@@ -23,7 +23,6 @@ Requires [uv](https://docs.astral.sh/uv/).
 ```bash
 uv sync
 uv run main.py          # launch the app
-uv run main.py --cli    # headless sync (for automation)
 ```
 
 ## Build the Windows executable

@@ -10,12 +10,8 @@ dependencies = [
     "flet>=0.28",
     "keyring>=25.0",
     "platformdirs>=4.0",
-    "python-dotenv>=1.2.2",
     "requests>=2.33.1",
 ]
-
-[project.scripts]
-igpsync = "igpsync.cli:main"
 
 [project.gui-scripts]
 igpsync-gui = "igpsync.gui.app:main"

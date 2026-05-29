@@ -4,14 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A cross-platform app that exports cycling activities from iGPSPORT and uploads them to intervals.icu. It ships as a **Flet** GUI (Python, renders via Flutter — desktop now, Android/iOS later) and a headless CLI. Dependency/environment management is done with [uv](https://docs.astral.dev/uv/) (Python 3.13).
+A cross-platform app that exports cycling activities from iGPSPORT and uploads them to intervals.icu. It ships as a **Flet** GUI (Python, renders via Flutter — desktop now, Android/iOS later). Dependency/environment management is done with [uv](https://docs.astral.dev/uv/) (Python 3.13).
 
 ## Commands
 
 ```bash
 uv sync                 # install/lock dependencies into .venv
-uv run main.py          # launch the GUI (default)
-uv run main.py --cli    # run the headless sync (original behavior)
+uv run main.py          # launch the GUI
 uv run flet build windows   # build the distributable Windows .exe (build/windows/)
 uv run pytest               # run the test suite
 ```
@@ -26,12 +25,12 @@ uv run pytest               # run the test suite
 
 The code is split so that going mobile later changes only packaging and the secret-storage backend; core and most UI stay put. All packages live under `src/igpsync/`.
 
-- **Core (`core.py`)** — pure sync logic, no UI and no module-level side effects. `sync(SyncConfig, progress)` drives the four steps and reports via a `progress(message)` callback so the CLI and GUI render it differently. Raises `SyncError` / `AuthError` for friendly messages. Functions: `login`, `list_activities`, `resolve_fit_url`, `download_fit`, `upload_to_intervals`.
+- **Core (`core.py`)** — pure sync logic, no UI and no module-level side effects. `sync(SyncConfig, progress)` drives the four steps and reports via a `progress(message)` callback so callers can render it however they like. Raises `SyncError` / `AuthError` for friendly messages. Functions: `login`, `list_activities`, `resolve_fit_url`, `download_fit`, `upload_to_intervals`.
 - **Storage**
   - `secrets.py` — `SecretStore` ABC + `KeyringSecretStore`. Secrets (`igp_password`, `intervals_api_key`) live in the **OS-native vault** via `keyring` (Windows Credential Manager / macOS Keychain), never in a file. The ABC is the seam: a future `FletSecureStorage` mobile backend drops in without touching core or UI.
-  - `config.py` — non-secret settings (`igp_user`, step toggles, `max_activities`, `download_dir`) as JSON in `platformdirs.user_config_dir`. Falls back to `.env`/`IGP_USER` for backward compatibility.
+  - `config.py` — non-secret settings (`igp_user`, step toggles, `max_activities`, `download_dir`) as JSON in `platformdirs.user_config_dir`.
 - **GUI (`gui/`)** — `app.py` (entry `ft.run(_app)`, Material 3 theme, app-bar routing between views), `settings_view.py` (credential inputs → keyring), `sync_view.py` (one-click "Sync activities", progress bar + live log; runs `core.sync` on a background thread). First run with no saved credentials opens Settings. Uses the **imperative** Flet style (explicit `page` mutation); the 0.85 declarative `@ft.component` / `ft.use_dialog` API is an alternative we don't use.
-- **`cli.py` / `main.py`** — `cli.py` reproduces the original behavior using core+config+secrets; `main.py` is a shim that launches the GUI by default, or the CLI with `--cli`.
+- **`main.py`** — entry shim that puts `src/` on the path and launches the GUI (`igpsync.gui.app.main`). The GUI is the only entry point.
 
 ## Flow / external API notes
 

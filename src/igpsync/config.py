@@ -8,7 +8,6 @@ activity cap and the download directory.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -43,19 +42,12 @@ class AppConfig:
 
 
 def load() -> AppConfig:
-    """Load config from disk, falling back to .env values then defaults."""
+    """Load config from disk, falling back to defaults."""
     data: dict = {}
     if CONFIG_PATH.exists():
         data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
-    config = AppConfig(**{k: v for k, v in data.items() if k in AppConfig.__annotations__})
-
-    # Backward-compatible .env fallback for the username only (secrets come
-    # from the vault). Does not overwrite a value already saved in config.json.
-    if not config.igp_user:
-        config.igp_user = os.getenv("IGP_USER", "")
-
-    return config
+    return AppConfig(**{k: v for k, v in data.items() if k in AppConfig.__annotations__})
 
 
 def save(config: AppConfig) -> None:
