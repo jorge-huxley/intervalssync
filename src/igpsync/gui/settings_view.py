@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Awaitable, Callable
 
 import flet as ft
 
@@ -12,13 +12,17 @@ from ..core import CYCLING_ACTIVITY_TYPES
 from .system import open_folder
 
 
-def build_settings_view(
+async def build_settings_view(
     page: ft.Page,
     config: config_module.AppConfig,
     store: secrets_module.SecretStore,
-    on_saved: Callable[[], None],
+    on_saved: Callable[[], Awaitable[None]],
 ) -> ft.Control:
-    """Return the settings card. `on_saved` is called after a successful save."""
+    """Return the settings card. `on_saved` is awaited after a successful save."""
+
+    # Prefetch the currently-stored secrets to prefill the fields.
+    existing_password = await store.get(secrets_module.IGP_PASSWORD) or ""
+    existing_api_key = await store.get(secrets_module.INTERVALS_API_KEY) or ""
 
     igp_user = ft.TextField(
         label="iGPSPORT email",
@@ -28,14 +32,14 @@ def build_settings_view(
     )
     igp_password = ft.TextField(
         label="iGPSPORT password",
-        value=store.get(secrets_module.IGP_PASSWORD) or "",
+        value=existing_password,
         prefix_icon=ft.Icons.LOCK,
         password=True,
         can_reveal_password=True,
     )
     api_key = ft.TextField(
         label="intervals.icu API key",
-        value=store.get(secrets_module.INTERVALS_API_KEY) or "",
+        value=existing_api_key,
         prefix_icon=ft.Icons.KEY,
         password=True,
         can_reveal_password=True,
@@ -128,7 +132,7 @@ def build_settings_view(
         ],
     )
 
-    def save(_: ft.ControlEvent) -> None:
+    async def save(_: ft.ControlEvent) -> None:
         if not igp_user.value or not igp_password.value:
             page.show_dialog(ft.SnackBar(ft.Text("iGPSPORT email and password are required.")))
             return
@@ -148,14 +152,14 @@ def build_settings_view(
         config.step_upload_intervals = step_upload.value
         config_module.save(config)
 
-        store.set(secrets_module.IGP_PASSWORD, igp_password.value)
+        await store.set(secrets_module.IGP_PASSWORD, igp_password.value)
         if api_key.value:
-            store.set(secrets_module.INTERVALS_API_KEY, api_key.value)
+            await store.set(secrets_module.INTERVALS_API_KEY, api_key.value)
         else:
-            store.delete(secrets_module.INTERVALS_API_KEY)
+            await store.delete(secrets_module.INTERVALS_API_KEY)
 
         page.show_dialog(ft.SnackBar(ft.Text("Saved securely to your system credential store.")))
-        on_saved()
+        await on_saved()
 
     return ft.Card(
         content=ft.Container(

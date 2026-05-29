@@ -1,53 +1,51 @@
 """Secure secret storage.
 
-Secrets are kept in the operating system's native credential vault (Windows
-Credential Manager, macOS Keychain, Linux Secret Service) via `keyring` — never
-in a plaintext file.
+Secrets are kept in the operating system's native vault (Windows Credential
+Manager, macOS/iOS Keychain, Android Keystore, Linux libsecret) via
+`flet-secure-storage` — never in a plaintext file. The same backend works on
+every platform Flet targets, so there is no per-OS branching.
 
-`SecretStore` is the seam for portability: desktop keyring backends do not exist
-in a Flet Android/iOS build, so a future `FletSecureStorage` backend (platform
-Keystore/Keychain) can be dropped in here without touching core or UI.
+`SecretStore` is the async seam between the GUI and storage. It's async because
+`flet-secure-storage` talks to the Flutter side asynchronously.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-import keyring
+from flet_secure_storage import SecureStorage
 
-SERVICE_NAME = "igpsport-intervals"
-
-# Logical secret keys used across the app.
+# Logical secret keys.
 IGP_PASSWORD = "igp_password"
 INTERVALS_API_KEY = "intervals_api_key"
 
 
 class SecretStore(ABC):
     @abstractmethod
-    def get(self, key: str) -> str | None: ...
+    async def get(self, key: str) -> str | None: ...
 
     @abstractmethod
-    def set(self, key: str, value: str) -> None: ...
+    async def set(self, key: str, value: str) -> None: ...
 
     @abstractmethod
-    def delete(self, key: str) -> None: ...
+    async def delete(self, key: str) -> None: ...
 
 
-class KeyringSecretStore(SecretStore):
-    """Stores secrets in the OS-native vault keyed by (SERVICE_NAME, key)."""
+class FletSecureStorage(SecretStore):
+    """Stores secrets in the OS-native vault via a flet-secure-storage service.
 
-    def __init__(self, service_name: str = SERVICE_NAME) -> None:
-        self.service_name = service_name
+    The `SecureStorage` service must already be registered on the page
+    (``page.services.append(storage)``) before use.
+    """
 
-    def get(self, key: str) -> str | None:
-        return keyring.get_password(self.service_name, key)
+    def __init__(self, storage: SecureStorage) -> None:
+        self._storage = storage
 
-    def set(self, key: str, value: str) -> None:
-        keyring.set_password(self.service_name, key, value)
+    async def get(self, key: str) -> str | None:
+        return await self._storage.get(key)
 
-    def delete(self, key: str) -> None:
-        try:
-            keyring.delete_password(self.service_name, key)
-        except keyring.errors.PasswordDeleteError:
-            # Already absent — nothing to do.
-            pass
+    async def set(self, key: str, value: str) -> None:
+        await self._storage.set(key, value)
+
+    async def delete(self, key: str) -> None:
+        await self._storage.remove(key)

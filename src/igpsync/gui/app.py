@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import flet as ft
+from flet_secure_storage import SecureStorage
 
 from .. import config as config_module
 from .. import secrets as secrets_module
@@ -10,7 +11,7 @@ from .settings_view import build_settings_view
 from .sync_view import build_sync_view
 
 
-def _app(page: ft.Page) -> None:
+async def _app(page: ft.Page) -> None:
     page.title = "iGPSPORT → intervals.icu"
     page.theme_mode = ft.ThemeMode.SYSTEM
     page.theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO)
@@ -21,7 +22,11 @@ def _app(page: ft.Page) -> None:
     page.padding = 0
 
     config = config_module.load()
-    store = secrets_module.KeyringSecretStore()
+
+    # Register the secure-storage service and wrap it as our SecretStore.
+    storage = SecureStorage()
+    page.services.append(storage)
+    store = secrets_module.FletSecureStorage(storage)
 
     body = ft.Container(expand=True, padding=20)
 
@@ -30,13 +35,13 @@ def _app(page: ft.Page) -> None:
         # being clipped (e.g. the full Settings form on a short window).
         return ft.Column([view], scroll=ft.ScrollMode.AUTO, expand=True)
 
-    def show_sync() -> None:
+    async def show_sync(_: ft.ControlEvent | None = None) -> None:
         body.content = _scrollable(build_sync_view(page, config, store))
         page.update()
 
-    def show_settings() -> None:
+    async def show_settings(_: ft.ControlEvent | None = None) -> None:
         body.content = _scrollable(
-            build_settings_view(page, config, store, on_saved=show_sync)
+            await build_settings_view(page, config, store, on_saved=show_sync)
         )
         page.update()
 
@@ -45,20 +50,18 @@ def _app(page: ft.Page) -> None:
         center_title=False,
         bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
         actions=[
-            ft.IconButton(ft.Icons.SYNC, tooltip="Sync", on_click=lambda _: show_sync()),
-            ft.IconButton(
-                ft.Icons.SETTINGS, tooltip="Settings", on_click=lambda _: show_settings()
-            ),
+            ft.IconButton(ft.Icons.SYNC, tooltip="Sync", on_click=show_sync),
+            ft.IconButton(ft.Icons.SETTINGS, tooltip="Settings", on_click=show_settings),
         ],
     )
 
     page.add(body)
 
     # First run (no credentials yet) opens Settings; otherwise go to Sync.
-    if config.igp_user and store.get(secrets_module.IGP_PASSWORD):
-        show_sync()
+    if config.igp_user and await store.get(secrets_module.IGP_PASSWORD):
+        await show_sync()
     else:
-        show_settings()
+        await show_settings()
 
 
 def main() -> None:
