@@ -41,6 +41,7 @@ def build_sync_view(
             download_dir=config.download_dir,
             delete_after_upload=config.delete_after_upload,
             force_resync=config.force_resync,
+            activity_type=config.activity_type,
             list_activities=config.step_list_activities,
             get_download_url=config.step_get_download_url,
             download_fit=config.step_download_fit,

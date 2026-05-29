@@ -29,9 +29,28 @@ ACTIVITY_LIST_URL = "https://i.igpsport.com/Activity/ActivityList"
 GATEWAY = "https://prod.en.igpsport.com/service/web-gateway/web-analyze/activity"
 INTERVALS_UPLOAD_URL = "https://intervals.icu/api/v1/athlete/0/activities"
 INTERVALS_ACTIVITIES_URL = "https://intervals.icu/api/v1/athlete/0/activities"
+INTERVALS_ACTIVITY_URL = "https://intervals.icu/api/v1/activity"
 
 # iGPSPORT reports activity start times as "YYYY-MM-DD HH:MM:SS".
 IGP_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+# iGPSPORT exports every ride as the generic "Ride". intervals.icu doesn't take
+# a sport on upload, so we PUT the desired type afterwards. These are the
+# cycling subset of the intervals.icu SportInfo enum (api_value, label). The API
+# does NOT validate the string, so only ever send values from this list.
+DEFAULT_ACTIVITY_TYPE = "Ride"
+CYCLING_ACTIVITY_TYPES: list[tuple[str, str]] = [
+    ("Ride", "Ride"),
+    ("MountainBikeRide", "Mountain Bike Ride"),
+    ("GravelRide", "Gravel Ride"),
+    ("VirtualRide", "Virtual Ride"),
+    ("EBikeRide", "E-Bike Ride"),
+    ("EMountainBikeRide", "E-Mountain Bike Ride"),
+    ("TrackRide", "Track Ride"),
+    ("Cyclocross", "Cyclocross"),
+    ("Handcycle", "Handcycle"),
+    ("Velomobile", "Velomobile"),
+]
 
 
 def external_id_for(ride_id: int) -> str:
@@ -141,11 +160,12 @@ def download_fit(fit_url: str, dest_path: Path) -> Path:
 
 def upload_to_intervals(
     fit_path: Path, title: str, ride_id: int, api_key: str
-) -> bool:
-    """Upload a .fit file to intervals.icu. Returns True on success.
+) -> str | None:
+    """Upload a .fit file to intervals.icu; return the new activity id or None.
 
     Uses basic auth with the literal username "API_KEY"; `external_id` reuses
-    the iGPSPORT ride id so re-uploads are idempotent.
+    the iGPSPORT ride id so re-uploads are idempotent. The id is read from the
+    UploadResponse so the caller can set the activity type afterwards.
     """
     with fit_path.open("rb") as f:
         resp = requests.post(
@@ -154,7 +174,24 @@ def upload_to_intervals(
             files={"file": (fit_path.name, f, "application/octet-stream")},
             auth=("API_KEY", api_key),
         )
-    return resp.status_code in (200, 201)
+    if resp.status_code not in (200, 201):
+        return None
+
+    data = resp.json()
+    activities = data.get("activities") or []
+    if activities and activities[0].get("id"):
+        return activities[0]["id"]
+    return data.get("id")
+
+
+def set_activity_type(activity_id: str, activity_type: str, api_key: str) -> bool:
+    """Set an activity's sport on intervals.icu (e.g. "MountainBikeRide")."""
+    resp = requests.put(
+        f"{INTERVALS_ACTIVITY_URL}/{activity_id}",
+        json={"type": activity_type},
+        auth=("API_KEY", api_key),
+    )
+    return resp.ok
 
 
 def fetch_uploaded_external_ids(
@@ -204,6 +241,9 @@ class SyncConfig:
     # When False (default), skip activities already uploaded to intervals.icu.
     # When True, re-download and re-upload them regardless.
     force_resync: bool = False
+    # Sport to set on uploaded activities (intervals.icu doesn't accept it on
+    # upload). "Ride" leaves iGPSPORT's default untouched.
+    activity_type: str = DEFAULT_ACTIVITY_TYPE
     list_activities: bool = True
     get_download_url: bool = False
     download_fit: bool = False
@@ -281,9 +321,21 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
         if not config.intervals_api_key:
             raise SyncError("intervals.icu API key is required for upload.")
 
-        if upload_to_intervals(fit_path, act.title, act.ride_id, config.intervals_api_key):
+        activity_id = upload_to_intervals(
+            fit_path, act.title, act.ride_id, config.intervals_api_key
+        )
+        if activity_id:
             report(f"✓ Uploaded {act.ride_id}: {act.title}")
             result.uploaded += 1
+
+            if config.activity_type and config.activity_type != DEFAULT_ACTIVITY_TYPE:
+                if set_activity_type(
+                    activity_id, config.activity_type, config.intervals_api_key
+                ):
+                    report(f"↻ Set {act.ride_id} → {config.activity_type}")
+                else:
+                    report(f"⚠ Could not set activity type for {act.ride_id}.")
+
             if config.delete_after_upload:
                 fit_path.unlink(missing_ok=True)
                 report(f"  Removed local file {fit_path.name}")

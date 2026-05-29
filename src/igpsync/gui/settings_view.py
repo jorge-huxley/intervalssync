@@ -8,6 +8,7 @@ import flet as ft
 
 from .. import config as config_module
 from .. import secrets as secrets_module
+from ..core import CYCLING_ACTIVITY_TYPES
 from .system import open_folder
 
 
@@ -47,6 +48,16 @@ def build_settings_view(
         prefix_icon=ft.Icons.FORMAT_LIST_NUMBERED,
         keyboard_type=ft.KeyboardType.NUMBER,
         width=220,
+    )
+
+    activity_type = ft.Dropdown(
+        label="Activity type on intervals.icu",
+        value=config.activity_type,
+        width=320,
+        options=[
+            ft.dropdown.Option(key=value, text=label)
+            for value, label in CYCLING_ACTIVITY_TYPES
+        ],
     )
 
     delete_after_upload = ft.Switch(
@@ -127,6 +138,7 @@ def build_settings_view(
             max_activities.value = "5"
         config.delete_after_upload = delete_after_upload.value
         config.force_resync = force_resync.value
+        config.activity_type = activity_type.value or "Ride"
         config.step_list_activities = step_list.value
         config.step_get_download_url = step_url.value
         config.step_download_fit = step_download.value
@@ -159,6 +171,7 @@ def build_settings_view(
                     igp_password,
                     api_key,
                     max_activities,
+                    activity_type,
                     delete_after_upload,
                     force_resync,
                     download_folder_row,
