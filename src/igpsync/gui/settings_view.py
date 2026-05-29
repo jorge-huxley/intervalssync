@@ -75,6 +75,40 @@ def build_settings_view(
         ],
     )
 
+    # Developer options — pick which pipeline steps run. Each step builds on
+    # the previous one (upload needs a download, which needs the FIT URL).
+    step_list = ft.Switch(label="List activities", value=config.step_list_activities)
+    step_url = ft.Switch(label="Resolve download URLs", value=config.step_get_download_url)
+    step_download = ft.Switch(label="Download .fit files", value=config.step_download_fit)
+    step_upload = ft.Switch(label="Upload to intervals.icu", value=config.step_upload_intervals)
+
+    developer_options = ft.ExpansionTile(
+        title=ft.Text("Developer options"),
+        leading=ft.Icon(ft.Icons.DEVELOPER_MODE),
+        affinity=ft.TileAffinity.LEADING,
+        expanded=False,
+        controls=[
+            ft.Container(
+                padding=ft.Padding(left=16, top=0, right=16, bottom=8),
+                content=ft.Column(
+                    spacing=4,
+                    controls=[
+                        ft.Text(
+                            "Choose which steps run during a sync. Each step depends "
+                            "on the ones above it.",
+                            size=12,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        step_list,
+                        step_url,
+                        step_download,
+                        step_upload,
+                    ],
+                ),
+            )
+        ],
+    )
+
     def save(_: ft.ControlEvent) -> None:
         if not igp_user.value or not igp_password.value:
             page.show_dialog(ft.SnackBar(ft.Text("iGPSPORT email and password are required.")))
@@ -87,6 +121,10 @@ def build_settings_view(
             config.max_activities = 5
             max_activities.value = "5"
         config.delete_after_upload = delete_after_upload.value
+        config.step_list_activities = step_list.value
+        config.step_get_download_url = step_url.value
+        config.step_download_fit = step_download.value
+        config.step_upload_intervals = step_upload.value
         config_module.save(config)
 
         store.set(secrets_module.IGP_PASSWORD, igp_password.value)
@@ -117,6 +155,7 @@ def build_settings_view(
                     max_activities,
                     delete_after_upload,
                     download_folder_row,
+                    developer_options,
                     ft.FilledButton(
                         "Save",
                         icon=ft.Icons.SAVE,
