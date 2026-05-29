@@ -64,9 +64,30 @@ jobs:
       - name: Stamp version into the app
         run: echo "__version__ = \"$APP_VERSION\"" > src/igpsync/_version.py
 
+      # Use a stable release key if the keystore secrets are configured, so every
+      # release shares one signature and Android installs updates over the top
+      # (no uninstall). Without the secrets, flet falls back to a debug key.
+      - name: Configure APK signing (if keystore secret is set)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            {
+              echo "FLET_ANDROID_SIGNING_KEY_STORE=$RUNNER_TEMP/release.jks"
+              echo "FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "FLET_ANDROID_SIGNING_KEY_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "FLET_ANDROID_SIGNING_KEY_ALIAS=$KEY_ALIAS"
+            } >> "$GITHUB_ENV"
+            echo "Release signing configured."
+          else
+            echo "No keystore secret set — APK will be debug-signed."
+          fi
+
       # flet build apk auto-installs the Flutter/Android SDK + JDK on first run.
-      # The APK is debug-signed (installable for sideloading); for store-grade
-      # signing add [tool.flet.android.signing] + a keystore in GitHub secrets.
+      # It picks up the FLET_ANDROID_SIGNING_* env vars set above when present.
       - name: Build Android APK
         run: uv run flet build apk --yes --verbose --build-version "${{ env.APP_VERSION }}"
 
