@@ -1,9 +1,10 @@
-# Builds the Windows app and the Android APK, then publishes them as a GitHub
-# Release.
+# Builds the Windows app and the Android APK, then publishes them as a single
+# GitHub Release.
 #
 # It runs only when you push a version tag like "v0.1.0" — see how to do that
-# in the README's "Cutting a release" section. Both jobs upload to the same
-# release for the tag.
+# in the README's "Cutting a release" section. The two build jobs upload their
+# artifacts; a final release job attaches them to one release and generates the
+# notes once (so they aren't duplicated).
 
 name: Release
 
@@ -12,8 +13,7 @@ on:
     tags:
       - "v*" # any tag starting with v, e.g. v0.1.0, v1.2.3
 
-# The automatic GITHUB_TOKEN needs write access to create the Release and
-# upload the .zip to it.
+# The automatic GITHUB_TOKEN needs write access to create the Release.
 permissions:
   contents: write
 
@@ -23,54 +23,58 @@ env:
 
 jobs:
   windows:
-    runs-on: windows-latest # GitHub's Windows runner (ships with Visual Studio 2022 + C++)
+    runs-on: windows-latest # ships with Visual Studio 2022 + C++
     steps:
-      # 1. Get the repository contents onto the runner.
-      - name: Check out code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
 
-      # 2. Install uv (our dependency/Python manager). It reads .python-version
-      #    and pyproject.toml to set up the right environment.
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v6
-
-      # 3. Build the Windows app. flet downloads the matching Flutter SDK on the
-      #    first run; --yes auto-confirms prompts (the runner is non-interactive).
-      #    Output lands in build/windows/.
       - name: Build Windows app
         run: uv run flet build windows --yes --verbose
 
-      # 4. Zip the build folder so the Release has a single downloadable file.
-      - name: Package into a zip
+      # Name the zip after the tag, e.g. igpsport-intervals-v0.2.0-windows.zip
+      - name: Package into a versioned zip
         shell: pwsh
-        run: Compress-Archive -Path build/windows/* -DestinationPath igpsport-intervals-windows.zip
+        run: Compress-Archive -Path build/windows/* -DestinationPath "igpsport-intervals-${{ github.ref_name }}-windows.zip"
 
-      # 5. Create (or update) the GitHub Release for this tag and attach the zip.
-      #    Release notes are generated automatically from the commits.
-      - name: Publish Release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          files: igpsport-intervals-windows.zip
-          generate_release_notes: true
+          name: windows
+          path: "igpsport-intervals-${{ github.ref_name }}-windows.zip"
 
   android:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v6
-
-      # flet build apk auto-installs the Flutter SDK, the Android SDK and a JDK
-      # on first run. Output lands in build/apk/. The APK is debug-signed by
-      # default, which is installable for sideloading; for a store-grade signed
-      # build, add [tool.flet.android.signing] + a keystore in GitHub secrets.
+      # flet build apk auto-installs the Flutter/Android SDK + JDK on first run.
+      # The APK is debug-signed (installable for sideloading); for store-grade
+      # signing add [tool.flet.android.signing] + a keystore in GitHub secrets.
       - name: Build Android APK
         run: uv run flet build apk --yes --verbose
 
+      - name: Rename APK with the version
+        run: mv build/apk/*.apk "igpsport-intervals-${{ github.ref_name }}-android.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: "igpsport-intervals-${{ github.ref_name }}-android.apk"
+
+  release:
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      # Create (or update) the Release for this tag, attach both files, and
+      # generate the notes a single time (avoids the duplicate notes you get
+      # when each build job generates them).
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/apk/*.apk
+          files: dist/**/*
           generate_release_notes: true

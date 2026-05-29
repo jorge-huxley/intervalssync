@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+from pathlib import Path
+
 import flet as ft
 from flet_secure_storage import SecureStorage
 
@@ -12,6 +16,7 @@ from .sync_view import build_sync_view
 
 
 _DESKTOP = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX}
+_MOBILE = {ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV, ft.PagePlatform.IOS}
 
 
 async def _app(page: ft.Page) -> None:
@@ -28,6 +33,13 @@ async def _app(page: ft.Page) -> None:
         page.window.min_width = 420
 
     config = config_module.load()
+
+    # On mobile the public Downloads dir isn't writable (scoped storage), so
+    # download into the app's own writable storage instead. Flet sets
+    # FLET_APP_STORAGE_DATA to a pre-created, writable per-app directory.
+    if page.platform in _MOBILE:
+        base = os.getenv("FLET_APP_STORAGE_DATA") or tempfile.gettempdir()
+        config.download_dir = str(Path(base) / "igpsport-fit")
 
     # Register the secure-storage service and wrap it as our SecretStore.
     storage = SecureStorage()
