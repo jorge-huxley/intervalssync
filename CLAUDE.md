@@ -36,6 +36,12 @@ Unchanged from the original script, now in `core.py`:
 2. **Activity list**: `i.igpsport.com/Activity/ActivityList` returns `{"item": [...]}` with PascalCase keys (`RideId`, `Title`, `StartTime`).
 3. **FIT URL resolution** uses a different host (`prod.en.igpsport.com/service/web-gateway/...`): try `queryActivityDetail/{id}`, fall back to `getDownloadUrl/{id}`.
 4. **Upload**: intervals.icu uses HTTP basic auth with literal username `"API_KEY"`; the API key is the password. Files are named `igpsport_{ride_id}.fit` and the id is sent as `external_id` for idempotency.
+5. **Skip already-uploaded**: before downloading, `GET /api/v1/athlete/0/activities?oldest=…&newest=…` lists existing activities; the response includes the `external_id` we set, so rides already present (`igpsport_{ride_id}`) are skipped unless `force_resync` is set.
+
+### intervals.icu API docs
+
+- Swagger reference: https://intervals.icu/api-docs.html (JS-rendered — open in a browser or query the live API to inspect response shapes; WebFetch can't read it).
+- API integration cookbook (forum): https://forum.intervals.icu/t/intervals-icu-api-integration-cookbook/80090
 
 ## Flet version note
 
