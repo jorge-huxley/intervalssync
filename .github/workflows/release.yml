@@ -111,8 +111,14 @@ jobs:
       # Create (or update) the Release for this tag, attach both files, and
       # generate the notes a single time (avoids the duplicate notes you get
       # when each build job generates them).
+      #
+      # Tags with a hyphen (e.g. v0.3.0-rc1) are marked as pre-releases: GitHub
+      # keeps the last stable as "Latest", the in-app update check (which uses
+      # the /releases/latest API) ignores them, and they aren't offered to users.
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/**/*
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
