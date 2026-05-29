@@ -13,8 +13,9 @@ your details once and click **Sync**.
    - your intervals.icu **API key** (intervals.icu → Settings → Developer)
 4. Click **Save**, then go back and press **Sync activities**.
 
-Your password and API key are stored in **Windows Credential Manager** (the same
-secure vault Windows uses for its own logins) — never in a plain text file.
+Your password and API key are stored in your operating system's **secure
+credential store** — Windows Credential Manager on Windows (the same vault
+Windows uses for its own logins) — never in a plain text file.
 
 ## Run from source
 

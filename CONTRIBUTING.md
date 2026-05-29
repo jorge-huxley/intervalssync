@@ -60,9 +60,10 @@ Keep new logic in `core` testable and UI-free; the GUI and CLI should stay thin.
 
 ## Things to keep in mind
 
-- **Never commit secrets.** Credentials live in the OS credential vault via
-  `keyring`; `.env` is git-ignored. Don't add real API keys, passwords, or
-  personal data to the repo, tests, or commit messages.
+- **Never commit secrets.** Credentials live in the OS-native credential vault
+  (Windows Credential Manager / macOS Keychain / Android Keystore / Linux
+  libsecret) via the `flet-secure-storage` service — never in a file. Don't add
+  real API keys, passwords, or personal data to the repo, tests, or commits.
 - The Flet API changes between versions — verify control arguments against the
   installed version (currently 0.85.x) rather than older tutorials.
 
