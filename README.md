@@ -87,11 +87,19 @@ the fix and tag a patch. If `master` already has work you're not ready to ship,
 branch the fix from the **last released tag** instead, so only the fix goes out:
 
 ```bash
-git switch -c hotfix/v0.2.5 v0.2.4   # branch from the released tag
-# ...make the fix, open a PR / merge it...
-git tag v0.2.5 && git push origin v0.2.5   # builds just the fix
-git switch master && git merge hotfix/v0.2.5   # bring the fix back into master
+# 1. Branch from the last released tag (NOT master):
+git switch -c hotfix/v0.2.5 v0.2.4
+# 2. Commit the fix on this branch, then push it:
+git push -u origin hotfix/v0.2.5
+# 3. Tag this branch's fix commit -> builds & publishes only the fix:
+git tag v0.2.5 && git push origin v0.2.5
+# 4. Open a PR from hotfix/v0.2.5 into master and merge it, so the fix is
+#    also in master for future work (master is protected, so use a PR).
 ```
+
+The tag points at the hotfix commit, so the build contains just the fix — none
+of master's unreleased work. The merge into master (step 4) is separate and
+happens *after* tagging.
 
 ## Roadmap
 
