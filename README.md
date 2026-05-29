@@ -1,8 +1,21 @@
 # iGPSPORT → intervals.icu
 
-A small, friendly app that downloads your cycling activities from **iGPSPORT** and
-uploads them to **intervals.icu**. No command line, no config files — just enter
-your details once and click **Sync**.
+A small, friendly app that syncs your cycling activities from **iGPSPORT** to
+**intervals.icu**. It's built for non-technical riders — no command line, no config
+files: enter your credentials once, press **Sync**, and your latest rides land on
+intervals.icu. Free and open source, for **Windows** and **Android**.
+
+## Features
+
+- Lists your recent iGPSPORT activities and uploads the original `.fit` files to intervals.icu
+- **Skips activities already uploaded** so re-running is safe — with an optional *force re-sync*
+- Lets you choose how many recent activities to process
+- **Sets the intervals.icu sport type** after upload (e.g. Mountain Bike Ride / Gravel Ride) — iGPSPORT exports everything as a generic "Ride"
+- Optionally deletes the local `.fit` files after a successful upload
+- Stores your credentials in the **OS secure vault** (Windows Credential Manager / Android Keystore), never in a file
+- Lets you know when a newer version is available
+
+> Prefer the terminal, or want to help out? It's open source (Python + [Flet](https://flet.dev), MIT) — see [Run from source](#run-from-source) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Download & run (Windows)
 
