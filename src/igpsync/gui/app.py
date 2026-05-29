@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 import flet as ft
+from flet_permission_handler import Permission, PermissionHandler, PermissionStatus
 from flet_secure_storage import SecureStorage
 
 from .. import __version__
@@ -20,6 +21,9 @@ from .sync_view import build_sync_view
 
 _DESKTOP = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX}
 _MOBILE = {ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV, ft.PagePlatform.IOS}
+# Standard public Downloads directory on Android (the filesystem name is the
+# singular "Download"). Used when the user opts in and grants storage access.
+ANDROID_DOWNLOADS = "/storage/emulated/0/Download/igpsport-fit"
 
 
 async def _app(page: ft.Page) -> None:
@@ -37,17 +41,33 @@ async def _app(page: ft.Page) -> None:
 
     config = config_module.load()
 
-    # On mobile the public Downloads dir isn't writable (scoped storage), so
-    # download into the app's own writable storage instead. Flet sets
-    # FLET_APP_STORAGE_DATA to a pre-created, writable per-app directory.
-    if page.platform in _MOBILE:
-        base = os.getenv("FLET_APP_STORAGE_DATA") or tempfile.gettempdir()
-        config.download_dir = str(Path(base) / "igpsport-fit")
-
-    # Register the secure-storage service and wrap it as our SecretStore.
+    # Register services: the secure-storage vault and the permission handler.
     storage = SecureStorage()
-    page.services.append(storage)
+    perms = PermissionHandler()
+    page.services.extend([storage, perms])
     store = secrets_module.FletSecureStorage(storage)
+
+    def _private_download_dir() -> str:
+        # App-private, always-writable per-app dir (Flet pre-creates it).
+        base = os.getenv("FLET_APP_STORAGE_DATA") or tempfile.gettempdir()
+        return str(Path(base) / "igpsport-fit")
+
+    async def apply_download_location() -> None:
+        # Desktop keeps the user's chosen/Downloads folder. On mobile we use
+        # app-private storage, unless the user opted into the public Downloads
+        # folder and has granted "all files" access.
+        if page.platform not in _MOBILE:
+            return
+        config.download_dir = _private_download_dir()
+        if config.save_to_downloads:
+            try:
+                status = await perms.get_status(Permission.MANAGE_EXTERNAL_STORAGE)
+            except Exception:  # noqa: BLE001 — never let this break startup
+                status = None
+            if status == PermissionStatus.GRANTED:
+                config.download_dir = ANDROID_DOWNLOADS
+
+    await apply_download_location()
 
     body = ft.Container(expand=True, padding=20)
 
@@ -62,7 +82,14 @@ async def _app(page: ft.Page) -> None:
 
     async def show_settings(_: ft.ControlEvent | None = None) -> None:
         body.content = _scrollable(
-            await build_settings_view(page, config, store, on_saved=show_sync)
+            await build_settings_view(
+                page,
+                config,
+                store,
+                on_saved=show_sync,
+                perms=perms,
+                apply_download_location=apply_download_location,
+            )
         )
         page.update()
 

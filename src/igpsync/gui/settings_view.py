@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Awaitable, Callable
 
 import flet as ft
+from flet_permission_handler import Permission, PermissionHandler, PermissionStatus
 
 from .. import config as config_module
 from .. import secrets as secrets_module
@@ -17,6 +18,8 @@ async def build_settings_view(
     config: config_module.AppConfig,
     store: secrets_module.SecretStore,
     on_saved: Callable[[], Awaitable[None]],
+    perms: PermissionHandler | None = None,
+    apply_download_location: Callable[[], Awaitable[None]] | None = None,
 ) -> ft.Control:
     """Return the settings card. `on_saved` is awaited after a successful save."""
 
@@ -83,16 +86,26 @@ async def build_settings_view(
         ft.PagePlatform.IOS,
     }
 
+    # Android only: opt in to saving into the public Downloads folder (needs the
+    # "all files access" permission, requested on save). Off = app-private.
+    save_to_downloads = ft.Switch(
+        label="Save to phone's Downloads folder",
+        value=config.save_to_downloads,
+    )
+
     # On desktop we show the path and an "open folder" button. On mobile the
-    # folder lives in app-private storage that no file manager can browse and
-    # there's no reliable way to open it, so we show an explanatory note instead.
+    # text depends on whether files go to the (browsable) Downloads folder or to
+    # app-private storage that no file manager can reach.
     if is_mobile:
-        folder_detail = ft.Text(
-            "Files are kept in the app's private storage and uploaded to "
-            "intervals.icu (removed afterwards unless you turn that off).",
-            size=13,
-            color=ft.Colors.ON_SURFACE_VARIANT,
-        )
+        if config.save_to_downloads:
+            note = "Saved to your phone's Downloads folder (Download/igpsport-fit)."
+        else:
+            note = (
+                "Kept in the app's private storage and uploaded to intervals.icu "
+                "(removed afterwards unless you turn that off). Turn on “Save to "
+                "phone's Downloads folder” to keep them where you can find them."
+            )
+        folder_detail = ft.Text(note, size=13, color=ft.Colors.ON_SURFACE_VARIANT)
         folder_trailing: ft.Control | None = None
     else:
         folder_detail = ft.Text(
@@ -173,6 +186,21 @@ async def build_settings_view(
         config.step_get_download_url = step_url.value
         config.step_download_fit = step_download.value
         config.step_upload_intervals = step_upload.value
+
+        message = "Saved securely to your system credential store."
+        if is_mobile:
+            want_downloads = bool(save_to_downloads.value)
+            if want_downloads and perms is not None:
+                # Requesting an already-granted permission just returns GRANTED.
+                status = await perms.request(Permission.MANAGE_EXTERNAL_STORAGE)
+                if status != PermissionStatus.GRANTED:
+                    want_downloads = False
+                    save_to_downloads.value = False
+                    message = (
+                        "Saved, but storage permission wasn't granted — files "
+                        "stay in the app's private storage."
+                    )
+            config.save_to_downloads = want_downloads
         config_module.save(config)
 
         await store.set(secrets_module.IGP_PASSWORD, igp_password.value)
@@ -181,7 +209,10 @@ async def build_settings_view(
         else:
             await store.delete(secrets_module.INTERVALS_API_KEY)
 
-        page.show_dialog(ft.SnackBar(ft.Text("Saved securely to your system credential store.")))
+        if apply_download_location is not None:
+            await apply_download_location()
+
+        page.show_dialog(ft.SnackBar(ft.Text(message)))
         await on_saved()
 
     return ft.Card(
@@ -204,6 +235,7 @@ async def build_settings_view(
                     activity_type,
                     delete_after_upload,
                     force_resync,
+                    *([save_to_downloads] if is_mobile else []),
                     download_folder_row,
                     developer_options,
                     ft.FilledButton(

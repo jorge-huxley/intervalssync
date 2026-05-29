@@ -34,6 +34,9 @@ class AppConfig:
     force_resync: bool = False
     # intervals.icu sport set on uploaded activities ("" = leave as uploaded).
     activity_type: str = ""
+    # Android only: save downloads to the public Downloads folder (needs the
+    # "all files access" permission) instead of app-private storage.
+    save_to_downloads: bool = False
     # Step toggles (advanced). The GUI's one-click sync sets these for the user.
     step_list_activities: bool = True
     step_get_download_url: bool = True

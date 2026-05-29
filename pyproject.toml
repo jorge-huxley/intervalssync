@@ -10,6 +10,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "flet>=0.28",
+    "flet-permission-handler>=0.85.2",
     "flet-secure-storage>=0.85.2",
     "packaging>=26.2",
     "platformdirs>=4.0",
@@ -42,5 +43,10 @@ company = "igpsport-intervals"
 bundle_id = "io.github.jorgehuxley.igpsync"
 
 # Android permissions baked into AndroidManifest.xml by `flet build apk`.
+# MANAGE_EXTERNAL_STORAGE ("all files access") + the legacy storage perms let
+# users opt into saving downloads to the public Downloads folder.
 [tool.flet.android.permission]
 "android.permission.INTERNET" = true
+"android.permission.MANAGE_EXTERNAL_STORAGE" = true
+"android.permission.READ_EXTERNAL_STORAGE" = true
+"android.permission.WRITE_EXTERNAL_STORAGE" = true

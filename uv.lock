@@ -105,6 +105,18 @@ wheels = [
 ]
 
 [[package]]
+name = "flet-permission-handler"
+version = "0.85.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flet" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/63/f3/1f90351acc3c17769cb8268aed3f58f8b0064c738782e9cba5a36edac2bd/flet_permission_handler-0.85.2.tar.gz", hash = "sha256:0a1d05538c34ad305980643f25c9ed05f66f2d81d787259083db0b6464eb7ab1", size = 12241, upload-time = "2026-05-25T17:33:40.236Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f0/93/348a0c1259c176b7a7f903dc08692696c7640e9385a6217df8fe21fcc02f/flet_permission_handler-0.85.2-py3-none-any.whl", hash = "sha256:58072efa14d953c15a7137f50d448d1fd6c4e304f26cf482e386a3a7a2a549d3", size = 13552, upload-time = "2026-05-25T17:33:39.375Z" },
+]
+
+[[package]]
 name = "flet-secure-storage"
 version = "0.85.2"
 source = { registry = "https://pypi.org/simple" }
@@ -168,6 +180,7 @@ version = "0.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "flet" },
+    { name = "flet-permission-handler" },
     { name = "flet-secure-storage" },
     { name = "packaging" },
     { name = "platformdirs" },
@@ -182,6 +195,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "flet", specifier = ">=0.28" },
+    { name = "flet-permission-handler", specifier = ">=0.85.2" },
     { name = "flet-secure-storage", specifier = ">=0.85.2" },
     { name = "packaging", specifier = ">=26.2" },
     { name = "platformdirs", specifier = ">=4.0" },
