@@ -11,15 +11,21 @@ from .settings_view import build_settings_view
 from .sync_view import build_sync_view
 
 
+_DESKTOP = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX}
+
+
 async def _app(page: ft.Page) -> None:
     page.title = "iGPSPORT → intervals.icu"
     page.theme_mode = ft.ThemeMode.SYSTEM
     page.theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO)
     page.dark_theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO)
-    page.window.width = 560
-    page.window.height = 720
-    page.window.min_width = 420
     page.padding = 0
+
+    # Window sizing only applies on desktop; on mobile the app fills the screen.
+    if page.platform in _DESKTOP:
+        page.window.width = 560
+        page.window.height = 720
+        page.window.min_width = 420
 
     config = config_module.load()
 

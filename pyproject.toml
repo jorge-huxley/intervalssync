@@ -34,3 +34,10 @@ packages = ["src/igpsync"]
 # Used by `flet build`. The product name shown to end users.
 product = "iGPSPORT to intervals.icu"
 company = "igpsport-intervals"
+# Reverse-DNS app identifier (Android package / iOS bundle id). No hyphens
+# allowed in the segments. Change if you fork.
+bundle_id = "io.github.jorgehuxley.igpsync"
+
+# Android permissions baked into AndroidManifest.xml by `flet build apk`.
+[tool.flet.android.permission]
+"android.permission.INTERNET" = true

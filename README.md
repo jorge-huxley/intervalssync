@@ -17,6 +17,16 @@ Your password and API key are stored in your operating system's **secure
 credential store** — Windows Credential Manager on Windows (the same vault
 Windows uses for its own logins) — never in a plain text file.
 
+## Download & run (Android)
+
+1. On the [Releases](../../releases) page, download the latest `.apk`.
+2. Open it on your phone. Android will ask you to allow installing from this
+   source — accept (Settings → "Install unknown apps" for your browser/files app).
+3. Open the app, fill in **Settings** (same fields as above), and **Sync**.
+
+On Android your credentials are stored in the **Android Keystore**. The app
+isn't on the Play Store, so the "unknown source" prompt is expected.
+
 ## Run from source
 
 Requires [uv](https://docs.astral.sh/uv/).
@@ -45,11 +55,13 @@ git tag v0.1.0      # pick the next version number
 git push origin v0.1.0
 ```
 
-The workflow builds the Windows app on a clean runner, zips it, and attaches
-`igpsport-intervals-windows.zip` to a new GitHub Release. Watch it run under the
-repo's **Actions** tab; the result appears under **Releases**.
+The workflow builds the Windows app **and the Android APK** on clean runners and
+attaches both (`igpsport-intervals-windows.zip` and an `.apk`) to a new GitHub
+Release. Watch it run under the repo's **Actions** tab; the result appears under
+**Releases**.
 
 ## Roadmap
 
-The app is built with [Flet](https://flet.dev), so the same Python code can later
-be packaged for **Android** (`flet build apk`) and **iOS** (`flet build ipa`).
+The app is built with [Flet](https://flet.dev), so the same Python code targets
+desktop and Android today, with **iOS** (`flet build ipa`) possible from the same
+code.
