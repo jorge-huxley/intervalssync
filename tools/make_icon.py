@@ -1,5 +1,5 @@
-"""Generate the app icon (assets/icon.png) — a white "sync" glyph on an indigo
-rounded square, matching the app's Material indigo theme.
+"""Generate the app icon (assets/icon.png) — a white "sync" glyph on a diagonal
+gradient from iGPSPORT red to intervals.icu blue (the two services it bridges).
 
 Run it with Pillow available, e.g.:
 
@@ -20,8 +20,8 @@ SS = 4  # supersample factor for smooth (anti-aliased) edges
 SIZE = 1024 * SS
 OUT = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
 
-TOP = (92, 107, 192)   # indigo 400  #5C6BC0
-BOTTOM = (40, 53, 147)  # indigo 800  #283593
+IGP_RED = (228, 0, 43)        # iGPSPORT brand red  #E4002B
+INTERVALS_BLUE = (30, 136, 229)  # intervals.icu blue  #1E88E5
 WHITE = (255, 255, 255, 255)
 
 
@@ -45,11 +45,15 @@ def _draw_arc_arrow(draw, cx, cy, r, start, end, width):
 
 
 def main() -> None:
-    # Vertical indigo gradient.
-    bg = Image.new("RGB", (SIZE, SIZE), TOP)
-    bd = ImageDraw.Draw(bg)
-    for y in range(SIZE):
-        bd.line([(0, y), (SIZE, y)], fill=_lerp(TOP, BOTTOM, y / SIZE))
+    # Diagonal gradient iGPSPORT-red (top-left) → intervals.icu-blue (bottom-right).
+    # Built small per-pixel then upscaled (fast + smooth).
+    g = 256
+    small = Image.new("RGB", (g, g))
+    px = small.load()
+    for y in range(g):
+        for x in range(g):
+            px[x, y] = _lerp(IGP_RED, INTERVALS_BLUE, (x + y) / (2 * (g - 1)))
+    bg = small.resize((SIZE, SIZE), Image.BILINEAR)
 
     # Rounded-square mask.
     mask = Image.new("L", (SIZE, SIZE), 0)
