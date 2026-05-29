@@ -73,6 +73,26 @@ attaches both (`igpsport-intervals-windows.zip` and an `.apk`) to a new GitHub
 Release. Watch it run under the repo's **Actions** tab; the result appears under
 **Releases**.
 
+### Pre-releases (test a build before shipping)
+
+Tag with a hyphen, e.g. `v0.3.0-rc1`, to publish a **pre-release**. It still
+builds installable artifacts you can test on a device, but GitHub keeps the last
+stable as **Latest** and the in-app update check ignores it — so users on the
+stable version aren't notified. Once it's good, tag the final `v0.3.0`.
+
+### Urgent hotfix while `master` has unreleased work
+
+`master` only ever contains finished, merged PRs, so usually you can just merge
+the fix and tag a patch. If `master` already has work you're not ready to ship,
+branch the fix from the **last released tag** instead, so only the fix goes out:
+
+```bash
+git switch -c hotfix/v0.2.5 v0.2.4   # branch from the released tag
+# ...make the fix, open a PR / merge it...
+git tag v0.2.5 && git push origin v0.2.5   # builds just the fix
+git switch master && git merge hotfix/v0.2.5   # bring the fix back into master
+```
+
 ## Roadmap
 
 The app is built with [Flet](https://flet.dev), so the same Python code targets
