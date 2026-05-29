@@ -65,3 +65,16 @@ Release. Watch it run under the repo's **Actions** tab; the result appears under
 The app is built with [Flet](https://flet.dev), so the same Python code targets
 desktop and Android today, with **iOS** (`flet build ipa`) possible from the same
 code.
+
+## Acknowledgements
+
+This project builds on community work around iGPSPORT activity access and
+syncing:
+
+- [kamikadzem22/igpsport-unoffical-api](https://github.com/kamikadzem22/igpsport-unoffical-api)
+  for documenting and exploring the unofficial iGPSPORT API.
+- [simple4wan/ride-sync](https://github.com/simple4wan/ride-sync) for prior
+  work on syncing ride activities between services.
+
+This app is an independent project and is not affiliated with iGPSPORT,
+intervals.icu, or the projects listed above.
