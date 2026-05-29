@@ -1,0 +1,219 @@
+"""Pure sync logic for moving activities from iGPSPORT to intervals.icu.
+
+This module contains no UI and no module-level side effects — it is driven by
+the CLI and the GUI alike. Progress is surfaced through a callback so each
+front-end can render it however it likes.
+
+Flow (see CLAUDE.md for the full API notes):
+  1. Log in to iGPSPORT; the `loginToken` cookie is URL-decoded and reused as a
+     Bearer token for the gateway API.
+  2. List activities (PascalCase keys: RideId / Title / StartTime).
+  3. Resolve the FIT download URL: try queryActivityDetail, fall back to
+     getDownloadUrl.
+  4. Download the .fit file and upload it to intervals.icu (basic auth with the
+     literal username "API_KEY").
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable
+from urllib.parse import unquote
+
+import requests
+
+LOGIN_URL = "https://i.igpsport.com/Auth/Login"
+ACTIVITY_LIST_URL = "https://i.igpsport.com/Activity/ActivityList"
+GATEWAY = "https://prod.en.igpsport.com/service/web-gateway/web-analyze/activity"
+INTERVALS_UPLOAD_URL = "https://intervals.icu/api/v1/athlete/0/activities"
+
+
+class SyncError(Exception):
+    """Base class for errors the front-ends can show as friendly messages."""
+
+
+class AuthError(SyncError):
+    """Raised when iGPSPORT login fails or returns no usable token."""
+
+
+@dataclass
+class Activity:
+    ride_id: int
+    title: str
+    start_time: str
+
+
+@dataclass
+class SyncResult:
+    listed: int = 0
+    downloaded: int = 0
+    uploaded: int = 0
+    failed: int = 0
+    activities: list[Activity] = field(default_factory=list)
+
+
+# A progress callback receives short, human-readable status events. It is
+# optional everywhere; the default is a no-op so core stays silent by itself.
+Progress = Callable[[str], None]
+
+
+def _noop(_message: str) -> None:
+    pass
+
+
+def login(session: requests.Session, user: str, password: str) -> dict[str, str]:
+    """Authenticate and return auth headers carrying the Bearer token.
+
+    The token is taken from the `loginToken` session cookie and URL-decoded —
+    this cookie-to-Bearer step is required for the gateway endpoints.
+    """
+    resp = session.post(LOGIN_URL, json={"username": user, "password": password})
+    if not resp.ok:
+        raise AuthError(f"iGPSPORT login failed: HTTP {resp.status_code}")
+
+    token = session.cookies.get("loginToken")
+    if not token:
+        raise AuthError("iGPSPORT login did not return a loginToken cookie")
+
+    return {"Authorization": f"Bearer {unquote(token)}"}
+
+
+def list_activities(session: requests.Session, max_activities: int) -> list[Activity]:
+    """Return the most recent activities, newest first, capped at max_activities."""
+    resp = session.get(ACTIVITY_LIST_URL)
+    resp.raise_for_status()
+
+    items = resp.json().get("item", [])[:max_activities]
+    activities: list[Activity] = []
+    for item in items:
+        ride_id = item["RideId"]
+        activities.append(
+            Activity(
+                ride_id=ride_id,
+                title=item.get("Title") or f"iGPSPORT {ride_id}",
+                start_time=item.get("StartTime") or item.get("StartDate") or "unknown date",
+            )
+        )
+    return activities
+
+
+def resolve_fit_url(
+    session: requests.Session, auth_headers: dict[str, str], ride_id: int
+) -> str | None:
+    """Resolve a FIT download URL: try queryActivityDetail, then getDownloadUrl."""
+    detail = session.get(
+        f"{GATEWAY}/queryActivityDetail/{ride_id}", headers=auth_headers
+    )
+    if detail.ok:
+        fit_url = detail.json().get("data", {}).get("fitUrl")
+        if fit_url:
+            return fit_url
+
+    fallback = session.get(
+        f"{GATEWAY}/getDownloadUrl/{ride_id}", headers=auth_headers
+    )
+    if fallback.ok:
+        return fallback.json().get("data")
+
+    return None
+
+
+def download_fit(fit_url: str, dest_path: Path) -> Path:
+    """Download a .fit file to dest_path and return the path."""
+    resp = requests.get(fit_url)
+    resp.raise_for_status()
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    dest_path.write_bytes(resp.content)
+    return dest_path
+
+
+def upload_to_intervals(
+    fit_path: Path, title: str, ride_id: int, api_key: str
+) -> bool:
+    """Upload a .fit file to intervals.icu. Returns True on success.
+
+    Uses basic auth with the literal username "API_KEY"; `external_id` reuses
+    the iGPSPORT ride id so re-uploads are idempotent.
+    """
+    with fit_path.open("rb") as f:
+        resp = requests.post(
+            INTERVALS_UPLOAD_URL,
+            params={"name": title, "external_id": f"igpsport_{ride_id}"},
+            files={"file": (fit_path.name, f, "application/octet-stream")},
+            auth=("API_KEY", api_key),
+        )
+    return resp.status_code in (200, 201)
+
+
+@dataclass
+class SyncConfig:
+    igp_user: str
+    igp_password: str
+    intervals_api_key: str | None
+    max_activities: int = 5
+    download_dir: Path = Path("downloads")
+    list_activities: bool = True
+    get_download_url: bool = False
+    download_fit: bool = False
+    upload_intervals: bool = False
+
+
+def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
+    """Run the configured steps end-to-end, reporting progress via the callback."""
+    report = progress or _noop
+    result = SyncResult()
+
+    session = requests.Session()
+    report("Logging in to iGPSPORT…")
+    auth_headers = login(session, config.igp_user, config.igp_password)
+    report("Logged in.")
+
+    activities = list_activities(session, config.max_activities)
+    result.activities = activities
+    result.listed = len(activities)
+
+    if config.list_activities:
+        report(f"Found {len(activities)} activities.")
+        for act in activities:
+            report(f"  • {act.ride_id} | {act.start_time} | {act.title}")
+
+    needs_url = (
+        config.get_download_url or config.download_fit or config.upload_intervals
+    )
+    if not needs_url:
+        return result
+
+    download_dir = Path(config.download_dir)
+
+    for act in activities:
+        fit_path = download_dir / f"igpsport_{act.ride_id}.fit"
+
+        fit_url = resolve_fit_url(session, auth_headers, act.ride_id)
+        if not fit_url:
+            report(f"⚠ Could not resolve FIT URL for {act.ride_id}; skipping.")
+            result.failed += 1
+            continue
+
+        if config.get_download_url and not (config.download_fit or config.upload_intervals):
+            report(f"FIT URL for {act.ride_id}: {fit_url}")
+            continue
+
+        report(f"Downloading {act.ride_id}…")
+        download_fit(fit_url, fit_path)
+        result.downloaded += 1
+
+        if not config.upload_intervals:
+            continue
+
+        if not config.intervals_api_key:
+            raise SyncError("intervals.icu API key is required for upload.")
+
+        if upload_to_intervals(fit_path, act.title, act.ride_id, config.intervals_api_key):
+            report(f"✓ Uploaded {act.ride_id}: {act.title}")
+            result.uploaded += 1
+        else:
+            report(f"✗ Failed to upload {act.ride_id}.")
+            result.failed += 1
+
+    return result

@@ -12,3 +12,8 @@ wheels/
 .env
 
 Downloads/
+downloads/
+
+# Flet build output
+build/
+.flet/
