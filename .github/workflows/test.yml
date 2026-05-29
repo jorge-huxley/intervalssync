@@ -1,0 +1,25 @@
+# Runs the test suite on every push and pull request, so regressions (including
+# from contributors' PRs) are caught before merging.
+
+name: Tests
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies (incl. dev group)
+        run: uv sync
+
+      - name: Run tests
+        run: uv run pytest -q
