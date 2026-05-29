@@ -77,6 +77,33 @@ async def build_settings_view(
         value=config.force_resync,
     )
 
+    is_mobile = page.platform in {
+        ft.PagePlatform.ANDROID,
+        ft.PagePlatform.ANDROID_TV,
+        ft.PagePlatform.IOS,
+    }
+
+    # On desktop we show the path and an "open folder" button. On mobile the
+    # folder lives in app-private storage that no file manager can browse and
+    # there's no reliable way to open it, so we show an explanatory note instead.
+    if is_mobile:
+        folder_detail = ft.Text(
+            "Files are kept in the app's private storage and uploaded to "
+            "intervals.icu (removed afterwards unless you turn that off).",
+            size=13,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+        )
+        folder_trailing: ft.Control | None = None
+    else:
+        folder_detail = ft.Text(
+            config.download_dir, size=13, selectable=True, no_wrap=False
+        )
+        folder_trailing = ft.IconButton(
+            ft.Icons.FOLDER_OPEN,
+            tooltip="Open folder",
+            on_click=lambda _: open_folder(config.download_dir),
+        )
+
     download_folder_row = ft.Row(
         spacing=8,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -87,14 +114,10 @@ async def build_settings_view(
                 spacing=0,
                 controls=[
                     ft.Text("Download folder", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-                    ft.Text(config.download_dir, size=13, selectable=True, no_wrap=False),
+                    folder_detail,
                 ],
             ),
-            ft.IconButton(
-                ft.Icons.FOLDER_OPEN,
-                tooltip="Open folder",
-                on_click=lambda _: open_folder(config.download_dir),
-            ),
+            *( [folder_trailing] if folder_trailing else [] ),
         ],
     )
 
