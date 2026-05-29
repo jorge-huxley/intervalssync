@@ -55,8 +55,11 @@ def build_settings_view(
         value=config.activity_type,
         width=320,
         options=[
-            ft.dropdown.Option(key=value, text=label)
-            for value, label in CYCLING_ACTIVITY_TYPES
+            ft.dropdown.Option(key="", text="Don't change (leave as uploaded)"),
+            *(
+                ft.dropdown.Option(key=value, text=label)
+                for value, label in CYCLING_ACTIVITY_TYPES
+            ),
         ],
     )
 
@@ -138,7 +141,7 @@ def build_settings_view(
             max_activities.value = "5"
         config.delete_after_upload = delete_after_upload.value
         config.force_resync = force_resync.value
-        config.activity_type = activity_type.value or "Ride"
+        config.activity_type = activity_type.value or ""
         config.step_list_activities = step_list.value
         config.step_get_download_url = step_url.value
         config.step_download_fit = step_download.value

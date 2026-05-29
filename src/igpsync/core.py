@@ -35,10 +35,13 @@ INTERVALS_ACTIVITY_URL = "https://intervals.icu/api/v1/activity"
 IGP_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 # iGPSPORT exports every ride as the generic "Ride". intervals.icu doesn't take
-# a sport on upload, so we PUT the desired type afterwards. These are the
-# cycling subset of the intervals.icu SportInfo enum (api_value, label). The API
+# a sport on upload, so we PUT the desired type afterwards. An empty activity
+# type means "leave the uploaded sport untouched" (do nothing). Any non-empty
+# value — including "Ride" — is applied via PUT.
+ACTIVITY_TYPE_KEEP = ""
+
+# Cycling subset of the intervals.icu SportInfo enum (api_value, label). The API
 # does NOT validate the string, so only ever send values from this list.
-DEFAULT_ACTIVITY_TYPE = "Ride"
 CYCLING_ACTIVITY_TYPES: list[tuple[str, str]] = [
     ("Ride", "Ride"),
     ("MountainBikeRide", "Mountain Bike Ride"),
@@ -242,8 +245,8 @@ class SyncConfig:
     # When True, re-download and re-upload them regardless.
     force_resync: bool = False
     # Sport to set on uploaded activities (intervals.icu doesn't accept it on
-    # upload). "Ride" leaves iGPSPORT's default untouched.
-    activity_type: str = DEFAULT_ACTIVITY_TYPE
+    # upload). Empty string = leave the uploaded sport untouched.
+    activity_type: str = ACTIVITY_TYPE_KEEP
     list_activities: bool = True
     get_download_url: bool = False
     download_fit: bool = False
@@ -328,7 +331,7 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
             report(f"✓ Uploaded {act.ride_id}: {act.title}")
             result.uploaded += 1
 
-            if config.activity_type and config.activity_type != DEFAULT_ACTIVITY_TYPE:
+            if config.activity_type:
                 if set_activity_type(
                     activity_id, config.activity_type, config.intervals_api_key
                 ):

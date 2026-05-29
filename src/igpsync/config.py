@@ -33,8 +33,8 @@ class AppConfig:
     delete_after_upload: bool = True
     # Re-download/re-upload activities even if they are already on intervals.icu.
     force_resync: bool = False
-    # intervals.icu sport set on uploaded activities ("Ride" = leave as-is).
-    activity_type: str = "Ride"
+    # intervals.icu sport set on uploaded activities ("" = leave as uploaded).
+    activity_type: str = ""
     # Step toggles (advanced). The GUI's one-click sync sets these for the user.
     step_list_activities: bool = True
     step_get_download_url: bool = True
