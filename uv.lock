@@ -164,11 +164,12 @@ wheels = [
 
 [[package]]
 name = "igpsport-intervals"
-version = "0.1.0"
+version = "0.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "flet" },
     { name = "flet-secure-storage" },
+    { name = "packaging" },
     { name = "platformdirs" },
     { name = "requests" },
 ]
@@ -182,6 +183,7 @@ dev = [
 requires-dist = [
     { name = "flet", specifier = ">=0.28" },
     { name = "flet-secure-storage", specifier = ">=0.85.2" },
+    { name = "packaging", specifier = ">=26.2" },
     { name = "platformdirs", specifier = ">=4.0" },
     { name = "requests", specifier = ">=2.33.1" },
 ]
