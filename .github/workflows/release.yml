@@ -1,0 +1,52 @@
+# Builds the Windows app and publishes it as a GitHub Release.
+#
+# It runs only when you push a version tag like "v0.1.0" — see how to do that
+# in the README's "Cutting a release" section.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*" # any tag starting with v, e.g. v0.1.0, v1.2.3
+
+# The automatic GITHUB_TOKEN needs write access to create the Release and
+# upload the .zip to it.
+permissions:
+  contents: write
+
+env:
+  PYTHONUTF8: "1" # make Python use UTF-8 everywhere (our progress text uses •, ↷, …)
+  FLET_CLI_NO_RICH_OUTPUT: "1" # plain, log-friendly output from `flet build`
+
+jobs:
+  windows:
+    runs-on: windows-latest # GitHub's Windows runner (ships with Visual Studio 2022 + C++)
+    steps:
+      # 1. Get the repository contents onto the runner.
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      # 2. Install uv (our dependency/Python manager). It reads .python-version
+      #    and pyproject.toml to set up the right environment.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      # 3. Build the Windows app. flet downloads the matching Flutter SDK on the
+      #    first run; --yes auto-confirms prompts (the runner is non-interactive).
+      #    Output lands in build/windows/.
+      - name: Build Windows app
+        run: uv run flet build windows --yes --verbose
+
+      # 4. Zip the build folder so the Release has a single downloadable file.
+      - name: Package into a zip
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/* -DestinationPath igpsport-intervals-windows.zip
+
+      # 5. Create (or update) the GitHub Release for this tag and attach the zip.
+      #    Release notes are generated automatically from the commits.
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: igpsport-intervals-windows.zip
+          generate_release_notes: true

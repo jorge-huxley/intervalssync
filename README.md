@@ -32,8 +32,22 @@ uv run main.py --cli    # headless sync (for automation)
 uv run flet build windows
 ```
 
-The distributable lands in `build/windows/`. Zip that folder and attach it to a
-GitHub Release. (Flet downloads the Flutter toolchain on the first build.)
+The distributable lands in `build/windows/`. (Flet downloads the Flutter
+toolchain on the first build.)
+
+## Cutting a release
+
+Releases are built automatically by GitHub Actions (`.github/workflows/release.yml`)
+whenever you push a version tag. To publish a new version:
+
+```bash
+git tag v0.1.0      # pick the next version number
+git push origin v0.1.0
+```
+
+The workflow builds the Windows app on a clean runner, zips it, and attaches
+`igpsport-intervals-windows.zip` to a new GitHub Release. Watch it run under the
+repo's **Actions** tab; the result appears under **Releases**.
 
 ## Roadmap
 
