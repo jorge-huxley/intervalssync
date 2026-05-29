@@ -1,7 +1,9 @@
-# Builds the Windows app and publishes it as a GitHub Release.
+# Builds the Windows app and the Android APK, then publishes them as a GitHub
+# Release.
 #
 # It runs only when you push a version tag like "v0.1.0" — see how to do that
-# in the README's "Cutting a release" section.
+# in the README's "Cutting a release" section. Both jobs upload to the same
+# release for the tag.
 
 name: Release
 
@@ -49,4 +51,26 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: igpsport-intervals-windows.zip
+          generate_release_notes: true
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      # flet build apk auto-installs the Flutter SDK, the Android SDK and a JDK
+      # on first run. Output lands in build/apk/. The APK is debug-signed by
+      # default, which is installable for sideloading; for a store-grade signed
+      # build, add [tool.flet.android.signing] + a keystore in GitHub secrets.
+      - name: Build Android APK
+        run: uv run flet build apk --yes --verbose
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/apk/*.apk
           generate_release_notes: true
