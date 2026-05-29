@@ -53,7 +53,17 @@ def build_sync_config() -> SyncConfig:
     )
 
 
+def _force_utf8_console() -> None:
+    """Avoid UnicodeEncodeError when printing symbols on a cp1252 console."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main() -> int:
+    _force_utf8_console()
     try:
         sync_config = build_sync_config()
         result = sync(sync_config, progress=print)
