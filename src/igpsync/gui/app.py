@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import tempfile
 from pathlib import Path
@@ -65,6 +66,32 @@ async def _app(page: ft.Page) -> None:
         )
         page.update()
 
+    def open_releases(_: ft.ControlEvent) -> None:
+        page.launch_url(RELEASES_PAGE)
+
+    def notify_update(latest: str | None, *, quiet_when_current: bool) -> None:
+        # Must run on the event loop (not a worker thread) so the snackbar's
+        # action handler is wired up and the "View" button works.
+        if latest:
+            page.show_dialog(
+                ft.SnackBar(
+                    content=ft.Text(f"Update available: v{latest}"),
+                    action="View",
+                    on_action=open_releases,
+                    duration=8000,
+                )
+            )
+        elif not quiet_when_current:
+            page.show_dialog(ft.SnackBar(ft.Text("You're on the latest version.")))
+        page.update()
+
+    async def check_updates_now(_: ft.ControlEvent) -> None:
+        page.pop_dialog()  # close the About dialog
+        # allow_dev=True so it works on local/dev builds too (for testing): a
+        # 0.0.0 dev build counts as older than any published release.
+        latest = await asyncio.to_thread(check_for_update, __version__, allow_dev=True)
+        notify_update(latest, quiet_when_current=False)
+
     def show_about(_: ft.ControlEvent | None = None) -> None:
         page.show_dialog(
             ft.AlertDialog(
@@ -78,6 +105,7 @@ async def _app(page: ft.Page) -> None:
                     ],
                 ),
                 actions=[
+                    ft.TextButton("Check for updates", on_click=check_updates_now),
                     ft.TextButton(
                         "GitHub",
                         url="https://github.com/jorge-huxley/igpsport-intervals",
@@ -106,22 +134,15 @@ async def _app(page: ft.Page) -> None:
     else:
         await show_settings()
 
-    # Quietly check GitHub for a newer release (off the UI thread; no-op on
-    # dev builds, silent on any error).
-    def _check_updates() -> None:
-        latest = check_for_update(__version__)
-        if latest:
-            page.show_dialog(
-                ft.SnackBar(
-                    content=ft.Text(f"Update available: v{latest}"),
-                    action="View",
-                    on_action=lambda _: page.launch_url(RELEASES_PAGE),
-                    duration=8000,
-                )
-            )
-            page.update()
+    # Quietly check GitHub for a newer release. The network call runs in a
+    # thread (so it doesn't block the UI) but the snackbar is shown back on the
+    # event loop — otherwise its action handler isn't wired and "View" is dead.
+    # No-op on dev builds, silent on any error.
+    async def auto_check_updates() -> None:
+        latest = await asyncio.to_thread(check_for_update, __version__)
+        notify_update(latest, quiet_when_current=True)
 
-    page.run_thread(_check_updates)
+    page.run_task(auto_check_updates)
 
 
 def main() -> None:

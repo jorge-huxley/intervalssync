@@ -47,6 +47,12 @@ def test_dev_build_skips_check(monkeypatch):
     assert update_check.check_for_update("0.0.0+dev") is None
 
 
+def test_allow_dev_compares_dev_build(monkeypatch):
+    # With allow_dev, a 0.0.0 dev build is older than any real release.
+    monkeypatch.setattr(update_check.requests, "get", _fake_latest("v0.2.0"))
+    assert update_check.check_for_update("0.0.0+dev", allow_dev=True) == "0.2.0"
+
+
 def test_network_error_returns_none(monkeypatch):
     def boom(*a, **k):
         raise update_check.requests.ConnectionError("offline")
