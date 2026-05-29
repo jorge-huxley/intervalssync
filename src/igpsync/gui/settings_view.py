@@ -8,6 +8,7 @@ import flet as ft
 
 from .. import config as config_module
 from .. import secrets as secrets_module
+from .system import open_folder
 
 
 def build_settings_view(
@@ -53,6 +54,27 @@ def build_settings_view(
         value=config.delete_after_upload,
     )
 
+    download_folder_row = ft.Row(
+        spacing=8,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            ft.Icon(ft.Icons.FOLDER, color=ft.Colors.ON_SURFACE_VARIANT),
+            ft.Column(
+                expand=True,
+                spacing=0,
+                controls=[
+                    ft.Text("Download folder", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                    ft.Text(config.download_dir, size=13, selectable=True, no_wrap=False),
+                ],
+            ),
+            ft.IconButton(
+                ft.Icons.FOLDER_OPEN,
+                tooltip="Open folder",
+                on_click=lambda _: open_folder(config.download_dir),
+            ),
+        ],
+    )
+
     def save(_: ft.ControlEvent) -> None:
         if not igp_user.value or not igp_password.value:
             page.show_dialog(ft.SnackBar(ft.Text("iGPSPORT email and password are required.")))
@@ -94,6 +116,7 @@ def build_settings_view(
                     api_key,
                     max_activities,
                     delete_after_upload,
+                    download_folder_row,
                     ft.FilledButton(
                         "Save",
                         icon=ft.Icons.SAVE,
