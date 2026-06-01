@@ -39,3 +39,7 @@ def test_fletsecurestorage_delegates():
         assert await store.get("k") is None
 
     asyncio.run(scenario())
+
+
+def test_dropbox_refresh_token_key_is_declared():
+    assert secrets_module.DROPBOX_REFRESH_TOKEN == "dropbox_refresh_token"

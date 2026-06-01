@@ -39,6 +39,13 @@ jobs:
         shell: bash
         run: echo "__version__ = \"$APP_VERSION\"" > src/igpsync/_version.py
 
+      - name: Stamp Dropbox app key into the app
+        shell: pwsh
+        env:
+          IGPSYNC_DROPBOX_APP_KEY: ${{ secrets.IGPSYNC_DROPBOX_APP_KEY }}
+        run: |
+          python -c "from pathlib import Path; import os; Path('src/igpsync/_dropbox_app_key.py').write_text('DROPBOX_APP_KEY = ' + repr(os.getenv('IGPSYNC_DROPBOX_APP_KEY', '')) + '\n', encoding='utf-8')"
+
       - name: Build Windows app
         run: uv run flet build windows --yes --verbose --build-version "${{ env.APP_VERSION }}"
 
@@ -63,6 +70,12 @@ jobs:
 
       - name: Stamp version into the app
         run: echo "__version__ = \"$APP_VERSION\"" > src/igpsync/_version.py
+
+      - name: Stamp Dropbox app key into the app
+        env:
+          IGPSYNC_DROPBOX_APP_KEY: ${{ secrets.IGPSYNC_DROPBOX_APP_KEY }}
+        run: |
+          python -c "from pathlib import Path; import os; Path('src/igpsync/_dropbox_app_key.py').write_text('DROPBOX_APP_KEY = ' + repr(os.getenv('IGPSYNC_DROPBOX_APP_KEY', '')) + '\n', encoding='utf-8')"
 
       # Use a stable release key if the keystore secrets are configured, so every
       # release shares one signature and Android installs updates over the top

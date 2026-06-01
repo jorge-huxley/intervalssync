@@ -137,7 +137,14 @@ def test_login_raises_without_cookie(monkeypatch):
 @pytest.fixture
 def stub_sync(monkeypatch, tmp_path):
     """Replace every network leaf so sync() runs offline. Returns a recorder."""
-    rec = {"downloaded": [], "uploaded": [], "typed": [], "existing": set()}
+    rec = {
+        "downloaded": [],
+        "uploaded": [],
+        "dropbox": [],
+        "typed": [],
+        "existing": set(),
+        "dropbox_ok": True,
+    }
 
     monkeypatch.setattr(core, "login", lambda s, u, p: {"Authorization": "x"})
     monkeypatch.setattr(
@@ -167,6 +174,12 @@ def stub_sync(monkeypatch, tmp_path):
         return f"i{ride_id}"
 
     monkeypatch.setattr(core, "upload_to_intervals", fake_upload)
+
+    def fake_dropbox(fp, ride_id, token, app_key, folder):
+        rec["dropbox"].append((ride_id, token, app_key, folder, fp.name))
+        return rec["dropbox_ok"]
+
+    monkeypatch.setattr(core, "upload_to_dropbox", fake_dropbox)
     monkeypatch.setattr(
         core,
         "set_activity_type",
@@ -182,6 +195,8 @@ def _config(tmp_path, **overrides):
         igp_user="u",
         igp_password="p",
         intervals_api_key="k",
+        dropbox_refresh_token="dbx-refresh",
+        dropbox_app_key="dbx-app",
         download_dir=tmp_path,
         delete_after_upload=False,
         force_resync=False,
@@ -190,6 +205,8 @@ def _config(tmp_path, **overrides):
         get_download_url=False,
         download_fit=True,
         upload_intervals=True,
+        upload_dropbox=False,
+        dropbox_folder="/igpsport-fit",
     )
     base.update(overrides)
     return core.SyncConfig(**base)
@@ -240,3 +257,73 @@ def test_sync_deletes_file_after_upload_when_enabled(stub_sync):
 def test_sync_keeps_file_when_delete_disabled(stub_sync):
     core.sync(_config(stub_sync["tmp"], delete_after_upload=False))
     assert (stub_sync["tmp"] / "igpsport_1.fit").exists()
+
+
+def test_sync_does_not_upload_to_dropbox_when_disabled(stub_sync):
+    core.sync(_config(stub_sync["tmp"], upload_dropbox=False))
+    assert stub_sync["dropbox"] == []
+
+
+def test_sync_uploads_to_dropbox_after_intervals(stub_sync):
+    result = core.sync(_config(stub_sync["tmp"], upload_dropbox=True))
+    assert result.uploaded == 3
+    assert result.uploaded_dropbox == 3
+    assert [item[0] for item in stub_sync["dropbox"]] == [1, 2, 3]
+    assert stub_sync["dropbox"][0][1:4] == ("dbx-refresh", "dbx-app", "/igpsport-fit")
+
+
+def test_sync_skips_dropbox_when_intervals_skip_applies(stub_sync):
+    stub_sync["existing"] = {"igpsport_1", "igpsport_2"}
+    result = core.sync(_config(stub_sync["tmp"], upload_dropbox=True))
+    assert result.skipped == 2
+    assert result.uploaded_dropbox == 1
+    assert [item[0] for item in stub_sync["dropbox"]] == [3]
+
+
+def test_sync_force_resync_uploads_all_to_dropbox(stub_sync):
+    stub_sync["existing"] = {"igpsport_1", "igpsport_2", "igpsport_3"}
+    result = core.sync(
+        _config(stub_sync["tmp"], force_resync=True, upload_dropbox=True)
+    )
+    assert result.skipped == 0
+    assert result.uploaded_dropbox == 3
+
+
+def test_sync_keeps_file_when_dropbox_upload_fails(stub_sync):
+    stub_sync["dropbox_ok"] = False
+    result = core.sync(
+        _config(stub_sync["tmp"], delete_after_upload=True, upload_dropbox=True)
+    )
+    assert result.uploaded == 3
+    assert result.failed_dropbox == 3
+    assert (stub_sync["tmp"] / "igpsport_1.fit").exists()
+
+
+def test_sync_deletes_file_after_intervals_and_dropbox_when_enabled(stub_sync):
+    result = core.sync(
+        _config(stub_sync["tmp"], delete_after_upload=True, upload_dropbox=True)
+    )
+    assert result.uploaded_dropbox == 3
+    assert not (stub_sync["tmp"] / "igpsport_1.fit").exists()
+
+
+def test_sync_requires_dropbox_app_key_when_enabled(stub_sync):
+    with pytest.raises(core.SyncError, match="Dropbox app key"):
+        core.sync(
+            _config(
+                stub_sync["tmp"],
+                upload_dropbox=True,
+                dropbox_app_key=None,
+            )
+        )
+
+
+def test_sync_requires_dropbox_connection_when_enabled(stub_sync):
+    with pytest.raises(core.SyncError, match="Connect Dropbox"):
+        core.sync(
+            _config(
+                stub_sync["tmp"],
+                upload_dropbox=True,
+                dropbox_refresh_token=None,
+            )
+        )

@@ -10,6 +10,12 @@ from flet_permission_handler import Permission, PermissionHandler, PermissionSta
 from .. import config as config_module
 from .. import secrets as secrets_module
 from ..core import CYCLING_ACTIVITY_TYPES
+from ..dropbox_client import (
+    DEFAULT_DROPBOX_FOLDER,
+    finish_dropbox_auth,
+    get_dropbox_app_key,
+    start_dropbox_auth,
+)
 from .system import open_folder
 
 
@@ -26,6 +32,8 @@ async def build_settings_view(
     # Prefetch the currently-stored secrets to prefill the fields.
     existing_password = await store.get(secrets_module.IGP_PASSWORD) or ""
     existing_api_key = await store.get(secrets_module.INTERVALS_API_KEY) or ""
+    existing_dropbox_token = await store.get(secrets_module.DROPBOX_REFRESH_TOKEN)
+    dropbox_app_key = get_dropbox_app_key()
 
     igp_user = ft.TextField(
         label="iGPSPORT email",
@@ -78,6 +86,145 @@ async def build_settings_view(
     force_resync = ft.Switch(
         label="Force re-sync (re-download even if already on intervals.icu)",
         value=config.force_resync,
+    )
+
+    upload_dropbox = ft.Switch(
+        label="Upload to Dropbox after intervals.icu",
+        value=(
+            config.upload_dropbox
+            and bool(existing_dropbox_token)
+            and bool(dropbox_app_key)
+        ),
+        disabled=not bool(existing_dropbox_token and dropbox_app_key),
+    )
+    dropbox_folder = ft.TextField(
+        label="Dropbox folder",
+        value=config.dropbox_folder or DEFAULT_DROPBOX_FOLDER,
+        prefix_icon=ft.Icons.FOLDER,
+        helper="Inside this app's Dropbox folder",
+    )
+    dropbox_status = ft.Text(
+        (
+            "Connected"
+            if existing_dropbox_token and dropbox_app_key
+            else "Dropbox app key missing from this build"
+            if not dropbox_app_key
+            else "Not connected"
+        ),
+        size=13,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+    )
+    dropbox_auth_code = ft.TextField(
+        label="Dropbox authorization code",
+        prefix_icon=ft.Icons.KEY,
+        visible=False,
+    )
+    dropbox_finish_button = ft.OutlinedButton(
+        "Finish connection",
+        icon=ft.Icons.CHECK,
+        visible=False,
+    )
+    dropbox_auth_flow = None
+
+    async def connect_dropbox(_: ft.ControlEvent) -> None:
+        nonlocal dropbox_auth_flow
+        if not dropbox_app_key:
+            page.show_dialog(
+                ft.SnackBar(ft.Text("Dropbox app key is missing from this build."))
+            )
+            return
+        dropbox_auth_flow, auth_url = start_dropbox_auth(dropbox_app_key)
+        dropbox_auth_code.visible = True
+        dropbox_finish_button.visible = True
+        dropbox_auth_code.value = ""
+        await page.launch_url(auth_url)
+        page.show_dialog(
+            ft.SnackBar(ft.Text("Paste the Dropbox authorization code here."))
+        )
+        page.update()
+
+    async def finish_dropbox(_: ft.ControlEvent) -> None:
+        nonlocal dropbox_auth_flow
+        if dropbox_auth_flow is None:
+            page.show_dialog(ft.SnackBar(ft.Text("Start Dropbox connection first.")))
+            return
+        if not dropbox_auth_code.value:
+            page.show_dialog(ft.SnackBar(ft.Text("Paste the Dropbox code first.")))
+            return
+        try:
+            refresh_token = finish_dropbox_auth(
+                dropbox_auth_flow, dropbox_auth_code.value
+            )
+        except Exception as exc:  # noqa: BLE001 — show auth failures directly
+            page.show_dialog(ft.SnackBar(ft.Text(f"Dropbox connection failed: {exc}")))
+            return
+        if not refresh_token:
+            page.show_dialog(
+                ft.SnackBar(ft.Text("Dropbox did not return a refresh token."))
+            )
+            return
+        await store.set(secrets_module.DROPBOX_REFRESH_TOKEN, refresh_token)
+        dropbox_auth_flow = None
+        dropbox_auth_code.visible = False
+        dropbox_finish_button.visible = False
+        dropbox_status.value = "Connected"
+        upload_dropbox.disabled = False
+        upload_dropbox.value = True
+        dropbox_disconnect_button.disabled = False
+        page.show_dialog(ft.SnackBar(ft.Text("Dropbox connected.")))
+        page.update()
+
+    async def disconnect_dropbox(_: ft.ControlEvent) -> None:
+        await store.delete(secrets_module.DROPBOX_REFRESH_TOKEN)
+        config.upload_dropbox = False
+        config_module.save(config)
+        upload_dropbox.value = False
+        upload_dropbox.disabled = True
+        dropbox_status.value = "Not connected"
+        page.show_dialog(ft.SnackBar(ft.Text("Dropbox disconnected.")))
+        page.update()
+
+    dropbox_connect_button = ft.OutlinedButton(
+        "Connect Dropbox",
+        icon=ft.Icons.CLOUD_UPLOAD,
+        disabled=not bool(dropbox_app_key),
+        on_click=connect_dropbox,
+    )
+    dropbox_disconnect_button = ft.TextButton(
+        "Disconnect",
+        icon=ft.Icons.LINK_OFF,
+        disabled=not bool(existing_dropbox_token),
+        on_click=disconnect_dropbox,
+    )
+    dropbox_finish_button.on_click = finish_dropbox
+
+    dropbox_options = ft.ExpansionTile(
+        title=ft.Text("Dropbox"),
+        leading=ft.Icon(ft.Icons.CLOUD),
+        affinity=ft.TileAffinity.LEADING,
+        expanded=config.upload_dropbox,
+        controls=[
+            ft.Container(
+                padding=ft.Padding(left=16, top=0, right=16, bottom=8),
+                content=ft.Column(
+                    spacing=8,
+                    controls=[
+                        dropbox_status,
+                        ft.Row(
+                            spacing=8,
+                            controls=[
+                                dropbox_connect_button,
+                                dropbox_disconnect_button,
+                            ],
+                        ),
+                        dropbox_auth_code,
+                        dropbox_finish_button,
+                        upload_dropbox,
+                        dropbox_folder,
+                    ],
+                ),
+            )
+        ],
     )
 
     is_mobile = page.platform in {
@@ -186,8 +333,20 @@ async def build_settings_view(
         config.step_get_download_url = step_url.value
         config.step_download_fit = step_download.value
         config.step_upload_intervals = step_upload.value
+        config.dropbox_folder = dropbox_folder.value.strip() or DEFAULT_DROPBOX_FOLDER
+        config.upload_dropbox = bool(upload_dropbox.value)
 
         message = "Saved securely to your system credential store."
+        if config.upload_dropbox and not dropbox_app_key:
+            config.upload_dropbox = False
+            upload_dropbox.value = False
+            message = "Saved, but Dropbox is disabled because this build has no app key."
+        elif config.upload_dropbox and not await store.get(
+            secrets_module.DROPBOX_REFRESH_TOKEN
+        ):
+            config.upload_dropbox = False
+            upload_dropbox.value = False
+            message = "Saved, but Dropbox is disabled until you connect it."
         if is_mobile:
             want_downloads = bool(save_to_downloads.value)
             if want_downloads and perms is not None:
@@ -235,6 +394,7 @@ async def build_settings_view(
                     activity_type,
                     delete_after_upload,
                     force_resync,
+                    dropbox_options,
                     *([save_to_downloads] if is_mobile else []),
                     download_folder_row,
                     developer_options,

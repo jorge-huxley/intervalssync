@@ -42,6 +42,10 @@ class AppConfig:
     step_get_download_url: bool = True
     step_download_fit: bool = True
     step_upload_intervals: bool = True
+    # Optional secondary upload target. Off by default because most users only
+    # want intervals.icu.
+    upload_dropbox: bool = False
+    dropbox_folder: str = "/igpsport-fit"
 
 
 def load() -> AppConfig:

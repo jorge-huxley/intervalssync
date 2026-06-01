@@ -24,6 +24,8 @@ from urllib.parse import unquote
 
 import requests
 
+from .dropbox_client import DEFAULT_DROPBOX_FOLDER, upload_to_dropbox
+
 LOGIN_URL = "https://i.igpsport.com/Auth/Login"
 ACTIVITY_LIST_URL = "https://i.igpsport.com/Activity/ActivityList"
 GATEWAY = "https://prod.en.igpsport.com/service/web-gateway/web-analyze/activity"
@@ -81,8 +83,10 @@ class SyncResult:
     listed: int = 0
     downloaded: int = 0
     uploaded: int = 0
+    uploaded_dropbox: int = 0
     skipped: int = 0
     failed: int = 0
+    failed_dropbox: int = 0
     activities: list[Activity] = field(default_factory=list)
 
 
@@ -238,6 +242,8 @@ class SyncConfig:
     igp_user: str
     igp_password: str
     intervals_api_key: str | None
+    dropbox_refresh_token: str | None = None
+    dropbox_app_key: str | None = None
     max_activities: int = 5
     download_dir: Path = Path("downloads")
     delete_after_upload: bool = True
@@ -251,6 +257,8 @@ class SyncConfig:
     get_download_url: bool = False
     download_fit: bool = False
     upload_intervals: bool = False
+    upload_dropbox: bool = False
+    dropbox_folder: str = DEFAULT_DROPBOX_FOLDER
 
 
 def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
@@ -339,7 +347,33 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
                 else:
                     report(f"⚠ Could not set activity type for {act.ride_id}.")
 
-            if config.delete_after_upload:
+            dropbox_uploaded = True
+            if config.upload_dropbox:
+                if not config.dropbox_app_key:
+                    raise SyncError("Dropbox app key is required for Dropbox upload.")
+                if not config.dropbox_refresh_token:
+                    raise SyncError("Connect Dropbox in Settings before syncing.")
+
+                report(f"Uploading {act.ride_id} to Dropbox…")
+                try:
+                    dropbox_uploaded = upload_to_dropbox(
+                        fit_path,
+                        act.ride_id,
+                        config.dropbox_refresh_token,
+                        config.dropbox_app_key,
+                        config.dropbox_folder,
+                    )
+                except Exception as exc:  # noqa: BLE001 — surface provider failures
+                    dropbox_uploaded = False
+                    report(f"⚠ Dropbox upload failed for {act.ride_id}: {exc}")
+
+                if dropbox_uploaded:
+                    result.uploaded_dropbox += 1
+                    report(f"✓ Uploaded {act.ride_id} to Dropbox")
+                else:
+                    result.failed_dropbox += 1
+
+            if config.delete_after_upload and dropbox_uploaded:
                 fit_path.unlink(missing_ok=True)
                 report(f"  Removed local file {fit_path.name}")
         else:

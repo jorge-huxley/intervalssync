@@ -11,6 +11,8 @@ def test_defaults():
     assert cfg.force_resync is False
     assert cfg.activity_type == ""  # "" = leave the uploaded sport untouched
     assert cfg.max_activities == 5
+    assert cfg.upload_dropbox is False
+    assert cfg.dropbox_folder == "/igpsport-fit"
 
 
 def test_save_and_load_roundtrip(tmp_path, monkeypatch):
@@ -24,6 +26,8 @@ def test_save_and_load_roundtrip(tmp_path, monkeypatch):
         max_activities=3,
         activity_type="GravelRide",
         delete_after_upload=False,
+        upload_dropbox=True,
+        dropbox_folder="/rides",
     )
     config_module.save(cfg)
     assert path.exists()
@@ -33,6 +37,8 @@ def test_save_and_load_roundtrip(tmp_path, monkeypatch):
     assert loaded.max_activities == 3
     assert loaded.activity_type == "GravelRide"
     assert loaded.delete_after_upload is False
+    assert loaded.upload_dropbox is True
+    assert loaded.dropbox_folder == "/rides"
 
 
 def test_load_ignores_unknown_keys(tmp_path, monkeypatch):
