@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import dropbox
 from dropbox import DropboxOAuth2FlowNoRedirect
-from dropbox.files import WriteMode
+from dropbox.exceptions import ApiError
+from dropbox.files import FileMetadata, WriteMode
 
 from ._dropbox_app_key import DROPBOX_APP_KEY as BUILD_DROPBOX_APP_KEY
 
 DROPBOX_APP_KEY_ENV = "IGPSYNC_DROPBOX_APP_KEY"
 DEFAULT_DROPBOX_FOLDER = "/igpsport-fit"
+
+# Matches the FIT file names we write, e.g. "igpsport_12345.fit".
+_FIT_NAME_RE = re.compile(r"^igpsport_(\d+)\.fit$")
 
 
 def get_dropbox_app_key() -> str | None:
@@ -20,13 +25,17 @@ def get_dropbox_app_key() -> str | None:
     return os.getenv(DROPBOX_APP_KEY_ENV) or BUILD_DROPBOX_APP_KEY or None
 
 
+def normalize_folder(folder: str) -> str:
+    """Return a leading-slash, no-trailing-slash Dropbox folder path."""
+    clean = (folder or DEFAULT_DROPBOX_FOLDER).strip()
+    if not clean.startswith("/"):
+        clean = f"/{clean}"
+    return clean.rstrip("/")
+
+
 def dropbox_path_for(folder: str, ride_id: int) -> str:
     """Return the Dropbox app-folder path for an iGPSPORT ride."""
-    clean_folder = (folder or DEFAULT_DROPBOX_FOLDER).strip()
-    if not clean_folder.startswith("/"):
-        clean_folder = f"/{clean_folder}"
-    clean_folder = clean_folder.rstrip("/")
-    return f"{clean_folder}/igpsport_{ride_id}.fit"
+    return f"{normalize_folder(folder)}/igpsport_{ride_id}.fit"
 
 
 def start_dropbox_auth(app_key: str) -> tuple[DropboxOAuth2FlowNoRedirect, str]:
@@ -35,7 +44,12 @@ def start_dropbox_auth(app_key: str) -> tuple[DropboxOAuth2FlowNoRedirect, str]:
         app_key,
         use_pkce=True,
         token_access_type="offline",
-        scope=["account_info.read", "files.content.write"],
+        # files.metadata.read lets us list the folder to skip rides already there.
+        scope=[
+            "account_info.read",
+            "files.metadata.read",
+            "files.content.write",
+        ],
     )
     return auth_flow, auth_flow.start()
 
@@ -73,3 +87,39 @@ def upload_to_dropbox(
                 mode=WriteMode.overwrite,
                 mute=True,
             )
+
+
+def list_dropbox_ride_ids(
+    folder: str, refresh_token: str, app_key: str
+) -> set[int]:
+    """Return iGPSPORT ride ids that already have a FIT file in the folder.
+
+    Returns an empty set when the folder doesn't exist yet. Raises on other
+    Dropbox errors so the caller can decide whether to treat them as fatal.
+    """
+    base = normalize_folder(folder)
+    ride_ids: set[int] = set()
+    with dropbox.Dropbox(
+        oauth2_refresh_token=refresh_token,
+        app_key=app_key,
+        timeout=100,
+        user_agent="igpsport-intervals",
+    ) as dbx:
+        try:
+            result = dbx.files_list_folder(base)
+        except ApiError as exc:
+            if exc.error.is_path() and exc.error.get_path().is_not_found():
+                return ride_ids
+            raise
+        entries = list(result.entries)
+        while result.has_more:
+            result = dbx.files_list_folder_continue(result.cursor)
+            entries.extend(result.entries)
+
+    for entry in entries:
+        if not isinstance(entry, FileMetadata):
+            continue
+        match = _FIT_NAME_RE.match(entry.name)
+        if match:
+            ride_ids.add(int(match.group(1)))
+    return ride_ids

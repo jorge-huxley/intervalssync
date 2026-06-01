@@ -62,7 +62,8 @@ def build_sync_view(
             append_log(
                 f"\nDone — intervals uploaded {result.uploaded}, "
                 f"Dropbox uploaded {result.uploaded_dropbox}, "
-                f"skipped {result.skipped}, downloaded {result.downloaded}, "
+                f"downloaded {result.downloaded}, "
+                f"skipped {result.skipped}, Dropbox skipped {result.skipped_dropbox}, "
                 f"failed {result.failed}, Dropbox failed {result.failed_dropbox}."
             )
         except SyncError as exc:

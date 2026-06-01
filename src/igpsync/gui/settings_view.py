@@ -89,7 +89,7 @@ async def build_settings_view(
     )
 
     upload_dropbox = ft.Switch(
-        label="Upload to Dropbox after intervals.icu",
+        label="Upload activities to Dropbox",
         value=(
             config.upload_dropbox
             and bool(existing_dropbox_token)

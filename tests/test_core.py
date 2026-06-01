@@ -143,6 +143,7 @@ def stub_sync(monkeypatch, tmp_path):
         "dropbox": [],
         "typed": [],
         "existing": set(),
+        "dropbox_existing": set(),
         "dropbox_ok": True,
     }
 
@@ -181,6 +182,11 @@ def stub_sync(monkeypatch, tmp_path):
             raise RuntimeError("dropbox upload failed")
 
     monkeypatch.setattr(core, "upload_to_dropbox", fake_dropbox)
+    monkeypatch.setattr(
+        core,
+        "list_dropbox_ride_ids",
+        lambda folder, token, app_key: set(rec["dropbox_existing"]),
+    )
     monkeypatch.setattr(
         core,
         "set_activity_type",
@@ -273,20 +279,45 @@ def test_sync_uploads_to_dropbox_after_intervals(stub_sync):
     assert stub_sync["dropbox"][0][1:4] == ("dbx-refresh", "dbx-app", "/igpsport-fit")
 
 
-def test_sync_skips_dropbox_when_intervals_skip_applies(stub_sync):
+def test_sync_uploads_to_dropbox_even_when_intervals_skips(stub_sync):
+    # Already on intervals.icu, but not yet in Dropbox: the targets are
+    # independent, so all three still get pushed to Dropbox.
     stub_sync["existing"] = {"igpsport_1", "igpsport_2"}
     result = core.sync(_config(stub_sync["tmp"], upload_dropbox=True))
     assert result.skipped == 2
+    assert result.uploaded == 1
+    assert result.uploaded_dropbox == 3
+    assert [item[0] for item in stub_sync["dropbox"]] == [1, 2, 3]
+
+
+def test_sync_uploads_to_dropbox_when_intervals_disabled(stub_sync):
+    result = core.sync(
+        _config(stub_sync["tmp"], upload_intervals=False, upload_dropbox=True)
+    )
+    assert result.uploaded == 0
+    assert stub_sync["uploaded"] == []
+    assert result.uploaded_dropbox == 3
+    assert [item[0] for item in stub_sync["dropbox"]] == [1, 2, 3]
+
+
+def test_sync_skips_dropbox_for_rides_already_in_dropbox(stub_sync):
+    stub_sync["dropbox_existing"] = {1, 2}
+    result = core.sync(
+        _config(stub_sync["tmp"], upload_intervals=False, upload_dropbox=True)
+    )
+    assert result.skipped_dropbox == 2
     assert result.uploaded_dropbox == 1
     assert [item[0] for item in stub_sync["dropbox"]] == [3]
 
 
 def test_sync_force_resync_uploads_all_to_dropbox(stub_sync):
     stub_sync["existing"] = {"igpsport_1", "igpsport_2", "igpsport_3"}
+    stub_sync["dropbox_existing"] = {1, 2, 3}
     result = core.sync(
         _config(stub_sync["tmp"], force_resync=True, upload_dropbox=True)
     )
     assert result.skipped == 0
+    assert result.skipped_dropbox == 0
     assert result.uploaded_dropbox == 3
 
 

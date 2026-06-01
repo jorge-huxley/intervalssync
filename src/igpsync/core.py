@@ -24,7 +24,11 @@ from urllib.parse import unquote
 
 import requests
 
-from .dropbox_client import DEFAULT_DROPBOX_FOLDER, upload_to_dropbox
+from .dropbox_client import (
+    DEFAULT_DROPBOX_FOLDER,
+    list_dropbox_ride_ids,
+    upload_to_dropbox,
+)
 
 LOGIN_URL = "https://i.igpsport.com/Auth/Login"
 ACTIVITY_LIST_URL = "https://i.igpsport.com/Activity/ActivityList"
@@ -85,6 +89,7 @@ class SyncResult:
     uploaded: int = 0
     uploaded_dropbox: int = 0
     skipped: int = 0
+    skipped_dropbox: int = 0
     failed: int = 0
     failed_dropbox: int = 0
     activities: list[Activity] = field(default_factory=list)
@@ -281,7 +286,10 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
             report(f"  • {act.ride_id} | {act.start_time} | {act.title}")
 
     needs_url = (
-        config.get_download_url or config.download_fit or config.upload_intervals
+        config.get_download_url
+        or config.download_fit
+        or config.upload_intervals
+        or config.upload_dropbox
     )
     if not needs_url:
         return result
@@ -304,20 +312,50 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
 
     # Validate Dropbox prerequisites once, before processing any activity, so a
     # misconfiguration fails fast instead of part-way through the loop.
+    dropbox_uploaded_ids: set[int] = set()
     if config.upload_dropbox:
         if not config.dropbox_app_key:
             raise SyncError("Dropbox app key is required for Dropbox upload.")
         if not config.dropbox_refresh_token:
             raise SyncError("Connect Dropbox in Settings before syncing.")
 
+        # Skip-tracking for Dropbox is independent of intervals.icu: list the
+        # ride ids already present in the folder so we don't re-upload them.
+        if not config.force_resync:
+            try:
+                dropbox_uploaded_ids = list_dropbox_ride_ids(
+                    config.dropbox_folder,
+                    config.dropbox_refresh_token,
+                    config.dropbox_app_key,
+                )
+                report(f"{len(dropbox_uploaded_ids)} activities already in Dropbox.")
+            except Exception as exc:  # noqa: BLE001 — non-fatal; process all
+                report(f"⚠ Could not check Dropbox (will process all): {exc}")
+
     download_dir = Path(config.download_dir)
 
-    for act in activities:
-        fit_path = download_dir / f"{external_id_for(act.ride_id)}.fit"
+    any_upload_enabled = config.upload_intervals or config.upload_dropbox
 
-        if external_id_for(act.ride_id) in already_uploaded:
+    for act in activities:
+        ext = external_id_for(act.ride_id)
+        fit_path = download_dir / f"{ext}.fit"
+
+        # Each target tracks its own "already there" state, so an activity can
+        # be uploaded to one target while being skipped on the other.
+        intervals_needs_it = config.upload_intervals and ext not in already_uploaded
+        dropbox_needs_it = (
+            config.upload_dropbox and act.ride_id not in dropbox_uploaded_ids
+        )
+
+        if config.upload_intervals and not intervals_needs_it:
             report(f"↷ Skipping {act.ride_id} — already on intervals.icu.")
             result.skipped += 1
+        if config.upload_dropbox and not dropbox_needs_it:
+            report(f"↷ Skipping {act.ride_id} — already in Dropbox.")
+            result.skipped_dropbox += 1
+
+        # Nothing left to do once every enabled upload target already has it.
+        if any_upload_enabled and not intervals_needs_it and not dropbox_needs_it:
             continue
 
         fit_url = resolve_fit_url(session, auth_headers, act.ride_id)
@@ -326,7 +364,9 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
             result.failed += 1
             continue
 
-        if config.get_download_url and not (config.download_fit or config.upload_intervals):
+        if config.get_download_url and not (
+            config.download_fit or config.upload_intervals or config.upload_dropbox
+        ):
             report(f"FIT URL for {act.ride_id}: {fit_url}")
             continue
 
@@ -334,51 +374,53 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
         download_fit(fit_url, fit_path)
         result.downloaded += 1
 
-        if not config.upload_intervals:
-            continue
+        intervals_ok = True
+        if intervals_needs_it:
+            if not config.intervals_api_key:
+                raise SyncError("intervals.icu API key is required for upload.")
 
-        if not config.intervals_api_key:
-            raise SyncError("intervals.icu API key is required for upload.")
+            activity_id = upload_to_intervals(
+                fit_path, act.title, act.ride_id, config.intervals_api_key
+            )
+            if activity_id:
+                report(f"✓ Uploaded {act.ride_id}: {act.title}")
+                result.uploaded += 1
 
-        activity_id = upload_to_intervals(
-            fit_path, act.title, act.ride_id, config.intervals_api_key
-        )
-        if activity_id:
-            report(f"✓ Uploaded {act.ride_id}: {act.title}")
-            result.uploaded += 1
+                if config.activity_type:
+                    if set_activity_type(
+                        activity_id, config.activity_type, config.intervals_api_key
+                    ):
+                        report(f"↻ Set {act.ride_id} → {config.activity_type}")
+                    else:
+                        report(f"⚠ Could not set activity type for {act.ride_id}.")
+            else:
+                report(f"✗ Failed to upload {act.ride_id}.")
+                result.failed += 1
+                intervals_ok = False
 
-            if config.activity_type:
-                if set_activity_type(
-                    activity_id, config.activity_type, config.intervals_api_key
-                ):
-                    report(f"↻ Set {act.ride_id} → {config.activity_type}")
-                else:
-                    report(f"⚠ Could not set activity type for {act.ride_id}.")
+        dropbox_ok = True
+        if dropbox_needs_it:
+            report(f"Uploading {act.ride_id} to Dropbox…")
+            try:
+                upload_to_dropbox(
+                    fit_path,
+                    act.ride_id,
+                    config.dropbox_refresh_token,
+                    config.dropbox_app_key,
+                    config.dropbox_folder,
+                )
+            except Exception as exc:  # noqa: BLE001 — surface provider failures
+                dropbox_ok = False
+                result.failed_dropbox += 1
+                report(f"⚠ Dropbox upload failed for {act.ride_id}: {exc}")
+            else:
+                result.uploaded_dropbox += 1
+                report(f"✓ Uploaded {act.ride_id} to Dropbox")
 
-            dropbox_uploaded = True
-            if config.upload_dropbox:
-                report(f"Uploading {act.ride_id} to Dropbox…")
-                try:
-                    upload_to_dropbox(
-                        fit_path,
-                        act.ride_id,
-                        config.dropbox_refresh_token,
-                        config.dropbox_app_key,
-                        config.dropbox_folder,
-                    )
-                except Exception as exc:  # noqa: BLE001 — surface provider failures
-                    dropbox_uploaded = False
-                    result.failed_dropbox += 1
-                    report(f"⚠ Dropbox upload failed for {act.ride_id}: {exc}")
-                else:
-                    result.uploaded_dropbox += 1
-                    report(f"✓ Uploaded {act.ride_id} to Dropbox")
-
-            if config.delete_after_upload and dropbox_uploaded:
-                fit_path.unlink(missing_ok=True)
-                report(f"  Removed local file {fit_path.name}")
-        else:
-            report(f"✗ Failed to upload {act.ride_id}.")
-            result.failed += 1
+        # Remove the local file only once every enabled target is satisfied, so
+        # a failure on either target keeps the file for a later retry.
+        if config.delete_after_upload and any_upload_enabled and intervals_ok and dropbox_ok:
+            fit_path.unlink(missing_ok=True)
+            report(f"  Removed local file {fit_path.name}")
 
     return result
