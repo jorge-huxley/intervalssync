@@ -54,8 +54,11 @@ def upload_to_dropbox(
     refresh_token: str,
     app_key: str,
     folder: str = DEFAULT_DROPBOX_FOLDER,
-) -> bool:
-    """Upload a FIT file to Dropbox, overwriting the ride's existing file."""
+) -> None:
+    """Upload a FIT file to Dropbox, overwriting the ride's existing file.
+
+    Raises on failure; a normal return means the upload succeeded.
+    """
     target = dropbox_path_for(folder, ride_id)
     with dropbox.Dropbox(
         oauth2_refresh_token=refresh_token,
@@ -70,4 +73,3 @@ def upload_to_dropbox(
                 mode=WriteMode.overwrite,
                 mute=True,
             )
-    return True

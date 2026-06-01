@@ -359,7 +359,7 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
             if config.upload_dropbox:
                 report(f"Uploading {act.ride_id} to Dropbox…")
                 try:
-                    dropbox_uploaded = upload_to_dropbox(
+                    upload_to_dropbox(
                         fit_path,
                         act.ride_id,
                         config.dropbox_refresh_token,
@@ -368,13 +368,11 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
                     )
                 except Exception as exc:  # noqa: BLE001 — surface provider failures
                     dropbox_uploaded = False
+                    result.failed_dropbox += 1
                     report(f"⚠ Dropbox upload failed for {act.ride_id}: {exc}")
-
-                if dropbox_uploaded:
+                else:
                     result.uploaded_dropbox += 1
                     report(f"✓ Uploaded {act.ride_id} to Dropbox")
-                else:
-                    result.failed_dropbox += 1
 
             if config.delete_after_upload and dropbox_uploaded:
                 fit_path.unlink(missing_ok=True)

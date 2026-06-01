@@ -177,7 +177,8 @@ def stub_sync(monkeypatch, tmp_path):
 
     def fake_dropbox(fp, ride_id, token, app_key, folder):
         rec["dropbox"].append((ride_id, token, app_key, folder, fp.name))
-        return rec["dropbox_ok"]
+        if not rec["dropbox_ok"]:
+            raise RuntimeError("dropbox upload failed")
 
     monkeypatch.setattr(core, "upload_to_dropbox", fake_dropbox)
     monkeypatch.setattr(
