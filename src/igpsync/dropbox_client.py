@@ -10,6 +10,7 @@ import dropbox
 from dropbox import DropboxOAuth2FlowNoRedirect
 from dropbox.exceptions import ApiError
 from dropbox.files import FileMetadata, WriteMode
+from requests.exceptions import HTTPError
 
 from ._dropbox_app_key import DROPBOX_APP_KEY as BUILD_DROPBOX_APP_KEY
 
@@ -57,8 +58,20 @@ def start_dropbox_auth(app_key: str) -> tuple[DropboxOAuth2FlowNoRedirect, str]:
 def finish_dropbox_auth(
     auth_flow: DropboxOAuth2FlowNoRedirect, auth_code: str
 ) -> str | None:
-    """Finish OAuth and return the long-lived refresh token."""
-    result = auth_flow.finish(auth_code.strip())
+    """Finish OAuth and return the long-lived refresh token.
+
+    The Dropbox SDK calls ``raise_for_status()`` on the token request and drops
+    the response body, so a failed exchange surfaces only a generic
+    "400 Client Error". Re-raise with Dropbox's actual error text (e.g.
+    ``invalid_grant``) so the cause is visible to the user.
+    """
+    try:
+        result = auth_flow.finish(auth_code.strip())
+    except HTTPError as exc:
+        detail = ""
+        if exc.response is not None:
+            detail = exc.response.text.strip()
+        raise RuntimeError(f"{exc} — {detail}" if detail else str(exc)) from exc
     return result.refresh_token
 
 
