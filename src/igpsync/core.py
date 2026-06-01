@@ -302,6 +302,14 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
         except requests.RequestException as exc:
             report(f"⚠ Could not check intervals.icu (will process all): {exc}")
 
+    # Validate Dropbox prerequisites once, before processing any activity, so a
+    # misconfiguration fails fast instead of part-way through the loop.
+    if config.upload_dropbox:
+        if not config.dropbox_app_key:
+            raise SyncError("Dropbox app key is required for Dropbox upload.")
+        if not config.dropbox_refresh_token:
+            raise SyncError("Connect Dropbox in Settings before syncing.")
+
     download_dir = Path(config.download_dir)
 
     for act in activities:
@@ -349,11 +357,6 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
 
             dropbox_uploaded = True
             if config.upload_dropbox:
-                if not config.dropbox_app_key:
-                    raise SyncError("Dropbox app key is required for Dropbox upload.")
-                if not config.dropbox_refresh_token:
-                    raise SyncError("Connect Dropbox in Settings before syncing.")
-
                 report(f"Uploading {act.ride_id} to Dropbox…")
                 try:
                     dropbox_uploaded = upload_to_dropbox(
