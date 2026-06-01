@@ -84,7 +84,7 @@ async def build_settings_view(
     )
 
     force_resync = ft.Switch(
-        label="Force re-sync (re-download even if already on intervals.icu or in Dropbox)",
+        label="Force re-sync (re-download even if already uploaded)",
         value=config.force_resync,
     )
 
