@@ -59,19 +59,17 @@ reusing the production one:
    an app with **Scoped access** and **App folder** access, and enable the
    `account_info.read`, `files.metadata.read`, and `files.content.write` scopes.
 2. Copy the app's **App key**.
-3. Set `IGPSYNC_DROPBOX_APP_KEY` before launching:
+3. Copy `.env.example` to `.env`, set `IGPSYNC_DROPBOX_APP_KEY` to your key, and
+   run with uv's `--env-file` flag (which loads the file into the environment):
 
    ```bash
-   IGPSYNC_DROPBOX_APP_KEY=your_app_key uv run main.py        # macOS/Linux
+   cp .env.example .env        # then edit .env and paste your app key
+   uv run --env-file .env main.py
    ```
 
-   ```powershell
-   $env:IGPSYNC_DROPBOX_APP_KEY = "your_app_key"; uv run main.py   # Windows
-   ```
-
-The app key for a PKCE public client isn't a secret (it ships inside released
-builds), but use your own for development so you don't share the production
-app's rate limit.
+`.env` is gitignored. The app key for a PKCE public client isn't a secret (it
+ships inside released builds), but use your own for development so you don't
+share the production app's rate limit.
 
 ## Making a change
 
