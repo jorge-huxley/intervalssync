@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import types
 
+import pytest
 from dropbox.exceptions import ApiError
 from dropbox.files import FileMetadata, FolderMetadata, ListFolderError
 from dropbox.files import LookupError as DbxLookupError
+from requests.exceptions import HTTPError
 
 from igpsync import dropbox_client
-from igpsync.dropbox_client import dropbox_path_for, list_dropbox_ride_ids
+from igpsync.dropbox_client import (
+    dropbox_path_for,
+    finish_dropbox_auth,
+    list_dropbox_ride_ids,
+)
 
 
 def test_dropbox_path_uses_app_folder_subdirectory():
@@ -82,3 +88,26 @@ def test_list_dropbox_ride_ids_returns_empty_when_folder_missing(monkeypatch):
         dropbox_client.dropbox, "Dropbox", lambda **kw: _MissingDbx([])
     )
     assert list_dropbox_ride_ids("/igpsport-fit", "token", "key") == set()
+
+
+class _FailingFlow:
+    """Stands in for the OAuth flow; finish() raises a token-exchange error."""
+
+    def __init__(self, body):
+        self._body = body
+
+    def finish(self, code):
+        resp = types.SimpleNamespace(text=self._body)
+        raise HTTPError("400 Client Error: Bad Request", response=resp)
+
+
+def test_finish_dropbox_auth_friendly_message_for_expired_code():
+    flow = _FailingFlow('{"error": "invalid_grant", "error_description": "..."}')
+    with pytest.raises(RuntimeError, match="expired or was already used"):
+        finish_dropbox_auth(flow, "somecode")
+
+
+def test_finish_dropbox_auth_falls_back_to_raw_error():
+    flow = _FailingFlow('{"error": "invalid_client"}')
+    with pytest.raises(RuntimeError, match="invalid_client"):
+        finish_dropbox_auth(flow, "somecode")

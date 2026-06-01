@@ -55,23 +55,34 @@ def start_dropbox_auth(app_key: str) -> tuple[DropboxOAuth2FlowNoRedirect, str]:
     return auth_flow, auth_flow.start()
 
 
+def _friendly_auth_error(exc: HTTPError) -> str:
+    """Turn a token-exchange HTTPError into a user-facing message.
+
+    The Dropbox SDK calls ``raise_for_status()`` and drops the response body,
+    so a failed exchange surfaces only a generic "400 Client Error". The most
+    common failure with the copy-paste flow is an expired/used code
+    (``invalid_grant``) — give that a friendly hint and fall back to Dropbox's
+    raw error text for anything unexpected.
+    """
+    body = ""
+    if exc.response is not None:
+        body = exc.response.text.strip()
+    if "invalid_grant" in body:
+        return (
+            "That authorization code expired or was already used. Tap "
+            "Connect Dropbox again and paste the new code quickly."
+        )
+    return f"{exc} — {body}" if body else str(exc)
+
+
 def finish_dropbox_auth(
     auth_flow: DropboxOAuth2FlowNoRedirect, auth_code: str
 ) -> str | None:
-    """Finish OAuth and return the long-lived refresh token.
-
-    The Dropbox SDK calls ``raise_for_status()`` on the token request and drops
-    the response body, so a failed exchange surfaces only a generic
-    "400 Client Error". Re-raise with Dropbox's actual error text (e.g.
-    ``invalid_grant``) so the cause is visible to the user.
-    """
+    """Finish OAuth and return the long-lived refresh token."""
     try:
         result = auth_flow.finish(auth_code.strip())
     except HTTPError as exc:
-        detail = ""
-        if exc.response is not None:
-            detail = exc.response.text.strip()
-        raise RuntimeError(f"{exc} — {detail}" if detail else str(exc)) from exc
+        raise RuntimeError(_friendly_auth_error(exc)) from exc
     return result.refresh_token
 
 
