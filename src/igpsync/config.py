@@ -30,7 +30,7 @@ class AppConfig:
     download_dir: str = field(default_factory=_default_download_dir)
     # Remove each .fit file once it has been uploaded to intervals.icu.
     delete_after_upload: bool = True
-    # Re-download/re-upload activities even if they are already on intervals.icu.
+    # Re-download/re-upload activities even if already on intervals.icu or Dropbox.
     force_resync: bool = False
     # intervals.icu sport set on uploaded activities ("" = leave as uploaded).
     activity_type: str = ""
@@ -42,6 +42,10 @@ class AppConfig:
     step_get_download_url: bool = True
     step_download_fit: bool = True
     step_upload_intervals: bool = True
+    # Optional secondary upload target. Off by default because most users only
+    # want intervals.icu.
+    upload_dropbox: bool = False
+    dropbox_folder: str = "/igpsport-fit"
 
 
 def load() -> AppConfig:

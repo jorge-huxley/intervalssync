@@ -20,7 +20,6 @@ Run the app while developing:
 
 ```bash
 uv run main.py          # launch the GUI
-uv run main.py --cli    # headless sync (reads .env / saved settings)
 ```
 
 ## Running the tests
@@ -44,6 +43,33 @@ minimal change (see `CLAUDE.md` for the full picture):
 - `src/igpsync/gui/` — the Flet UI; `cli.py` / `main.py` — the headless entry
 
 Keep new logic in `core` testable and UI-free; the GUI and CLI should stay thin.
+
+## Working on the Dropbox upload (optional)
+
+Dropbox is an optional, off-by-default upload target, so you only need to set
+this up if you're working on that feature — without a key the Dropbox switch in
+Settings stays disabled and the rest of the app works normally.
+
+The app authenticates with Dropbox using the **PKCE** OAuth flow, which needs a
+Dropbox **app key**. Releases get the key stamped in by CI from a repository
+secret. For local development, **create your own Dropbox app** rather than
+reusing the production one:
+
+1. In the [Dropbox App Console](https://www.dropbox.com/developers/apps), create
+   an app with **Scoped access** and **App folder** access, and enable the
+   `account_info.read`, `files.metadata.read`, and `files.content.write` scopes.
+2. Copy the app's **App key**.
+3. Copy `.env.example` to `.env`, set `IGPSYNC_DROPBOX_APP_KEY` to your key, and
+   run with uv's `--env-file` flag (which loads the file into the environment):
+
+   ```bash
+   cp .env.example .env        # then edit .env and paste your app key
+   uv run --env-file .env main.py
+   ```
+
+`.env` is gitignored. The app key for a PKCE public client isn't a secret (it
+ships inside released builds), but use your own for development so you don't
+share the production app's rate limit.
 
 ## Making a change
 

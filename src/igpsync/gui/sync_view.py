@@ -7,6 +7,7 @@ import flet as ft
 from .. import config as config_module
 from .. import secrets as secrets_module
 from ..core import SyncConfig, SyncError, sync
+from ..dropbox_client import get_dropbox_app_key
 
 
 def build_sync_view(
@@ -29,13 +30,20 @@ def build_sync_view(
         # fills in step by step rather than all at once when the sync ends.
         page.update()
 
-    def run_sync(igp_password: str, api_key: str | None) -> None:
+    def run_sync(
+        igp_password: str,
+        api_key: str | None,
+        dropbox_refresh_token: str | None,
+        dropbox_app_key: str | None,
+    ) -> None:
         # Secrets are resolved on the async side and passed in, because the
         # secret store is async/page-bound and this runs on a worker thread.
         sync_config = SyncConfig(
             igp_user=config.igp_user,
             igp_password=igp_password,
             intervals_api_key=api_key,
+            dropbox_refresh_token=dropbox_refresh_token,
+            dropbox_app_key=dropbox_app_key,
             max_activities=config.max_activities,
             download_dir=config.download_dir,
             delete_after_upload=config.delete_after_upload,
@@ -45,13 +53,18 @@ def build_sync_view(
             get_download_url=config.step_get_download_url,
             download_fit=config.step_download_fit,
             upload_intervals=config.step_upload_intervals,
+            upload_dropbox=config.upload_dropbox,
+            dropbox_folder=config.dropbox_folder,
         )
 
         try:
             result = sync(sync_config, progress=append_log)
             append_log(
-                f"\nDone — uploaded {result.uploaded}, skipped {result.skipped}, "
-                f"downloaded {result.downloaded}, failed {result.failed}."
+                f"\nDone — intervals uploaded {result.uploaded}, "
+                f"Dropbox uploaded {result.uploaded_dropbox}, "
+                f"downloaded {result.downloaded}, "
+                f"skipped {result.skipped}, Dropbox skipped {result.skipped_dropbox}, "
+                f"failed {result.failed}, Dropbox failed {result.failed_dropbox}."
             )
         except SyncError as exc:
             append_log(f"✗ {exc}")
@@ -68,6 +81,8 @@ def build_sync_view(
             page.show_dialog(ft.SnackBar(ft.Text("Add your credentials in Settings first.")))
             return
         api_key = await store.get(secrets_module.INTERVALS_API_KEY)
+        dropbox_refresh_token = await store.get(secrets_module.DROPBOX_REFRESH_TOKEN)
+        dropbox_app_key = get_dropbox_app_key()
 
         log.controls.clear()
         progress.visible = True
@@ -75,7 +90,13 @@ def build_sync_view(
         page.update()
         # Run off the UI thread (via Flet's managed executor) so the window
         # stays responsive and per-step updates flush to the client live.
-        page.run_thread(run_sync, igp_password, api_key)
+        page.run_thread(
+            run_sync,
+            igp_password,
+            api_key,
+            dropbox_refresh_token,
+            dropbox_app_key,
+        )
 
     sync_button.on_click = on_sync_click
 
