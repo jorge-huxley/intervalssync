@@ -122,8 +122,14 @@ def login(session: requests.Session, user: str, password: str) -> dict[str, str]
 
 
 def list_activities(session: requests.Session, max_activities: int) -> list[Activity]:
-    """Return the most recent activities, newest first, capped at max_activities."""
-    resp = session.get(ACTIVITY_LIST_URL)
+    """Return the most recent activities, newest first, capped at max_activities.
+
+    ActivityList paginates: with no params it returns only the first page (10).
+    The endpoint honours pageSize, so we ask for the full page in one request
+    (pageNo navigation is unreliable). The slice is a safety belt in case the
+    server ever returns more than we asked for.
+    """
+    resp = session.get(ACTIVITY_LIST_URL, params={"pageNo": 1, "pageSize": max_activities})
     resp.raise_for_status()
 
     items = resp.json().get("item", [])[:max_activities]

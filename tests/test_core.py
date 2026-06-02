@@ -130,6 +130,35 @@ def test_login_raises_without_cookie(monkeypatch):
         core.login(FakeSession(), "user", "pass")
 
 
+def test_list_activities_requests_full_page_and_caps():
+    """pageSize is sent so we get more than the server's default 10, and the
+    result is still capped at max_activities as a safety belt."""
+    captured = {}
+
+    class FakeSession:
+        def get(self, url, params=None):
+            captured["url"] = url
+            captured["params"] = params
+            items = [{"RideId": i, "Title": f"Ride {i}", "StartTime": "2026-05-28 19:20:42"}
+                     for i in range(50)]
+            return FakeResponse(json_data={"item": items, "total": 59})
+
+    acts = core.list_activities(FakeSession(), 50)
+    assert captured["params"] == {"pageNo": 1, "pageSize": 50}
+    assert len(acts) == 50
+    assert acts[0].ride_id == 0
+
+
+def test_list_activities_caps_when_server_returns_extra():
+    class FakeSession:
+        def get(self, url, params=None):
+            items = [{"RideId": i, "Title": "", "StartTime": ""} for i in range(20)]
+            return FakeResponse(json_data={"item": items, "total": 20})
+
+    acts = core.list_activities(FakeSession(), 5)
+    assert len(acts) == 5
+
+
 # --------------------------------------------------------------------------- #
 # sync() orchestration
 # --------------------------------------------------------------------------- #
