@@ -46,7 +46,8 @@ Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
-uv run main.py          # launch the app
+cp .env.example .env    # optional: set IGPSYNC_DROPBOX_APP_KEY for Dropbox
+uv run --env-file .env main.py
 ```
 
 ## Build the Windows executable

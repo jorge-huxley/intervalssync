@@ -55,6 +55,7 @@ def build_sync_view(
             upload_intervals=config.step_upload_intervals,
             upload_dropbox=config.upload_dropbox,
             dropbox_folder=config.dropbox_folder,
+            dropbox_date_filenames=config.dropbox_date_filenames,
         )
 
         try:

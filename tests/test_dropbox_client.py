@@ -14,16 +14,17 @@ from igpsync import dropbox_client
 from igpsync.dropbox_client import (
     dropbox_path_for,
     finish_dropbox_auth,
-    list_dropbox_ride_ids,
+    list_dropbox_fit_names,
 )
 
 
 def test_dropbox_path_uses_app_folder_subdirectory():
-    assert dropbox_path_for("/igpsport-fit", 123) == "/igpsport-fit/igpsport_123.fit"
+    filename = "ride-0-2026-06-03-17-23-53.fit"
+    assert dropbox_path_for("/Fit files", filename) == f"/Fit files/{filename}"
 
 
 def test_dropbox_path_normalizes_folder():
-    assert dropbox_path_for("rides/", 7) == "/rides/igpsport_7.fit"
+    assert dropbox_path_for("rides/", "igpsport_7.fit") == "/rides/igpsport_7.fit"
 
 
 class _FakeDbx:
@@ -51,31 +52,37 @@ def _page(entries, has_more=False, cursor=""):
     return types.SimpleNamespace(entries=entries, has_more=has_more, cursor=cursor)
 
 
-def test_list_dropbox_ride_ids_parses_fit_names(monkeypatch):
+def test_list_dropbox_fit_names_returns_fit_files(monkeypatch):
     entries = [
         FileMetadata(name="igpsport_1.fit"),
-        FileMetadata(name="igpsport_42.fit"),
+        FileMetadata(name="ride-0-2026-06-03-17-23-53.fit"),
         FileMetadata(name="notes.txt"),  # ignored — wrong name
         FolderMetadata(name="subfolder"),  # ignored — not a file
     ]
     monkeypatch.setattr(
         dropbox_client.dropbox, "Dropbox", lambda **kw: _FakeDbx([_page(entries)])
     )
-    assert list_dropbox_ride_ids("/igpsport-fit", "token", "key") == {1, 42}
+    assert list_dropbox_fit_names("/igpsport-fit", "token", "key") == {
+        "igpsport_1.fit",
+        "ride-0-2026-06-03-17-23-53.fit",
+    }
 
 
-def test_list_dropbox_ride_ids_follows_pagination(monkeypatch):
+def test_list_dropbox_fit_names_follows_pagination(monkeypatch):
     pages = [
         _page([FileMetadata(name="igpsport_1.fit")], has_more=True, cursor="c"),
-        _page([FileMetadata(name="igpsport_2.fit")]),
+        _page([FileMetadata(name="ride-0-2026-06-03-17-23-53.fit")]),
     ]
     monkeypatch.setattr(
         dropbox_client.dropbox, "Dropbox", lambda **kw: _FakeDbx(pages)
     )
-    assert list_dropbox_ride_ids("/igpsport-fit", "token", "key") == {1, 2}
+    assert list_dropbox_fit_names("/igpsport-fit", "token", "key") == {
+        "igpsport_1.fit",
+        "ride-0-2026-06-03-17-23-53.fit",
+    }
 
 
-def test_list_dropbox_ride_ids_returns_empty_when_folder_missing(monkeypatch):
+def test_list_dropbox_fit_names_returns_empty_when_folder_missing(monkeypatch):
     not_found = ApiError(
         "rid", ListFolderError.path(DbxLookupError.not_found), "", ""
     )
@@ -87,7 +94,7 @@ def test_list_dropbox_ride_ids_returns_empty_when_folder_missing(monkeypatch):
     monkeypatch.setattr(
         dropbox_client.dropbox, "Dropbox", lambda **kw: _MissingDbx([])
     )
-    assert list_dropbox_ride_ids("/igpsport-fit", "token", "key") == set()
+    assert list_dropbox_fit_names("/igpsport-fit", "token", "key") == set()
 
 
 class _FailingFlow:

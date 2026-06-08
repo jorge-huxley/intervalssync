@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 
 import dropbox
@@ -16,10 +15,6 @@ from ._dropbox_app_key import DROPBOX_APP_KEY as BUILD_DROPBOX_APP_KEY
 
 DROPBOX_APP_KEY_ENV = "IGPSYNC_DROPBOX_APP_KEY"
 DEFAULT_DROPBOX_FOLDER = "/igpsport-fit"
-
-# Matches the FIT file names we write, e.g. "igpsport_12345.fit".
-_FIT_NAME_RE = re.compile(r"^igpsport_(\d+)\.fit$")
-
 
 def get_dropbox_app_key() -> str | None:
     """Return the Dropbox app key from env or the build-stamped constant."""
@@ -34,9 +29,9 @@ def normalize_folder(folder: str) -> str:
     return clean.rstrip("/")
 
 
-def dropbox_path_for(folder: str, ride_id: int) -> str:
-    """Return the Dropbox app-folder path for an iGPSPORT ride."""
-    return f"{normalize_folder(folder)}/igpsport_{ride_id}.fit"
+def dropbox_path_for(folder: str, filename: str) -> str:
+    """Return the Dropbox path for a FIT filename."""
+    return f"{normalize_folder(folder)}/{filename}"
 
 
 def start_dropbox_auth(app_key: str) -> tuple[DropboxOAuth2FlowNoRedirect, str]:
@@ -88,7 +83,7 @@ def finish_dropbox_auth(
 
 def upload_to_dropbox(
     fit_path: Path,
-    ride_id: int,
+    filename: str,
     refresh_token: str,
     app_key: str,
     folder: str = DEFAULT_DROPBOX_FOLDER,
@@ -97,7 +92,7 @@ def upload_to_dropbox(
 
     Raises on failure; a normal return means the upload succeeded.
     """
-    target = dropbox_path_for(folder, ride_id)
+    target = dropbox_path_for(folder, filename)
     with dropbox.Dropbox(
         oauth2_refresh_token=refresh_token,
         app_key=app_key,
@@ -113,16 +108,16 @@ def upload_to_dropbox(
             )
 
 
-def list_dropbox_ride_ids(
+def list_dropbox_fit_names(
     folder: str, refresh_token: str, app_key: str
-) -> set[int]:
-    """Return iGPSPORT ride ids that already have a FIT file in the folder.
+) -> set[str]:
+    """Return FIT filenames already present in the folder.
 
     Returns an empty set when the folder doesn't exist yet. Raises on other
     Dropbox errors so the caller can decide whether to treat them as fatal.
     """
     base = normalize_folder(folder)
-    ride_ids: set[int] = set()
+    fit_names: set[str] = set()
     with dropbox.Dropbox(
         oauth2_refresh_token=refresh_token,
         app_key=app_key,
@@ -133,7 +128,7 @@ def list_dropbox_ride_ids(
             result = dbx.files_list_folder(base)
         except ApiError as exc:
             if exc.error.is_path() and exc.error.get_path().is_not_found():
-                return ride_ids
+                return fit_names
             raise
         entries = list(result.entries)
         while result.has_more:
@@ -143,7 +138,6 @@ def list_dropbox_ride_ids(
     for entry in entries:
         if not isinstance(entry, FileMetadata):
             continue
-        match = _FIT_NAME_RE.match(entry.name)
-        if match:
-            ride_ids.add(int(match.group(1)))
-    return ride_ids
+        if entry.name.lower().endswith(".fit"):
+            fit_names.add(entry.name)
+    return fit_names
