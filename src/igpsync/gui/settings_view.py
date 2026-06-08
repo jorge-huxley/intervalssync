@@ -101,7 +101,7 @@ async def build_settings_view(
         label="Dropbox folder",
         value=config.dropbox_folder or DEFAULT_DROPBOX_FOLDER,
         prefix_icon=ft.Icons.FOLDER,
-        helper="Inside this app's Dropbox folder",
+        helper="Dropbox path, e.g. /Fit files",
     )
     dropbox_status = ft.Text(
         (
