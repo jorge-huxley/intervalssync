@@ -36,6 +36,16 @@ def test_external_id_for():
     assert core.external_id_for(123) == "igpsport_123"
 
 
+def test_dropbox_filename_for_start_time():
+    act = core.Activity(1, "Ride", "2026-06-03 17:23:53")
+    assert core.dropbox_filename_for(act) == "ride-0-2026-06-03-17-23-53.fit"
+
+
+def test_dropbox_filename_falls_back_to_external_id_for_bad_start_time():
+    act = core.Activity(1, "Ride", "unknown date")
+    assert core.dropbox_filename_for(act) == "igpsport_1.fit"
+
+
 def test_activity_date_range_from_start_times():
     acts = [
         core.Activity(1, "a", "2026-05-20 10:00:00"),
@@ -205,15 +215,15 @@ def stub_sync(monkeypatch, tmp_path):
 
     monkeypatch.setattr(core, "upload_to_intervals", fake_upload)
 
-    def fake_dropbox(fp, ride_id, token, app_key, folder):
-        rec["dropbox"].append((ride_id, token, app_key, folder, fp.name))
+    def fake_dropbox(fp, filename, token, app_key, folder):
+        rec["dropbox"].append((filename, token, app_key, folder, fp.name))
         if not rec["dropbox_ok"]:
             raise RuntimeError("dropbox upload failed")
 
     monkeypatch.setattr(core, "upload_to_dropbox", fake_dropbox)
     monkeypatch.setattr(
         core,
-        "list_dropbox_ride_ids",
+        "list_dropbox_fit_names",
         lambda folder, token, app_key: set(rec["dropbox_existing"]),
     )
     monkeypatch.setattr(
@@ -304,8 +314,13 @@ def test_sync_uploads_to_dropbox_after_intervals(stub_sync):
     result = core.sync(_config(stub_sync["tmp"], upload_dropbox=True))
     assert result.uploaded == 3
     assert result.uploaded_dropbox == 3
-    assert [item[0] for item in stub_sync["dropbox"]] == [1, 2, 3]
+    assert [item[0] for item in stub_sync["dropbox"]] == [
+        "ride-0-2026-05-28-19-20-42.fit",
+        "ride-0-2026-05-26-18-47-06.fit",
+        "ride-0-2026-05-24-08-27-17.fit",
+    ]
     assert stub_sync["dropbox"][0][1:4] == ("dbx-refresh", "dbx-app", "/igpsport-fit")
+    assert stub_sync["dropbox"][0][4] == "igpsport_1.fit"
 
 
 def test_sync_uploads_to_dropbox_even_when_intervals_skips(stub_sync):
@@ -316,7 +331,11 @@ def test_sync_uploads_to_dropbox_even_when_intervals_skips(stub_sync):
     assert result.skipped == 2
     assert result.uploaded == 1
     assert result.uploaded_dropbox == 3
-    assert [item[0] for item in stub_sync["dropbox"]] == [1, 2, 3]
+    assert [item[0] for item in stub_sync["dropbox"]] == [
+        "ride-0-2026-05-28-19-20-42.fit",
+        "ride-0-2026-05-26-18-47-06.fit",
+        "ride-0-2026-05-24-08-27-17.fit",
+    ]
 
 
 def test_sync_uploads_to_dropbox_when_intervals_disabled(stub_sync):
@@ -326,22 +345,35 @@ def test_sync_uploads_to_dropbox_when_intervals_disabled(stub_sync):
     assert result.uploaded == 0
     assert stub_sync["uploaded"] == []
     assert result.uploaded_dropbox == 3
-    assert [item[0] for item in stub_sync["dropbox"]] == [1, 2, 3]
+    assert [item[0] for item in stub_sync["dropbox"]] == [
+        "ride-0-2026-05-28-19-20-42.fit",
+        "ride-0-2026-05-26-18-47-06.fit",
+        "ride-0-2026-05-24-08-27-17.fit",
+    ]
 
 
 def test_sync_skips_dropbox_for_rides_already_in_dropbox(stub_sync):
-    stub_sync["dropbox_existing"] = {1, 2}
+    stub_sync["dropbox_existing"] = {
+        "ride-0-2026-05-28-19-20-42.fit",
+        "ride-0-2026-05-26-18-47-06.fit",
+    }
     result = core.sync(
         _config(stub_sync["tmp"], upload_intervals=False, upload_dropbox=True)
     )
     assert result.skipped_dropbox == 2
     assert result.uploaded_dropbox == 1
-    assert [item[0] for item in stub_sync["dropbox"]] == [3]
+    assert [item[0] for item in stub_sync["dropbox"]] == [
+        "ride-0-2026-05-24-08-27-17.fit"
+    ]
 
 
 def test_sync_force_resync_uploads_all_to_dropbox(stub_sync):
     stub_sync["existing"] = {"igpsport_1", "igpsport_2", "igpsport_3"}
-    stub_sync["dropbox_existing"] = {1, 2, 3}
+    stub_sync["dropbox_existing"] = {
+        "ride-0-2026-05-28-19-20-42.fit",
+        "ride-0-2026-05-26-18-47-06.fit",
+        "ride-0-2026-05-24-08-27-17.fit",
+    }
     result = core.sync(
         _config(stub_sync["tmp"], force_resync=True, upload_dropbox=True)
     )

@@ -26,7 +26,7 @@ import requests
 
 from .dropbox_client import (
     DEFAULT_DROPBOX_FOLDER,
-    list_dropbox_ride_ids,
+    list_dropbox_fit_names,
     upload_to_dropbox,
 )
 
@@ -65,6 +65,15 @@ CYCLING_ACTIVITY_TYPES: list[tuple[str, str]] = [
 def external_id_for(ride_id: int) -> str:
     """The intervals.icu external_id we assign to an iGPSPORT ride."""
     return f"igpsport_{ride_id}"
+
+
+def dropbox_filename_for(activity: "Activity") -> str:
+    """Return the Dropbox filename for an activity."""
+    try:
+        start = datetime.strptime(activity.start_time, IGP_TIME_FORMAT)
+    except (TypeError, ValueError):
+        return f"{external_id_for(activity.ride_id)}.fit"
+    return f"ride-0-{start:%Y-%m-%d-%H-%M-%S}.fit"
 
 
 class SyncError(Exception):
@@ -318,7 +327,7 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
 
     # Validate Dropbox prerequisites once, before processing any activity, so a
     # misconfiguration fails fast instead of part-way through the loop.
-    dropbox_uploaded_ids: set[int] = set()
+    dropbox_uploaded_names: set[str] = set()
     if config.upload_dropbox:
         if not config.dropbox_app_key:
             raise SyncError("Dropbox app key is required for Dropbox upload.")
@@ -326,15 +335,15 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
             raise SyncError("Connect Dropbox in Settings before syncing.")
 
         # Skip-tracking for Dropbox is independent of intervals.icu: list the
-        # ride ids already present in the folder so we don't re-upload them.
+        # FIT files already present in the folder so we don't re-upload them.
         if not config.force_resync:
             try:
-                dropbox_uploaded_ids = list_dropbox_ride_ids(
+                dropbox_uploaded_names = list_dropbox_fit_names(
                     config.dropbox_folder,
                     config.dropbox_refresh_token,
                     config.dropbox_app_key,
                 )
-                report(f"{len(dropbox_uploaded_ids)} activities already in Dropbox.")
+                report(f"{len(dropbox_uploaded_names)} activities already in Dropbox.")
             except Exception as exc:  # noqa: BLE001 — non-fatal; process all
                 report(f"⚠ Could not check Dropbox (will process all): {exc}")
 
@@ -345,12 +354,13 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
     for act in activities:
         ext = external_id_for(act.ride_id)
         fit_path = download_dir / f"{ext}.fit"
+        dropbox_filename = dropbox_filename_for(act)
 
         # Each target tracks its own "already there" state, so an activity can
         # be uploaded to one target while being skipped on the other.
         intervals_needs_it = config.upload_intervals and ext not in already_uploaded
         dropbox_needs_it = (
-            config.upload_dropbox and act.ride_id not in dropbox_uploaded_ids
+            config.upload_dropbox and dropbox_filename not in dropbox_uploaded_names
         )
 
         if config.upload_intervals and not intervals_needs_it:
@@ -410,7 +420,7 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
             try:
                 upload_to_dropbox(
                     fit_path,
-                    act.ride_id,
+                    dropbox_filename,
                     config.dropbox_refresh_token,
                     config.dropbox_app_key,
                     config.dropbox_folder,
