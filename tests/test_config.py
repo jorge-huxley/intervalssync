@@ -13,6 +13,7 @@ def test_defaults():
     assert cfg.max_activities == 5
     assert cfg.upload_dropbox is False
     assert cfg.dropbox_folder == "/igpsport-fit"
+    assert cfg.dropbox_date_filenames is True
 
 
 def test_save_and_load_roundtrip(tmp_path, monkeypatch):
@@ -28,6 +29,7 @@ def test_save_and_load_roundtrip(tmp_path, monkeypatch):
         delete_after_upload=False,
         upload_dropbox=True,
         dropbox_folder="/rides",
+        dropbox_date_filenames=False,
     )
     config_module.save(cfg)
     assert path.exists()
@@ -39,6 +41,7 @@ def test_save_and_load_roundtrip(tmp_path, monkeypatch):
     assert loaded.delete_after_upload is False
     assert loaded.upload_dropbox is True
     assert loaded.dropbox_folder == "/rides"
+    assert loaded.dropbox_date_filenames is False
 
 
 def test_load_ignores_unknown_keys(tmp_path, monkeypatch):

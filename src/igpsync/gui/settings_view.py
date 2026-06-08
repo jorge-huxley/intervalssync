@@ -103,6 +103,10 @@ async def build_settings_view(
         prefix_icon=ft.Icons.FOLDER,
         helper="Dropbox path, e.g. /Fit files",
     )
+    dropbox_date_filenames = ft.Switch(
+        label="Use date in Dropbox filenames",
+        value=config.dropbox_date_filenames,
+    )
     dropbox_status = ft.Text(
         (
             "Connected"
@@ -221,6 +225,7 @@ async def build_settings_view(
                         dropbox_finish_button,
                         upload_dropbox,
                         dropbox_folder,
+                        dropbox_date_filenames,
                     ],
                 ),
             )
@@ -334,6 +339,7 @@ async def build_settings_view(
         config.step_download_fit = step_download.value
         config.step_upload_intervals = step_upload.value
         config.dropbox_folder = dropbox_folder.value.strip() or DEFAULT_DROPBOX_FOLDER
+        config.dropbox_date_filenames = bool(dropbox_date_filenames.value)
         config.upload_dropbox = bool(upload_dropbox.value)
 
         message = "Saved securely to your system credential store."

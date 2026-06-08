@@ -41,6 +41,11 @@ def test_dropbox_filename_for_start_time():
     assert core.dropbox_filename_for(act) == "ride-0-2026-06-03-17-23-53.fit"
 
 
+def test_dropbox_filename_uses_default_name_when_date_disabled():
+    act = core.Activity(1, "Ride", "2026-06-03 17:23:53")
+    assert core.dropbox_filename_for(act, use_date=False) == "igpsport_1.fit"
+
+
 def test_dropbox_filename_falls_back_to_external_id_for_bad_start_time():
     act = core.Activity(1, "Ride", "unknown date")
     assert core.dropbox_filename_for(act) == "igpsport_1.fit"
@@ -253,6 +258,7 @@ def _config(tmp_path, **overrides):
         upload_intervals=True,
         upload_dropbox=False,
         dropbox_folder="/igpsport-fit",
+        dropbox_date_filenames=True,
     )
     base.update(overrides)
     return core.SyncConfig(**base)
@@ -352,6 +358,23 @@ def test_sync_uploads_to_dropbox_when_intervals_disabled(stub_sync):
     ]
 
 
+def test_sync_uploads_to_dropbox_with_default_filenames_when_configured(stub_sync):
+    result = core.sync(
+        _config(
+            stub_sync["tmp"],
+            upload_intervals=False,
+            upload_dropbox=True,
+            dropbox_date_filenames=False,
+        )
+    )
+    assert result.uploaded_dropbox == 3
+    assert [item[0] for item in stub_sync["dropbox"]] == [
+        "igpsport_1.fit",
+        "igpsport_2.fit",
+        "igpsport_3.fit",
+    ]
+
+
 def test_sync_skips_dropbox_for_rides_already_in_dropbox(stub_sync):
     stub_sync["dropbox_existing"] = {
         "ride-0-2026-05-28-19-20-42.fit",
@@ -365,6 +388,21 @@ def test_sync_skips_dropbox_for_rides_already_in_dropbox(stub_sync):
     assert [item[0] for item in stub_sync["dropbox"]] == [
         "ride-0-2026-05-24-08-27-17.fit"
     ]
+
+
+def test_sync_skips_dropbox_default_filenames_when_configured(stub_sync):
+    stub_sync["dropbox_existing"] = {"igpsport_1.fit", "igpsport_2.fit"}
+    result = core.sync(
+        _config(
+            stub_sync["tmp"],
+            upload_intervals=False,
+            upload_dropbox=True,
+            dropbox_date_filenames=False,
+        )
+    )
+    assert result.skipped_dropbox == 2
+    assert result.uploaded_dropbox == 1
+    assert [item[0] for item in stub_sync["dropbox"]] == ["igpsport_3.fit"]
 
 
 def test_sync_force_resync_uploads_all_to_dropbox(stub_sync):

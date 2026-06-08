@@ -46,6 +46,7 @@ class AppConfig:
     # want intervals.icu.
     upload_dropbox: bool = False
     dropbox_folder: str = "/igpsport-fit"
+    dropbox_date_filenames: bool = True
 
 
 def load() -> AppConfig:

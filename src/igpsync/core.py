@@ -67,12 +67,15 @@ def external_id_for(ride_id: int) -> str:
     return f"igpsport_{ride_id}"
 
 
-def dropbox_filename_for(activity: "Activity") -> str:
+def dropbox_filename_for(activity: "Activity", use_date: bool = True) -> str:
     """Return the Dropbox filename for an activity."""
+    fallback = f"{external_id_for(activity.ride_id)}.fit"
+    if not use_date:
+        return fallback
     try:
         start = datetime.strptime(activity.start_time, IGP_TIME_FORMAT)
     except (TypeError, ValueError):
-        return f"{external_id_for(activity.ride_id)}.fit"
+        return fallback
     return f"ride-0-{start:%Y-%m-%d-%H-%M-%S}.fit"
 
 
@@ -279,6 +282,7 @@ class SyncConfig:
     upload_intervals: bool = False
     upload_dropbox: bool = False
     dropbox_folder: str = DEFAULT_DROPBOX_FOLDER
+    dropbox_date_filenames: bool = True
 
 
 def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
@@ -354,7 +358,7 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
     for act in activities:
         ext = external_id_for(act.ride_id)
         fit_path = download_dir / f"{ext}.fit"
-        dropbox_filename = dropbox_filename_for(act)
+        dropbox_filename = dropbox_filename_for(act, config.dropbox_date_filenames)
 
         # Each target tracks its own "already there" state, so an activity can
         # be uploaded to one target while being skipped on the other.
