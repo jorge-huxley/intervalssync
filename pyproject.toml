@@ -18,6 +18,9 @@ dependencies = [
     "requests>=2.33.1",
 ]
 
+[project.scripts]
+igpsync = "igpsync.cli:main"
+
 [project.gui-scripts]
 igpsync-gui = "igpsync.gui.app:main"
 

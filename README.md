@@ -15,7 +15,7 @@ intervals.icu. Free and open source, for **Windows** and **Android**.
 - Stores your credentials in the **OS secure vault** (Windows Credential Manager / Android Keystore), never in a file
 - Lets you know when a newer version is available
 
-> Prefer the terminal, or want to help out? It's open source (Python + [Flet](https://flet.dev), MIT) — see [Run from source](#run-from-source) and [CONTRIBUTING.md](CONTRIBUTING.md).
+> Prefer the terminal, or want to help out? It's open source (Python + [Flet](https://flet.dev), MIT) — see [Run from source](#run-from-source), [Agent / headless sync](docs/AGENT.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Download & run (Windows)
 
