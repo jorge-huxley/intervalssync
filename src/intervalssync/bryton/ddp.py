@@ -14,6 +14,7 @@ import requests
 from .exceptions import BrytonAuthError, BrytonDDPError
 
 DEFAULT_HOST = "m3.brytonactive.com"
+WEB_HOST = "active.brytonsport.com"
 DDP_CONNECT = {"msg": "connect", "version": "1", "support": ["1", "pre2", "pre1"]}
 
 
@@ -188,6 +189,23 @@ def _is_deleted_activity(fields: dict[str, Any]) -> bool:
         return True
     label = fields.get("name") or fields.get("title") or ""
     return label == "_deleted"
+
+
+def call_method(
+    session: BrytonSession,
+    method: str,
+    params: list[Any] | None = None,
+    *,
+    timeout: float = 60,
+) -> Any:
+    """Resume-login and invoke a Meteor DDP method."""
+    client = _DDPClient(session.host, timeout=timeout)
+    try:
+        client.connect()
+        client.call("login", [{"resume": session.auth_token}])
+        return client.call(method, params or [])
+    finally:
+        client.close()
 
 
 def list_activities(

@@ -20,6 +20,12 @@ from ..igpsport.core import SyncConfig as IgpSyncConfig
 from ..igpsport.core import SyncError as IgpSyncError
 from ..igpsport.core import SyncResult as IgpSyncResult
 from ..igpsport.core import sync as igpsport_sync
+from ..bryton.workout import (
+    BrytonWorkoutUploadConfig,
+    BrytonWorkoutUploadResult,
+    apply_uploaded_bryton_workout_map,
+    upload_workouts as bryton_upload_workouts,
+)
 from ..igpsport.workout import (
     WorkoutUploadConfig,
     WorkoutUploadResult,
@@ -177,11 +183,35 @@ def _build_workout_upload_config(
     )
 
 
+def _build_bryton_workout_upload_config(
+    credentials,
+    config: cli_config_module.CliConfig,
+    *,
+    workout_days_ahead: int | None,
+    force_resync: bool | None,
+) -> BrytonWorkoutUploadConfig:
+    return BrytonWorkoutUploadConfig(
+        bryton_email=credentials.bryton_email,
+        bryton_password=credentials.bryton_password,
+        intervals_api_key=credentials.intervals_api_key,
+        workout_days_ahead=(
+            workout_days_ahead if workout_days_ahead is not None else config.workout_days_ahead
+        ),
+        uploaded_workouts=dict(config.uploaded_bryton_workouts),
+        force_resync=force_resync if force_resync is not None else config.force_resync,
+    )
+
+
 def _workout_result_payload(
-    result: WorkoutUploadResult, *, ok: bool, error: str | None = None
+    result: WorkoutUploadResult | BrytonWorkoutUploadResult,
+    *,
+    ok: bool,
+    source: str = "igpsport",
+    error: str | None = None,
 ) -> dict:
     payload = {
         "ok": ok,
+        "source": source,
         "listed": result.listed,
         "uploaded": result.uploaded,
         "skipped": result.skipped,
@@ -193,7 +223,7 @@ def _workout_result_payload(
     return payload
 
 
-def _emit_workout_text_summary(result: WorkoutUploadResult) -> None:
+def _emit_workout_text_summary(result: WorkoutUploadResult | BrytonWorkoutUploadResult) -> None:
     print(
         f"Done — uploaded {result.uploaded}, "
         f"skipped {result.skipped}, "
@@ -320,19 +350,64 @@ def cmd_sync(args: argparse.Namespace) -> int:
 def cmd_upload_workouts(args: argparse.Namespace) -> int:
     config = cli_config_module.load()
     use_json = args.json
+    source = args.source
 
     try:
         env_path = resolve_env_path(
             env_file=Path(args.env_file) if args.env_file else None,
             config_env_file=config.env_file or None,
         )
-        credentials = load_credentials(env_path, source="igpsport")
+        credentials = load_credentials(env_path, source=source)
     except CliConfigError as exc:
         if use_json:
-            _emit_json({"ok": False, "error": str(exc)})
+            _emit_json({"ok": False, "source": source, "error": str(exc)})
         else:
             print(exc, file=sys.stderr)
         return EXIT_CONFIG_ERROR
+
+    def progress(message: str) -> None:
+        print(message, file=sys.stderr)
+
+    if source == "bryton":
+        upload_config = _build_bryton_workout_upload_config(
+            credentials,
+            config,
+            workout_days_ahead=args.workout_days_ahead,
+            force_resync=True if args.force_resync else None,
+        )
+        try:
+            result = bryton_upload_workouts(upload_config, progress=progress)
+        except BrytonSyncError as exc:
+            if use_json:
+                _emit_json(
+                    _workout_result_payload(
+                        BrytonWorkoutUploadResult(), ok=False, source=source, error=str(exc)
+                    )
+                )
+            else:
+                print(f"✗ {exc}", file=sys.stderr)
+            return EXIT_SYNC_ERROR
+        except Exception as exc:  # noqa: BLE001
+            if use_json:
+                _emit_json(
+                    _workout_result_payload(
+                        BrytonWorkoutUploadResult(), ok=False, source=source, error=str(exc)
+                    )
+                )
+            else:
+                print(f"✗ Unexpected error: {exc}", file=sys.stderr)
+            return EXIT_SYNC_ERROR
+
+        if result.uploaded_map or result.pruned_keys:
+            apply_uploaded_bryton_workout_map(config.uploaded_bryton_workouts, result)
+            cli_config_module.save(config)
+
+        ok = result.failed == 0
+        if use_json:
+            _emit_json(_workout_result_payload(result, ok=ok, source=source))
+        else:
+            _emit_workout_text_summary(result)
+        return EXIT_OK if ok else EXIT_SYNC_ERROR
 
     upload_config = _build_workout_upload_config(
         credentials,
@@ -341,20 +416,25 @@ def cmd_upload_workouts(args: argparse.Namespace) -> int:
         force_resync=True if args.force_resync else None,
     )
 
-    def progress(message: str) -> None:
-        print(message, file=sys.stderr)
-
     try:
         result = upload_workouts(upload_config, progress=progress)
     except IgpSyncError as exc:
         if use_json:
-            _emit_json(_workout_result_payload(WorkoutUploadResult(), ok=False, error=str(exc)))
+            _emit_json(
+                _workout_result_payload(
+                    WorkoutUploadResult(), ok=False, source=source, error=str(exc)
+                )
+            )
         else:
             print(f"✗ {exc}", file=sys.stderr)
         return EXIT_SYNC_ERROR
     except Exception as exc:  # noqa: BLE001
         if use_json:
-            _emit_json(_workout_result_payload(WorkoutUploadResult(), ok=False, error=str(exc)))
+            _emit_json(
+                _workout_result_payload(
+                    WorkoutUploadResult(), ok=False, source=source, error=str(exc)
+                )
+            )
         else:
             print(f"✗ Unexpected error: {exc}", file=sys.stderr)
         return EXIT_SYNC_ERROR
@@ -365,7 +445,7 @@ def cmd_upload_workouts(args: argparse.Namespace) -> int:
 
     ok = result.failed == 0
     if use_json:
-        _emit_json(_workout_result_payload(result, ok=ok))
+        _emit_json(_workout_result_payload(result, ok=ok, source=source))
     else:
         _emit_workout_text_summary(result)
 
@@ -447,8 +527,9 @@ def _build_parser() -> argparse.ArgumentParser:
     upload_workouts_parser = subparsers.add_parser(
         "upload-workouts",
         parents=[common],
-        help="Upload planned workouts from intervals.icu to iGPSPORT.",
+        help="Upload planned workouts from intervals.icu to iGPSPORT or Bryton.",
     )
+    _add_source_arg(upload_workouts_parser)
     upload_workouts_parser.add_argument(
         "--workout-days-ahead",
         type=int,
@@ -458,7 +539,7 @@ def _build_parser() -> argparse.ArgumentParser:
     upload_workouts_parser.add_argument(
         "--force-resync",
         action="store_true",
-        help="Re-upload workouts even if already on iGPSPORT.",
+        help="Re-upload workouts even if already on the target device platform.",
     )
     upload_workouts_parser.set_defaults(func=cmd_upload_workouts)
 
