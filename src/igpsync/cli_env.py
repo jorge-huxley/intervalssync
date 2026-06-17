@@ -1,9 +1,8 @@
 """Credential loading for the headless CLI.
 
-Secrets are read from a .env file (Hermes profile or standalone). The CLI never
-writes secrets — users set them via their agent profile, e.g.:
-
-    {profile} config set IGPSYNC_IGP_USER you@example.com
+All three credentials must live in a `.env` file. Do not use `hermes config set`
+for the email or password — Hermes routes those to `config.yaml` in plaintext.
+Append them to the profile `.env` instead (see docs/AGENT.md).
 """
 
 from __future__ import annotations
@@ -19,11 +18,12 @@ INTERVALS_API_KEY_KEY = "IGPSYNC_INTERVALS_API_KEY"
 REQUIRED_KEYS = (IGP_USER_KEY, IGP_PASSWORD_KEY, INTERVALS_API_KEY_KEY)
 
 SETUP_HINT = (
-    "Ask the user to set credentials once (replace {profile} with their "
-    "Hermes profile name, or use 'hermes' for the default profile):\n"
-    f"  {{profile}} config set {IGP_USER_KEY} <email>\n"
-    f"  {{profile}} config set {IGP_PASSWORD_KEY} <password>\n"
-    f"  {{profile}} config set {INTERVALS_API_KEY_KEY} <api-key>"
+    "Ask the user to append all three keys to their Hermes profile .env "
+    "(replace {profile_home} with the profile directory, e.g. "
+    "~/.hermes/profiles/coach):\n"
+    f"  echo '{IGP_USER_KEY}=<email>' >> {{profile_home}}/.env\n"
+    f"  echo '{IGP_PASSWORD_KEY}=<password>' >> {{profile_home}}/.env\n"
+    f"  echo '{INTERVALS_API_KEY_KEY}=<api-key>' >> {{profile_home}}/.env"
 )
 
 
