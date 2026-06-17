@@ -17,8 +17,9 @@ source, for **Windows** and **Android**.
 - Optionally deletes the local `.fit` files after a successful upload
 - Stores your credentials in the **OS secure vault** (Windows Credential Manager / Android Keystore), never in a file
 - Lets you know when a newer version is available
+- **Headless CLI** — same sync pipeline from the terminal, with JSON output and exit codes for automation and AI agents (see [CLI & automation](#cli--automation-ai-agents))
 
-> Prefer the terminal, or want to help out? It's open source (Python + [Flet](https://flet.dev), MIT) — see [Run from source](#run-from-source), [Agent / headless sync](docs/AGENT.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
+> Prefer the terminal, or want to help out? It's open source (Python + [Flet](https://flet.dev), MIT) — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Download & run (Windows)
 
@@ -43,6 +44,23 @@ Windows uses for its own logins) — never in a plain text file.
 On Android your credentials are stored in the **Android Keystore**. The app
 isn't on the Play Store, so the "unknown source" prompt is expected.
 
+## CLI & automation (AI agents)
+
+The `igpsync` CLI runs the same activity sync without the GUI — useful for
+scripts and automation agents (e.g. [Hermes](https://hermes-agent.nousresearch.com))
+that detect new rides and need a reliable upload step.
+
+Requires [uv](https://docs.astral.sh/uv/) and a clone of this repo:
+
+```bash
+uv sync
+uv run igpsync check          # verify credentials in .env
+uv run igpsync sync --json    # sync; result on stdout, progress on stderr
+```
+
+Credentials go in a `.env` file (not the GUI secure vault). Full setup,
+Hermes profile paths, flags, and JSON schema: [Agent / headless sync](docs/AGENT.md).
+
 ## Run from source
 
 Requires [uv](https://docs.astral.sh/uv/).
@@ -61,49 +79,6 @@ uv run flet build windows
 
 The distributable lands in `build/windows/`. (Flet downloads the Flutter
 toolchain on the first build.)
-
-## Cutting a release
-
-Releases are built automatically by GitHub Actions (`.github/workflows/release.yml`)
-whenever you push a version tag. To publish a new version:
-
-```bash
-git tag v0.1.0      # pick the next version number
-git push origin v0.1.0
-```
-
-The workflow builds the Windows app **and the Android APK** on clean runners and
-attaches both (`igpsport-intervals-windows.zip` and an `.apk`) to a new GitHub
-Release. Watch it run under the repo's **Actions** tab; the result appears under
-**Releases**.
-
-### Pre-releases (test a build before shipping)
-
-Tag with a hyphen, e.g. `v0.3.0-rc1`, to publish a **pre-release**. It still
-builds installable artifacts you can test on a device, but GitHub keeps the last
-stable as **Latest** and the in-app update check ignores it — so users on the
-stable version aren't notified. Once it's good, tag the final `v0.3.0`.
-
-### Urgent hotfix while `master` has unreleased work
-
-`master` only ever contains finished, merged PRs, so usually you can just merge
-the fix and tag a patch. If `master` already has work you're not ready to ship,
-branch the fix from the **last released tag** instead, so only the fix goes out:
-
-```bash
-# 1. Branch from the last released tag (NOT master):
-git switch -c hotfix/v0.2.5 v0.2.4
-# 2. Commit the fix on this branch, then push it:
-git push -u origin hotfix/v0.2.5
-# 3. Tag this branch's fix commit -> builds & publishes only the fix:
-git tag v0.2.5 && git push origin v0.2.5
-# 4. Open a PR from hotfix/v0.2.5 into master and merge it, so the fix is
-#    also in master for future work (master is protected, so use a PR).
-```
-
-The tag points at the hotfix commit, so the build contains just the fix — none
-of master's unreleased work. The merge into master (step 4) is separate and
-happens *after* tagging.
 
 ## Roadmap
 
