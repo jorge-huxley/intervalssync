@@ -1,5 +1,12 @@
 # iGPSPORT → intervals.icu
 
+[![License: MIT](https://img.shields.io/github/license/jorge-huxley/igpsport-intervals)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/downloads/)
+[![Tests](https://github.com/jorge-huxley/igpsport-intervals/actions/workflows/test.yml/badge.svg)](https://github.com/jorge-huxley/igpsport-intervals/actions/workflows/test.yml)
+[![GitHub release](https://img.shields.io/github/v/release/jorge-huxley/igpsport-intervals)](https://github.com/jorge-huxley/igpsport-intervals/releases)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Android-lightgrey)](#download--run-windows)
+[![Stars](https://img.shields.io/github/stars/jorge-huxley/igpsport-intervals?label=stars)](https://github.com/jorge-huxley/igpsport-intervals/stargazers)
+
 A small, friendly app that syncs your cycling activities between **iGPSPORT** and
 **intervals.icu**. It's built for non-technical riders — no command line, no config
 files: enter your credentials once, press **Sync**, and your latest rides land on
