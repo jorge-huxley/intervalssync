@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from igpsync import workout
+from intervalssync.igpsport import workout
 
 
 class FakeResponse:

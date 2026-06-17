@@ -12,9 +12,9 @@ from flet_permission_handler import Permission, PermissionHandler, PermissionSta
 from flet_secure_storage import SecureStorage
 
 from .. import __version__
-from .. import config as config_module
-from .. import secrets as secrets_module
-from ..update_check import RELEASES_PAGE, check_for_update
+from . import config as config_module
+from . import secrets as secrets_module
+from .update_check import RELEASES_PAGE, check_for_update
 from .settings_view import build_settings_view
 from .sync_view import build_sync_view
 

@@ -13,19 +13,21 @@ from pathlib import Path
 
 from platformdirs import user_config_dir, user_downloads_dir
 
-APP_NAME = "igpsport-intervals"
+APP_NAME = "intervalssync"
 
 CONFIG_DIR = Path(user_config_dir(APP_NAME, appauthor=False))
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 
 def _default_download_dir() -> str:
-    return str(Path(user_downloads_dir()) / "igpsport-fit")
+    return str(Path(user_downloads_dir()) / "intervalssync-fit")
 
 
 @dataclass
 class AppConfig:
+    activity_source: str = "igpsport"
     igp_user: str = ""
+    bryton_user: str = ""
     max_activities: int = 5
     download_dir: str = field(default_factory=_default_download_dir)
     # Remove each .fit file once it has been uploaded to intervals.icu.

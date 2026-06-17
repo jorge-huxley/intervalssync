@@ -12,7 +12,7 @@ def main() -> None:
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
 
-    from igpsync.gui.app import main as gui_main
+    from intervalssync.gui.app import main as gui_main
 
     gui_main()
 

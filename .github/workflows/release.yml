@@ -37,27 +37,27 @@ jobs:
       # Stamp it into the app so the in-app About dialog shows the real version.
       - name: Stamp version into the app
         shell: bash
-        run: echo "__version__ = \"$APP_VERSION\"" > src/igpsync/_version.py
+        run: echo "__version__ = \"$APP_VERSION\"" > src/intervalssync/_version.py
 
       - name: Stamp Dropbox app key into the app
         shell: pwsh
         env:
           IGPSYNC_DROPBOX_APP_KEY: ${{ secrets.IGPSYNC_DROPBOX_APP_KEY }}
         run: |
-          python -c "from pathlib import Path; import os; Path('src/igpsync/_dropbox_app_key.py').write_text('DROPBOX_APP_KEY = ' + repr(os.getenv('IGPSYNC_DROPBOX_APP_KEY', '')) + '\n', encoding='utf-8')"
+          python -c "from pathlib import Path; import os; Path('src/intervalssync/_dropbox_app_key.py').write_text('DROPBOX_APP_KEY = ' + repr(os.getenv('IGPSYNC_DROPBOX_APP_KEY', '')) + '\n', encoding='utf-8')"
 
       - name: Build Windows app
         run: uv run flet build windows --yes --verbose --build-version "${{ env.APP_VERSION }}"
 
-      # Name the zip after the tag, e.g. igpsport-intervals-v0.2.0-windows.zip
+      # Name the zip after the tag, e.g. intervalssync-v0.2.0-windows.zip
       - name: Package into a versioned zip
         shell: pwsh
-        run: Compress-Archive -Path build/windows/* -DestinationPath "igpsport-intervals-${{ github.ref_name }}-windows.zip"
+        run: Compress-Archive -Path build/windows/* -DestinationPath "intervalssync-${{ github.ref_name }}-windows.zip"
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: "igpsport-intervals-${{ github.ref_name }}-windows.zip"
+          path: "intervalssync-${{ github.ref_name }}-windows.zip"
 
   android:
     runs-on: ubuntu-latest
@@ -69,13 +69,13 @@ jobs:
         run: echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Stamp version into the app
-        run: echo "__version__ = \"$APP_VERSION\"" > src/igpsync/_version.py
+        run: echo "__version__ = \"$APP_VERSION\"" > src/intervalssync/_version.py
 
       - name: Stamp Dropbox app key into the app
         env:
           IGPSYNC_DROPBOX_APP_KEY: ${{ secrets.IGPSYNC_DROPBOX_APP_KEY }}
         run: |
-          python -c "from pathlib import Path; import os; Path('src/igpsync/_dropbox_app_key.py').write_text('DROPBOX_APP_KEY = ' + repr(os.getenv('IGPSYNC_DROPBOX_APP_KEY', '')) + '\n', encoding='utf-8')"
+          python -c "from pathlib import Path; import os; Path('src/intervalssync/_dropbox_app_key.py').write_text('DROPBOX_APP_KEY = ' + repr(os.getenv('IGPSYNC_DROPBOX_APP_KEY', '')) + '\n', encoding='utf-8')"
 
       # Use a stable release key if the keystore secrets are configured, so every
       # release shares one signature and Android installs updates over the top
@@ -105,12 +105,12 @@ jobs:
         run: uv run flet build apk --yes --verbose --build-version "${{ env.APP_VERSION }}"
 
       - name: Rename APK with the version
-        run: mv build/apk/*.apk "igpsport-intervals-${{ github.ref_name }}-android.apk"
+        run: mv build/apk/*.apk "intervalssync-${{ github.ref_name }}-android.apk"
 
       - uses: actions/upload-artifact@v4
         with:
           name: android
-          path: "igpsport-intervals-${{ github.ref_name }}-android.apk"
+          path: "intervalssync-${{ github.ref_name }}-android.apk"
 
   release:
     needs: [windows, android]

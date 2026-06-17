@@ -1,4 +1,4 @@
-# iGPSPORT → intervals.icu
+# intervals.icu Sync
 
 [![License: MIT](https://img.shields.io/github/license/jorge-huxley/igpsport-intervals)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/downloads/)
@@ -8,15 +8,14 @@
 [![Stars](https://img.shields.io/github/stars/jorge-huxley/igpsport-intervals?label=stars)](https://github.com/jorge-huxley/igpsport-intervals/stargazers)
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/jorge_huxley)
 
-A small, friendly app that syncs your cycling activities between **iGPSPORT** and
-**intervals.icu**. It's built for non-technical riders — no command line, no config
-files: enter your credentials once, press **Sync**, and your latest rides land on
-intervals.icu. You can also push planned workouts the other way. Free and open
-source, for **Windows** and **Android**.
+A small, friendly app that syncs your cycling activities to **intervals.icu** from
+**iGPSPORT** or **Bryton Active**. Enter your credentials once, press **Sync**, and
+your latest rides land on intervals.icu. You can also push planned workouts from
+intervals.icu to iGPSPORT. Free and open source, for **Windows** and **Android**.
 
 ## Features
 
-- Lists your recent iGPSPORT activities and uploads the original `.fit` files to intervals.icu
+- Syncs recent rides from **iGPSPORT** or **Bryton Active** to intervals.icu (original `.fit` files)
 - **Upload workouts** — push planned cycling workouts from your intervals.icu calendar to iGPSPORT custom workouts (sync to your head unit from the iGPSPORT app)
 - **Skips activities already uploaded** so re-running is safe — with an optional *force re-sync*
 - Lets you choose how many recent activities to process
@@ -32,7 +31,7 @@ source, for **Windows** and **Android**.
 ## Download & run (Windows)
 
 1. Go to the [Releases](../../releases) page and download the latest `.zip`.
-2. Unzip it anywhere and double-click the app (e.g. `igpsync.exe`).
+2. Unzip it anywhere and double-click the app (e.g. `intervalssync.exe`).
 3. On first launch, open **Settings** and enter:
    - your iGPSPORT **email** and **password**
    - your intervals.icu **API key** (intervals.icu → Settings → Developer)
@@ -54,7 +53,7 @@ isn't on the Play Store, so the "unknown source" prompt is expected.
 
 ## CLI & automation (AI agents)
 
-Headless `igpsync` CLI for scripts and AI agents ([Hermes](https://hermes-agent.nousresearch.com), [OpenClaw](https://openclaw.ai/)) — sync activities to intervals.icu, upload planned workouts to iGPSPORT, JSON on stdout, credentials in `.env`. Setup, flags, and invocation: [Agent / headless sync](docs/AGENT.md).
+Headless `intervalssync` CLI — sync from iGPSPORT or Bryton, upload workouts to iGPSPORT, JSON on stdout. See [Agent / headless sync](docs/AGENT.md).
 
 ## Run from source
 
@@ -62,7 +61,7 @@ Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
-cp .env.example .env    # optional: set IGPSYNC_DROPBOX_APP_KEY for Dropbox
+cp .env.example .env    # optional: credentials for CLI; IGPSYNC_DROPBOX_APP_KEY for Dropbox
 uv run --env-file .env main.py
 ```
 

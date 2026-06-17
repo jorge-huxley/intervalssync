@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import flet as ft
 
-from .. import config as config_module
-from .. import secrets as secrets_module
-from ..core import SyncConfig, SyncError, sync
+from . import config as config_module
+from . import secrets as secrets_module
+from ..igpsport.core import SyncConfig, SyncError, sync
 from ..dropbox_client import get_dropbox_app_key
-from ..workout import WorkoutUploadConfig, apply_uploaded_workout_map, upload_workouts
+from ..igpsport.workout import WorkoutUploadConfig, apply_uploaded_workout_map, upload_workouts
 
 
 def build_sync_view(

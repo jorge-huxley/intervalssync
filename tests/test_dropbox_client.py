@@ -10,8 +10,8 @@ from dropbox.files import FileMetadata, FolderMetadata, ListFolderError
 from dropbox.files import LookupError as DbxLookupError
 from requests.exceptions import HTTPError
 
-from igpsync import dropbox_client
-from igpsync.dropbox_client import (
+from intervalssync import dropbox_client
+from intervalssync.dropbox_client import (
     dropbox_path_for,
     finish_dropbox_auth,
     list_dropbox_fit_names,

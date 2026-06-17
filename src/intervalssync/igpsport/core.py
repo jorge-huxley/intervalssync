@@ -24,19 +24,20 @@ from urllib.parse import unquote
 
 import requests
 
-from .dropbox_client import (
+from ..dropbox_client import (
     DEFAULT_DROPBOX_FOLDER,
     list_dropbox_fit_names,
     upload_to_dropbox,
+)
+from ..intervals_icu import (
+    fetch_uploaded_external_ids as icu_fetch_uploaded_external_ids,
+    set_activity_type,
+    upload_fit_file,
 )
 
 LOGIN_URL = "https://i.igpsport.com/Auth/Login"
 ACTIVITY_LIST_URL = "https://i.igpsport.com/Activity/ActivityList"
 GATEWAY = "https://prod.en.igpsport.com/service/web-gateway/web-analyze/activity"
-INTERVALS_UPLOAD_URL = "https://intervals.icu/api/v1/athlete/0/activities"
-INTERVALS_ACTIVITIES_URL = "https://intervals.icu/api/v1/athlete/0/activities"
-INTERVALS_ACTIVITY_URL = "https://intervals.icu/api/v1/activity"
-
 # iGPSPORT reports activity start times as "YYYY-MM-DD HH:MM:SS".
 IGP_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -191,54 +192,17 @@ def download_fit(fit_url: str, dest_path: Path) -> Path:
 def upload_to_intervals(
     fit_path: Path, title: str, ride_id: int, api_key: str
 ) -> str | None:
-    """Upload a .fit file to intervals.icu; return the new activity id or None.
-
-    Uses basic auth with the literal username "API_KEY"; `external_id` reuses
-    the iGPSPORT ride id so re-uploads are idempotent. The id is read from the
-    UploadResponse so the caller can set the activity type afterwards.
-    """
-    with fit_path.open("rb") as f:
-        resp = requests.post(
-            INTERVALS_UPLOAD_URL,
-            params={"name": title, "external_id": external_id_for(ride_id)},
-            files={"file": (fit_path.name, f, "application/octet-stream")},
-            auth=("API_KEY", api_key),
-        )
-    if resp.status_code not in (200, 201):
-        return None
-
-    data = resp.json()
-    activities = data.get("activities") or []
-    if activities and activities[0].get("id"):
-        return activities[0]["id"]
-    return data.get("id")
-
-
-def set_activity_type(activity_id: str, activity_type: str, api_key: str) -> bool:
-    """Set an activity's sport on intervals.icu (e.g. "MountainBikeRide")."""
-    resp = requests.put(
-        f"{INTERVALS_ACTIVITY_URL}/{activity_id}",
-        json={"type": activity_type},
-        auth=("API_KEY", api_key),
+    """Upload a .fit file to intervals.icu; return the new activity id or None."""
+    return upload_fit_file(
+        fit_path, title, external_id_for(ride_id), api_key
     )
-    return resp.ok
 
 
 def fetch_uploaded_external_ids(
     api_key: str, oldest: date, newest: date
 ) -> set[str]:
-    """Return the set of `external_id`s already on intervals.icu in a date range.
-
-    The activity list endpoint includes the `external_id` we set at upload time,
-    so we can tell which iGPSPORT rides are already present without re-downloading.
-    """
-    resp = requests.get(
-        INTERVALS_ACTIVITIES_URL,
-        params={"oldest": oldest.isoformat(), "newest": newest.isoformat()},
-        auth=("API_KEY", api_key),
-    )
-    resp.raise_for_status()
-    return {a["external_id"] for a in resp.json() if a.get("external_id")}
+    """Return external_ids for rides already on intervals.icu in a date range."""
+    return icu_fetch_uploaded_external_ids(api_key, oldest, newest)
 
 
 def _activity_date_range(activities: list[Activity]) -> tuple[date, date]:

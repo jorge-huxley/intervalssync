@@ -1,7 +1,7 @@
 """Non-secret CLI settings persisted as JSON.
 
 Secrets never live here — they are read from the Hermes profile .env file via
-`cli_env.py`.
+`env.py`.
 """
 
 from __future__ import annotations
@@ -12,14 +12,14 @@ from pathlib import Path
 
 from platformdirs import user_config_dir, user_downloads_dir
 
-APP_NAME = "igpsync-cli"
+APP_NAME = "intervalssync-cli"
 
 CONFIG_DIR = Path(user_config_dir(APP_NAME, appauthor=False))
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 
 def _default_download_dir() -> str:
-    return str(Path(user_downloads_dir()) / "igpsport-fit")
+    return str(Path(user_downloads_dir()) / "intervalssync-fit")
 
 
 @dataclass

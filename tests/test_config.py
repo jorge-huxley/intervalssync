@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from igpsync import config as config_module
+from intervalssync.gui import config as config_module
 
 
 def test_defaults():

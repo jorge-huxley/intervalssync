@@ -1,7 +1,7 @@
 # Contributing
 
-Thanks for your interest in improving **iGPSPORT → intervals.icu**! This guide
-covers how to set up the project, make a change, and open a pull request.
+Thanks for your interest in improving **intervalssync**! This guide covers how to
+set up the project, make a change, and open a pull request.
 
 ## Prerequisites
 
@@ -37,15 +37,14 @@ change can be merged.
 
 ## Project layout
 
-The code is split into three layers so the app can later target mobile with
-minimal change (see `CLAUDE.md` for the full picture):
+See `CLAUDE.md` for the full picture:
 
-- `src/igpsync/core.py` — pure sync logic (no UI, no side effects)
-- `src/igpsync/config.py` + `secrets.py` — settings (JSON) and secrets (OS vault)
-- `src/igpsync/gui/` — the Flet UI (`main.py` / `igpsync-gui` entry)
-- `src/igpsync/cli.py` — headless CLI (`igpsync` entry; see `docs/AGENT.md`)
+- `src/intervalssync/` — package root (CLI, GUI, config, shared `intervals_icu.py`)
+- `src/intervalssync/igpsport/` — iGPSPORT activity sync + workout upload
+- `src/intervalssync/bryton/` — Bryton Active activity sync
+- `src/intervalssync/gui/` — Flet UI (`intervalssync-gui` entry)
 
-Keep new logic in `core` testable and UI-free; the GUI and CLI should stay thin.
+Keep source logic testable and UI-free; CLI/GUI stay thin orchestration.
 
 ## Working on the Dropbox upload (optional)
 

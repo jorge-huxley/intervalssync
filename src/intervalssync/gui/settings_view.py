@@ -7,9 +7,9 @@ from typing import Awaitable, Callable
 import flet as ft
 from flet_permission_handler import Permission, PermissionHandler, PermissionStatus
 
-from .. import config as config_module
-from .. import secrets as secrets_module
-from ..core import CYCLING_ACTIVITY_TYPES
+from . import config as config_module
+from . import secrets as secrets_module
+from ..igpsport.core import CYCLING_ACTIVITY_TYPES
 from ..dropbox_client import (
     DEFAULT_DROPBOX_FOLDER,
     finish_dropbox_auth,

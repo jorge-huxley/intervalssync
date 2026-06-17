@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 
-from igpsync import secrets as secrets_module
+from intervalssync.gui import secrets as secrets_module
 
 
 class FakeSecureStorage:

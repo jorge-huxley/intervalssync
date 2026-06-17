@@ -1,10 +1,8 @@
-"""Headless CLI for iGPSPORT ↔ intervals.icu sync.
+"""Headless CLI for syncing activities to intervals.icu.
 
-Designed for agent use (e.g. Hermes): credentials are read from the profile
-.env file; progress goes to stderr; structured results go to stdout with --json.
-
-Subcommands: activity sync (iGPSPORT → intervals.icu) and workout upload
-(intervals.icu → iGPSPORT).
+Supports multiple activity sources (iGPSPORT, Bryton). Credentials are read
+from a .env file; progress goes to stderr; structured results go to stdout with
+--json.
 """
 
 from __future__ import annotations
@@ -14,22 +12,29 @@ import json
 import sys
 from pathlib import Path
 
-from . import cli_config as cli_config_module
-from .cli_env import CliConfigError, load_credentials, resolve_env_path
-from .core import SyncConfig, SyncError, SyncResult, sync
-from .workout import (
+from ..bryton.core import SyncConfig as BrytonSyncConfig
+from ..bryton.core import SyncResult as BrytonSyncResult
+from ..bryton.core import sync as bryton_sync
+from ..bryton.exceptions import BrytonSyncError
+from ..igpsport.core import SyncConfig as IgpSyncConfig
+from ..igpsport.core import SyncError as IgpSyncError
+from ..igpsport.core import SyncResult as IgpSyncResult
+from ..igpsport.core import sync as igpsport_sync
+from ..igpsport.workout import (
     WorkoutUploadConfig,
     WorkoutUploadResult,
     apply_uploaded_workout_map,
     upload_workouts,
 )
+from . import config as cli_config_module
+from .env import ActivitySource, CliConfigError, load_credentials, resolve_env_path
 
 EXIT_OK = 0
 EXIT_SYNC_ERROR = 1
 EXIT_CONFIG_ERROR = 2
 
 
-def _build_sync_config(
+def _build_igpsport_sync_config(
     credentials,
     config: cli_config_module.CliConfig,
     *,
@@ -38,8 +43,8 @@ def _build_sync_config(
     activity_type: str | None,
     download_dir: str | None,
     delete_after_upload: bool | None,
-) -> SyncConfig:
-    return SyncConfig(
+) -> IgpSyncConfig:
+    return IgpSyncConfig(
         igp_user=credentials.igp_user,
         igp_password=credentials.igp_password,
         intervals_api_key=credentials.intervals_api_key,
@@ -58,9 +63,37 @@ def _build_sync_config(
     )
 
 
-def _result_payload(result: SyncResult, *, ok: bool, error: str | None = None) -> dict:
+def _build_bryton_sync_config(
+    credentials,
+    config: cli_config_module.CliConfig,
+    *,
+    max_activities: int | None,
+    force_resync: bool | None,
+    activity_type: str | None,
+    download_dir: str | None,
+    delete_after_upload: bool | None,
+) -> BrytonSyncConfig:
+    return BrytonSyncConfig(
+        bryton_email=credentials.bryton_email,
+        bryton_password=credentials.bryton_password,
+        intervals_api_key=credentials.intervals_api_key,
+        max_activities=max_activities if max_activities is not None else config.max_activities,
+        download_dir=Path(download_dir or config.download_dir),
+        delete_after_upload=(
+            delete_after_upload if delete_after_upload is not None else config.delete_after_upload
+        ),
+        force_resync=force_resync if force_resync is not None else config.force_resync,
+        activity_type=activity_type if activity_type is not None else config.activity_type,
+        list_activities=True,
+        download_fit=True,
+        upload_intervals=True,
+    )
+
+
+def _igpsport_result_payload(result: IgpSyncResult, *, ok: bool, error: str | None = None) -> dict:
     payload = {
         "ok": ok,
+        "source": "igpsport",
         "listed": result.listed,
         "uploaded": result.uploaded,
         "skipped": result.skipped,
@@ -80,11 +113,43 @@ def _result_payload(result: SyncResult, *, ok: bool, error: str | None = None) -
     return payload
 
 
+def _bryton_result_payload(result: BrytonSyncResult, *, ok: bool, error: str | None = None) -> dict:
+    payload = {
+        "ok": ok,
+        "source": "bryton",
+        "listed": result.listed,
+        "uploaded": result.uploaded,
+        "skipped": result.skipped,
+        "failed": result.failed,
+        "downloaded": result.downloaded,
+        "activities": [
+            {
+                "activity_id": act.activity_id,
+                "title": act.title,
+                "start_time": act.start_time,
+            }
+            for act in result.activities
+        ],
+    }
+    if error is not None:
+        payload["error"] = error
+    return payload
+
+
 def _emit_json(payload: dict) -> None:
     print(json.dumps(payload, indent=2))
 
 
-def _emit_text_summary(result: SyncResult) -> None:
+def _emit_igpsport_text_summary(result: IgpSyncResult) -> None:
+    print(
+        f"Done — uploaded {result.uploaded}, "
+        f"downloaded {result.downloaded}, "
+        f"skipped {result.skipped}, "
+        f"failed {result.failed}."
+    )
+
+
+def _emit_bryton_text_summary(result: BrytonSyncResult) -> None:
     print(
         f"Done — uploaded {result.uploaded}, "
         f"downloaded {result.downloaded}, "
@@ -137,48 +202,89 @@ def _emit_workout_text_summary(result: WorkoutUploadResult) -> None:
     )
 
 
+def _source_from_args(args: argparse.Namespace) -> ActivitySource:
+    return args.source
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     config = cli_config_module.load()
+    source = _source_from_args(args)
     try:
         env_path = resolve_env_path(
             env_file=Path(args.env_file) if args.env_file else None,
             config_env_file=config.env_file or None,
         )
-        load_credentials(env_path)
+        load_credentials(env_path, source=source)
     except CliConfigError as exc:
         if args.json:
-            _emit_json({"ok": False, "error": str(exc)})
+            _emit_json({"ok": False, "source": source, "error": str(exc)})
         else:
             print(exc, file=sys.stderr)
         return EXIT_CONFIG_ERROR
 
     if args.json:
-        _emit_json({"ok": True, "env_file": str(env_path)})
+        _emit_json({"ok": True, "source": source, "env_file": str(env_path)})
     else:
-        print(f"Credentials OK ({env_path})")
+        print(f"Credentials OK for {source} ({env_path})")
     return EXIT_OK
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
     config = cli_config_module.load()
     use_json = args.json
+    source = _source_from_args(args)
 
     try:
         env_path = resolve_env_path(
             env_file=Path(args.env_file) if args.env_file else None,
             config_env_file=config.env_file or None,
         )
-        credentials = load_credentials(env_path)
+        credentials = load_credentials(env_path, source=source)
     except CliConfigError as exc:
         if use_json:
-            _emit_json({"ok": False, "error": str(exc)})
+            _emit_json({"ok": False, "source": source, "error": str(exc)})
         else:
             print(exc, file=sys.stderr)
         return EXIT_CONFIG_ERROR
 
     delete_after_upload = False if args.keep_files else None
 
-    sync_config = _build_sync_config(
+    def progress(message: str) -> None:
+        print(message, file=sys.stderr)
+
+    if source == "bryton":
+        sync_config = _build_bryton_sync_config(
+            credentials,
+            config,
+            max_activities=args.max_activities,
+            force_resync=True if args.force_resync else None,
+            activity_type=args.activity_type,
+            download_dir=args.download_dir,
+            delete_after_upload=delete_after_upload,
+        )
+        try:
+            result = bryton_sync(sync_config, progress=progress)
+        except BrytonSyncError as exc:
+            if use_json:
+                _emit_json(_bryton_result_payload(BrytonSyncResult(), ok=False, error=str(exc)))
+            else:
+                print(f"✗ {exc}", file=sys.stderr)
+            return EXIT_SYNC_ERROR
+        except Exception as exc:  # noqa: BLE001
+            if use_json:
+                _emit_json(_bryton_result_payload(BrytonSyncResult(), ok=False, error=str(exc)))
+            else:
+                print(f"✗ Unexpected error: {exc}", file=sys.stderr)
+            return EXIT_SYNC_ERROR
+
+        ok = result.failed == 0
+        if use_json:
+            _emit_json(_bryton_result_payload(result, ok=ok))
+        else:
+            _emit_bryton_text_summary(result)
+        return EXIT_OK if ok else EXIT_SYNC_ERROR
+
+    sync_config = _build_igpsport_sync_config(
         credentials,
         config,
         max_activities=args.max_activities,
@@ -187,30 +293,26 @@ def cmd_sync(args: argparse.Namespace) -> int:
         download_dir=args.download_dir,
         delete_after_upload=delete_after_upload,
     )
-
-    def progress(message: str) -> None:
-        print(message, file=sys.stderr)
-
     try:
-        result = sync(sync_config, progress=progress)
-    except SyncError as exc:
+        result = igpsport_sync(sync_config, progress=progress)
+    except IgpSyncError as exc:
         if use_json:
-            _emit_json(_result_payload(SyncResult(), ok=False, error=str(exc)))
+            _emit_json(_igpsport_result_payload(IgpSyncResult(), ok=False, error=str(exc)))
         else:
             print(f"✗ {exc}", file=sys.stderr)
         return EXIT_SYNC_ERROR
-    except Exception as exc:  # noqa: BLE001 — surface unexpected failures to agents
+    except Exception as exc:  # noqa: BLE001
         if use_json:
-            _emit_json(_result_payload(SyncResult(), ok=False, error=str(exc)))
+            _emit_json(_igpsport_result_payload(IgpSyncResult(), ok=False, error=str(exc)))
         else:
             print(f"✗ Unexpected error: {exc}", file=sys.stderr)
         return EXIT_SYNC_ERROR
 
     ok = result.failed == 0
     if use_json:
-        _emit_json(_result_payload(result, ok=ok))
+        _emit_json(_igpsport_result_payload(result, ok=ok))
     else:
-        _emit_text_summary(result)
+        _emit_igpsport_text_summary(result)
 
     return EXIT_OK if ok else EXIT_SYNC_ERROR
 
@@ -224,7 +326,7 @@ def cmd_upload_workouts(args: argparse.Namespace) -> int:
             env_file=Path(args.env_file) if args.env_file else None,
             config_env_file=config.env_file or None,
         )
-        credentials = load_credentials(env_path)
+        credentials = load_credentials(env_path, source="igpsport")
     except CliConfigError as exc:
         if use_json:
             _emit_json({"ok": False, "error": str(exc)})
@@ -244,13 +346,13 @@ def cmd_upload_workouts(args: argparse.Namespace) -> int:
 
     try:
         result = upload_workouts(upload_config, progress=progress)
-    except SyncError as exc:
+    except IgpSyncError as exc:
         if use_json:
             _emit_json(_workout_result_payload(WorkoutUploadResult(), ok=False, error=str(exc)))
         else:
             print(f"✗ {exc}", file=sys.stderr)
         return EXIT_SYNC_ERROR
-    except Exception as exc:  # noqa: BLE001 — surface unexpected failures to agents
+    except Exception as exc:  # noqa: BLE001
         if use_json:
             _emit_json(_workout_result_payload(WorkoutUploadResult(), ok=False, error=str(exc)))
         else:
@@ -270,6 +372,15 @@ def cmd_upload_workouts(args: argparse.Namespace) -> int:
     return EXIT_OK if ok else EXIT_SYNC_ERROR
 
 
+def _add_source_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--source",
+        choices=("igpsport", "bryton"),
+        default="igpsport",
+        help="Activity source (default: igpsport).",
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -284,8 +395,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     parser = argparse.ArgumentParser(
-        prog="igpsync",
-        description="Sync cycling activities and planned workouts between iGPSPORT and intervals.icu.",
+        prog="intervalssync",
+        description="Sync cycling activities to intervals.icu from iGPSPORT or Bryton Active.",
     )
 
     subparsers = parser.add_subparsers(dest="command")
@@ -296,13 +407,15 @@ def _build_parser() -> argparse.ArgumentParser:
         parents=[common],
         help="Validate credentials in the .env file (no network).",
     )
+    _add_source_arg(check_parser)
     check_parser.set_defaults(func=cmd_check)
 
     sync_parser = subparsers.add_parser(
         "sync",
         parents=[common],
-        help="Download recent rides from iGPSPORT and upload to intervals.icu.",
+        help="Download recent rides and upload to intervals.icu.",
     )
+    _add_source_arg(sync_parser)
     sync_parser.add_argument(
         "--max-activities",
         type=int,

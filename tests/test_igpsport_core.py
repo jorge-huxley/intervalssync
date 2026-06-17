@@ -1,4 +1,4 @@
-"""Tests for the pure sync logic in igpsync.core.
+"""Tests for the pure sync logic in intervalssync.igpsport.core.
 
 Network calls are stubbed so nothing hits iGPSPORT or intervals.icu. The leaf
 HTTP helpers are tested by faking `requests`; the `sync` orchestrator is tested
@@ -11,7 +11,8 @@ from datetime import date
 
 import pytest
 
-from igpsync import core
+from intervalssync.igpsport import core
+from intervalssync import intervals_icu
 
 
 class FakeResponse:
@@ -71,7 +72,7 @@ def test_upload_returns_activity_id_from_activities(monkeypatch, tmp_path):
     fit = tmp_path / "igpsport_1.fit"
     fit.write_bytes(b"FIT")
     monkeypatch.setattr(
-        core.requests,
+        intervals_icu.requests,
         "post",
         lambda *a, **k: FakeResponse(json_data={"id": "iX", "activities": [{"id": "i999"}]}),
     )
@@ -82,7 +83,7 @@ def test_upload_falls_back_to_top_level_id(monkeypatch, tmp_path):
     fit = tmp_path / "igpsport_1.fit"
     fit.write_bytes(b"FIT")
     monkeypatch.setattr(
-        core.requests,
+        intervals_icu.requests,
         "post",
         lambda *a, **k: FakeResponse(json_data={"id": "iTOP", "activities": []}),
     )
@@ -92,13 +93,13 @@ def test_upload_falls_back_to_top_level_id(monkeypatch, tmp_path):
 def test_upload_returns_none_on_failure(monkeypatch, tmp_path):
     fit = tmp_path / "igpsport_1.fit"
     fit.write_bytes(b"FIT")
-    monkeypatch.setattr(core.requests, "post", lambda *a, **k: FakeResponse(status=500))
+    monkeypatch.setattr(intervals_icu.requests, "post", lambda *a, **k: FakeResponse(status=500))
     assert core.upload_to_intervals(fit, "Ride", 1, "key") is None
 
 
 def test_fetch_uploaded_external_ids_filters_empty(monkeypatch):
     monkeypatch.setattr(
-        core.requests,
+        intervals_icu.requests,
         "get",
         lambda *a, **k: FakeResponse(
             json_data=[
@@ -115,7 +116,7 @@ def test_fetch_uploaded_external_ids_filters_empty(monkeypatch):
 
 @pytest.mark.parametrize("status,expected", [(200, True), (400, False)])
 def test_set_activity_type(monkeypatch, status, expected):
-    monkeypatch.setattr(core.requests, "put", lambda *a, **k: FakeResponse(status=status))
+    monkeypatch.setattr(intervals_icu.requests, "put", lambda *a, **k: FakeResponse(status=status))
     assert core.set_activity_type("i1", "MountainBikeRide", "key") is expected
 
 
