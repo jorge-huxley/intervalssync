@@ -17,6 +17,7 @@ from . import secrets as secrets_module
 from .update_check import RELEASES_PAGE, check_for_update
 from .settings_view import build_settings_view
 from .sync_view import build_sync_view
+from . import theme
 
 
 _DESKTOP = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX}
@@ -26,6 +27,9 @@ _MOBILE = {ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV, ft.PagePlatform.
 ANDROID_DOWNLOADS = "/storage/emulated/0/Download/intervalssync-fit"
 
 APP_TITLE = "Intervals Sync"
+
+_TAB_SYNC = 0
+_TAB_SETTINGS = 1
 
 
 async def _has_credentials(
@@ -42,33 +46,28 @@ async def _has_credentials(
 async def _app(page: ft.Page) -> None:
     page.title = APP_TITLE
     page.theme_mode = ft.ThemeMode.SYSTEM
-    page.theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO)
-    page.dark_theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO)
+    theme.apply_page_theme(page)
     page.padding = 0
+    page.bgcolor = theme.palette(page)["bg"]
 
-    # Window sizing only applies on desktop; on mobile the app fills the screen.
     if page.platform in _DESKTOP:
-        page.window.width = 560
-        page.window.height = 720
-        page.window.min_width = 420
+        page.window.width = 600
+        page.window.height = 760
+        page.window.min_width = 400
+        page.window.min_height = 560
 
     config = config_module.load()
 
-    # Register services: the secure-storage vault and the permission handler.
     storage = SecureStorage()
     perms = PermissionHandler()
     page.services.extend([storage, perms])
     store = secrets_module.FletSecureStorage(storage)
 
     def _private_download_dir() -> str:
-        # App-private, always-writable per-app dir (Flet pre-creates it).
         base = os.getenv("FLET_APP_STORAGE_DATA") or tempfile.gettempdir()
         return str(Path(base) / "intervalssync-fit")
 
     async def apply_download_location() -> None:
-        # Desktop keeps the user's chosen/Downloads folder. On mobile we use
-        # app-private storage, unless the user opted into the public Downloads
-        # folder and has granted "all files" access.
         if page.platform not in _MOBILE:
             return
         config.download_dir = _private_download_dir()
@@ -82,38 +81,21 @@ async def _app(page: ft.Page) -> None:
 
     await apply_download_location()
 
-    body = ft.Container(expand=True, padding=20)
+    body = ft.Container(expand=True)
+    header_slot = ft.Container()
+    current_tab = _TAB_SYNC
+    is_mobile = page.platform in _MOBILE
+
+    def _refresh_bg() -> None:
+        page.bgcolor = theme.palette(page)["bg"]
 
     def _scrollable(view: ft.Control) -> ft.Control:
-        # Wrap the view so it scrolls when taller than the window instead of
-        # being clipped (e.g. the full Settings form on a short window).
         return ft.Column([view], scroll=ft.ScrollMode.AUTO, expand=True)
 
-    async def show_sync(_: ft.ControlEvent | None = None) -> None:
-        body.content = _scrollable(build_sync_view(page, config, store))
-        page.update()
-
-    async def show_settings(_: ft.ControlEvent | None = None) -> None:
-        body.content = _scrollable(
-            await build_settings_view(
-                page,
-                config,
-                store,
-                on_saved=show_sync,
-                perms=perms,
-                apply_download_location=apply_download_location,
-            )
-        )
-        page.update()
-
     async def open_releases(_: ft.ControlEvent) -> None:
-        # page.launch_url is a coroutine in Flet 0.85 — it must be awaited,
-        # otherwise the "View" button silently does nothing.
         await page.launch_url(RELEASES_PAGE)
 
     def notify_update(latest: str | None, *, quiet_when_current: bool) -> None:
-        # Must run on the event loop (not a worker thread) so the snackbar's
-        # action handler is wired up and the "View" button works.
         if latest:
             page.show_dialog(
                 ft.SnackBar(
@@ -128,22 +110,37 @@ async def _app(page: ft.Page) -> None:
         page.update()
 
     async def check_updates_now(_: ft.ControlEvent) -> None:
-        page.pop_dialog()  # close the About dialog
-        # allow_dev=True so it works on local/dev builds too (for testing): a
-        # 0.0.0 dev build counts as older than any published release.
+        page.pop_dialog()
         latest = await asyncio.to_thread(check_for_update, __version__, allow_dev=True)
         notify_update(latest, quiet_when_current=False)
 
     def show_about(_: ft.ControlEvent | None = None) -> None:
+        colors = theme.palette(page)
         page.show_dialog(
             ft.AlertDialog(
-                title=ft.Text("About"),
+                modal=True,
+                shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_MD),
+                title=theme.display_text("About", size=22),
                 content=ft.Column(
                     tight=True,
-                    spacing=6,
+                    spacing=theme.SPACE_SM,
                     controls=[
-                        ft.Text(APP_TITLE, weight=ft.FontWeight.BOLD),
-                        ft.Text(f"Version {__version__}"),
+                        ft.Text(
+                            APP_TITLE,
+                            weight=ft.FontWeight.W_600,
+                            color=colors["text"],
+                        ),
+                        ft.Text(
+                            f"Version {__version__}",
+                            size=13,
+                            color=colors["text_muted"],
+                        ),
+                        ft.Text(
+                            "Sync rides and planned workouts between iGPSPORT, "
+                            "Bryton Active, and intervals.icu.",
+                            size=13,
+                            color=colors["text_muted"],
+                        ),
                     ],
                 ),
                 actions=[
@@ -157,29 +154,163 @@ async def _app(page: ft.Page) -> None:
             )
         )
 
-    page.appbar = ft.AppBar(
-        title=ft.Text(APP_TITLE),
-        center_title=False,
-        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-        actions=[
-            ft.IconButton(ft.Icons.SYNC, tooltip="Sync", on_click=show_sync),
-            ft.IconButton(ft.Icons.SETTINGS, tooltip="Settings", on_click=show_settings),
-            ft.IconButton(ft.Icons.INFO_OUTLINE, tooltip="About", on_click=show_about),
+    def _header() -> ft.Container:
+        colors = theme.palette(page)
+        return ft.Container(
+            content=ft.Row(
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Row(
+                        spacing=theme.SPACE_SM,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            ft.Container(
+                                width=36,
+                                height=36,
+                                border_radius=theme.RADIUS_SM,
+                                bgcolor=colors["accent_soft"],
+                                alignment=ft.Alignment.CENTER,
+                                content=ft.Icon(
+                                    ft.Icons.DIRECTIONS_BIKE,
+                                    size=20,
+                                    color=colors["accent"],
+                                ),
+                            ),
+                            ft.Column(
+                                spacing=0,
+                                controls=[
+                                    theme.display_text(APP_TITLE, size=18, color=colors["text"]),
+                                    ft.Text(
+                                        "iGPSPORT · Bryton · intervals.icu",
+                                        size=11,
+                                        color=colors["text_muted"],
+                                    ),
+                                ],
+                            ),
+                        ],
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.INFO_OUTLINE,
+                        tooltip="About",
+                        icon_color=colors["text_muted"],
+                        on_click=show_about,
+                    ),
+                ],
+            ),
+            padding=ft.Padding(
+                theme.SPACE_LG,
+                theme.SPACE_MD,
+                theme.SPACE_LG,
+                theme.SPACE_MD,
+            ),
+            bgcolor=colors["bg"],
+            border=ft.Border(bottom=ft.BorderSide(1, colors["border"])),
+        )
+
+    async def show_sync(_: ft.ControlEvent | None = None) -> None:
+        nonlocal current_tab
+        current_tab = _TAB_SYNC
+        body.content = _scrollable(build_sync_view(page, config, store))
+        header_slot.content = _header()
+        _update_nav()
+        _refresh_bg()
+        page.update()
+
+    async def show_settings(_: ft.ControlEvent | None = None) -> None:
+        nonlocal current_tab
+        current_tab = _TAB_SETTINGS
+        body.content = _scrollable(
+            await build_settings_view(
+                page,
+                config,
+                store,
+                on_saved=show_sync,
+                perms=perms,
+                apply_download_location=apply_download_location,
+            )
+        )
+        header_slot.content = _header()
+        _update_nav()
+        _refresh_bg()
+        page.update()
+
+    async def on_tab_change(e: ft.ControlEvent) -> None:
+        index = e.control.selected_index
+        if index == _TAB_SYNC:
+            await show_sync()
+        else:
+            await show_settings()
+
+    nav_bar = ft.NavigationBar(
+        selected_index=_TAB_SYNC,
+        on_change=on_tab_change,
+        destinations=[
+            ft.NavigationBarDestination(
+                icon=ft.Icons.SYNC_OUTLINED,
+                selected_icon=ft.Icons.SYNC,
+                label="Sync",
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.TUNE_OUTLINED,
+                selected_icon=ft.Icons.TUNE,
+                label="Settings",
+            ),
         ],
+        label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_SHOW,
     )
 
-    page.add(body)
+    sync_tab = ft.TextButton("Sync", on_click=show_sync)
+    settings_tab = ft.TextButton("Settings", on_click=show_settings)
+    desktop_tabs = ft.Container(
+        content=ft.Row(
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[sync_tab, settings_tab],
+        ),
+        padding=ft.Padding(0, theme.SPACE_SM, 0, theme.SPACE_SM),
+    )
 
-    # First run (no credentials yet) opens Settings; otherwise go to Sync.
+    def _update_nav() -> None:
+        nav_bar.selected_index = current_tab
+        colors = theme.palette(page)
+        for idx, btn in enumerate((sync_tab, settings_tab)):
+            active = idx == current_tab
+            btn.style = ft.ButtonStyle(
+                color=colors["accent"] if active else colors["text_muted"],
+                bgcolor=colors["accent_soft"] if active else ft.Colors.TRANSPARENT,
+                shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_SM),
+                padding=ft.Padding(
+                    theme.SPACE_MD, theme.SPACE_SM, theme.SPACE_MD, theme.SPACE_SM
+                ),
+            )
+
+    page.add(
+        ft.Column(
+            expand=True,
+            spacing=0,
+            controls=[
+                header_slot,
+                desktop_tabs if not is_mobile else ft.Container(height=0),
+                ft.Container(
+                    content=body,
+                    expand=True,
+                    padding=ft.Padding(
+                        theme.SPACE_LG,
+                        theme.SPACE_MD,
+                        theme.SPACE_LG,
+                        theme.SPACE_LG if not is_mobile else theme.SPACE_MD,
+                    ),
+                ),
+                nav_bar if is_mobile else ft.Container(height=0),
+            ],
+        )
+    )
+
     if await _has_credentials(config, store):
         await show_sync()
     else:
         await show_settings()
 
-    # Quietly check GitHub for a newer release. The network call runs in a
-    # thread (so it doesn't block the UI) but the snackbar is shown back on the
-    # event loop — otherwise its action handler isn't wired and "View" is dead.
-    # No-op on dev builds, silent on any error.
     async def auto_check_updates() -> None:
         latest = await asyncio.to_thread(check_for_update, __version__)
         notify_update(latest, quiet_when_current=True)

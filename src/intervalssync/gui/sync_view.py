@@ -18,6 +18,7 @@ from ..bryton.workout import (
 from ..igpsport.core import SyncConfig as IgpSyncConfig, SyncError, sync as igpsport_sync
 from ..dropbox_client import get_dropbox_app_key
 from ..igpsport.workout import WorkoutUploadConfig, apply_uploaded_workout_map, upload_workouts
+from . import theme
 
 
 def build_sync_view(
@@ -25,33 +26,45 @@ def build_sync_view(
     config: config_module.AppConfig,
     store: secrets_module.SecretStore,
 ) -> ft.Control:
-    progress = ft.ProgressBar(visible=False)
-    log = ft.ListView(spacing=2, auto_scroll=True, height=260)
+    colors = theme.palette(page)
+    progress = ft.ProgressBar(
+        visible=False,
+        color=colors["accent"],
+        bgcolor=colors["surface_alt"],
+        bar_height=3,
+        border_radius=2,
+    )
+    log = ft.ListView(spacing=4, auto_scroll=True, height=280, expand=False)
 
-    sync_igp_button = ft.FilledButton(
-        "Sync iGPSPORT",
-        icon=ft.Icons.SYNC,
-        height=52,
-        visible=config.enable_igpsport,
+    def _action_button(label: str, icon: str, *, outlined: bool = False) -> ft.FilledButton | ft.OutlinedButton:
+        content = ft.Row(
+            tight=True,
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[
+                ft.Icon(icon, size=20),
+                ft.Text(label, font_family=f"{theme.FONT_BODY}Medium"),
+            ],
+        )
+        style = ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_SM),
+            padding=ft.Padding(theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD),
+        )
+        if outlined:
+            return ft.OutlinedButton(content=content, style=style)
+        return ft.FilledButton(content=content, style=style)
+
+    sync_igp_button = _action_button("Sync iGPSPORT", ft.Icons.SYNC)
+    sync_igp_button.visible = config.enable_igpsport
+    sync_bryton_button = _action_button("Sync Bryton", ft.Icons.SYNC)
+    sync_bryton_button.visible = config.enable_bryton
+    upload_igp_workouts_button = _action_button(
+        "Upload to iGPSPORT", ft.Icons.FITNESS_CENTER_OUTLINED, outlined=True
     )
-    sync_bryton_button = ft.FilledButton(
-        "Sync Bryton",
-        icon=ft.Icons.SYNC,
-        height=52,
-        visible=config.enable_bryton,
+    upload_igp_workouts_button.visible = config.enable_igpsport
+    upload_bryton_workouts_button = _action_button(
+        "Upload to Bryton", ft.Icons.FITNESS_CENTER_OUTLINED, outlined=True
     )
-    upload_igp_workouts_button = ft.OutlinedButton(
-        "Upload to iGPSPORT",
-        icon=ft.Icons.FITNESS_CENTER,
-        height=52,
-        visible=config.enable_igpsport,
-    )
-    upload_bryton_workouts_button = ft.OutlinedButton(
-        "Upload to Bryton",
-        icon=ft.Icons.FITNESS_CENTER,
-        height=52,
-        visible=config.enable_bryton,
-    )
+    upload_bryton_workouts_button.visible = config.enable_bryton
 
     action_buttons = [
         btn
@@ -69,7 +82,20 @@ def build_sync_view(
             button.disabled = not enabled
 
     def append_log(message: str) -> None:
-        log.controls.append(ft.Text(message, size=13, selectable=True))
+        line_color = colors["text"]
+        if message.startswith("✗"):
+            line_color = ft.Colors.RED_400
+        elif message.startswith("\nDone"):
+            line_color = colors["accent"]
+        log.controls.append(
+            ft.Text(
+                message,
+                size=12,
+                selectable=True,
+                font_family="Courier New",
+                color=line_color,
+            )
+        )
         page.update()
 
     def run_igpsport_sync(
@@ -300,31 +326,59 @@ def build_sync_view(
     upload_igp_workouts_button.on_click = on_upload_igp_workouts_click
     upload_bryton_workouts_button.on_click = on_upload_bryton_workouts_click
 
+    log_panel = ft.Container(
+        content=ft.Column(
+            spacing=theme.SPACE_SM,
+            controls=[
+                ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    controls=[
+                        theme.section_label("Activity log", page),
+                        ft.Text(
+                            "live",
+                            size=10,
+                            color=colors["accent"],
+                            font_family=f"{theme.FONT_BODY}Medium",
+                        ),
+                    ],
+                ),
+                ft.Container(
+                    content=log,
+                    expand=True,
+                    padding=theme.SPACE_MD,
+                    bgcolor=colors["surface_alt"],
+                    border_radius=theme.RADIUS_SM,
+                    border=ft.Border(left=ft.BorderSide(3, colors["accent"])),
+                ),
+            ],
+        ),
+        padding=theme.SPACE_LG,
+        bgcolor=colors["surface"],
+        border=ft.Border.all(1, colors["border"]),
+        border_radius=theme.RADIUS_MD,
+    )
+
     return ft.Column(
-        spacing=16,
+        spacing=theme.SPACE_LG,
         controls=[
-            ft.Text(
-                "Sync activities to intervals.icu and upload planned workouts from your "
-                "enabled sources.",
-                size=14,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+            ft.Column(
+                spacing=theme.SPACE_SM,
+                controls=[
+                    theme.display_text("Your rides, synced", size=26, color=colors["text"]),
+                    theme.muted_text(
+                        "Pull recent activities from iGPSPORT or Bryton into intervals.icu, "
+                        "or push planned workouts the other way.",
+                        page,
+                    ),
+                ],
             ),
             ft.Row(
+                spacing=theme.SPACE_SM,
                 controls=action_buttons,
-                spacing=12,
                 wrap=True,
             ),
             progress,
-            ft.Card(
-                content=ft.Container(
-                    padding=16,
-                    content=ft.Column(
-                        controls=[
-                            ft.Text("Activity", size=16, weight=ft.FontWeight.BOLD),
-                            log,
-                        ],
-                    ),
-                )
-            ),
+            log_panel,
+            ft.Container(height=theme.SPACE_MD),
         ],
     )
