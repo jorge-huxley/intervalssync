@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from igpsync import cli, cli_config, cli_env, core
+from igpsync import cli, cli_config, cli_env, core, workout
 
 
 def _write_env(path: Path, **overrides: str) -> None:
@@ -40,6 +40,16 @@ def test_load_credentials_missing_keys(tmp_path: Path):
 
     with pytest.raises(cli_env.CliConfigError, match="IGPSYNC_IGP_PASSWORD"):
         cli_env.load_credentials(env_file)
+
+
+def test_load_credentials_missing_file_mentions_env_file(tmp_path: Path):
+    env_file = tmp_path / "missing.env"
+
+    with pytest.raises(cli_env.CliConfigError, match="--env-file") as exc_info:
+        cli_env.load_credentials(env_file)
+
+    assert "Secrets file not found" in str(exc_info.value)
+    assert ".env.example" in str(exc_info.value)
 
 
 def test_resolve_env_path_flag_wins(tmp_path: Path):
@@ -147,3 +157,67 @@ def test_cli_config_roundtrip(tmp_path: Path, monkeypatch):
     loaded = cli_config.load()
     assert loaded.env_file == "/custom/.env"
     assert loaded.max_activities == 10
+
+
+def test_upload_workouts_parser_accepts_flags():
+    args = cli._build_parser().parse_args(
+        ["upload-workouts", "--workout-days-ahead", "3", "--force-resync"]
+    )
+    assert args.command == "upload-workouts"
+    assert args.workout_days_ahead == 3
+    assert args.force_resync is True
+
+
+def test_upload_workouts_json_success(tmp_path: Path, monkeypatch, capsys):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+    monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
+
+    def fake_upload(config, progress=None):
+        if progress:
+            progress("uploading")
+        return workout.WorkoutUploadResult(
+            listed=2,
+            uploaded=1,
+            skipped=1,
+            uploaded_map={"42": 100},
+        )
+
+    monkeypatch.setattr(cli, "upload_workouts", fake_upload)
+
+    args = cli._build_parser().parse_args(
+        ["upload-workouts", "--env-file", str(env_file), "--json", "--workout-days-ahead", "2"]
+    )
+    assert cli.cmd_upload_workouts(args) == cli.EXIT_OK
+
+    captured = capsys.readouterr()
+    assert "uploading" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["ok"] is True
+    assert payload["uploaded"] == 1
+    assert payload["skipped"] == 1
+    assert payload["no_steps"] == 0
+
+    loaded = cli_config.load()
+    assert loaded.uploaded_workouts == {"42": 100}
+    assert loaded.workout_days_ahead == 1
+
+
+def test_upload_workouts_json_sync_error(tmp_path: Path, monkeypatch, capsys):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+
+    def fake_upload(config, progress=None):
+        raise core.SyncError("fetch failed")
+
+    monkeypatch.setattr(cli, "upload_workouts", fake_upload)
+
+    args = cli._build_parser().parse_args(
+        ["upload-workouts", "--env-file", str(env_file), "--json"]
+    )
+    assert cli.cmd_upload_workouts(args) == cli.EXIT_SYNC_ERROR
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["error"] == "fetch failed"

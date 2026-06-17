@@ -31,6 +31,10 @@ class CliConfig:
     delete_after_upload: bool = True
     force_resync: bool = False
     activity_type: str = ""
+    # Planned workouts: intervals.icu event id → iGPSPORT workoutId.
+    uploaded_workouts: dict[str, int] = field(default_factory=dict)
+    # How many calendar days of planned workouts to upload (1 = today only).
+    workout_days_ahead: int = 1
 
 
 def load() -> CliConfig:

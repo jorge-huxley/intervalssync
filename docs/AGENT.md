@@ -1,9 +1,9 @@
 # Agent / headless sync
 
-Use the `igpsync` CLI to upload recent rides from iGPSPORT to intervals.icu
+Use the `igpsync` CLI to sync cycling data between iGPSPORT and intervals.icu
 without the GUI. It is designed for automation agents (e.g.
-[Hermes](https://hermes-agent.nousresearch.com)) that already detect new
-activities and only need a reliable upload trigger.
+[Hermes](https://hermes-agent.nousresearch.com)) that need reliable upload
+triggers for activities and/or planned workouts.
 
 ## Prerequisites
 
@@ -71,6 +71,8 @@ Optional: pass `--env-file /path/to/.env` to override auto-detection.
 
 ## Agent invocation
 
+### Activity sync (iGPSPORT → intervals.icu)
+
 From the repository root:
 
 ```bash
@@ -101,6 +103,27 @@ Example success output:
 }
 ```
 
+### Workout upload (intervals.icu → iGPSPORT)
+
+```bash
+uv run igpsync upload-workouts --json
+```
+
+Example success output:
+
+```json
+{
+  "ok": true,
+  "listed": 3,
+  "uploaded": 1,
+  "skipped": 1,
+  "no_steps": 1,
+  "failed": 0
+}
+```
+
+Same progress/exit-code rules as activity sync.
+
 Example credential error:
 
 ```json
@@ -115,27 +138,53 @@ handle or write secrets.
 
 ## Optional flags
 
+Shared by all subcommands:
+
+| Flag              | Purpose                        |
+| ----------------- | ------------------------------ |
+| `--env-file PATH` | Override secrets file location |
+| `--json`          | Machine-readable JSON on stdout (progress on stderr) |
+
+`sync` flags:
 
 | Flag                   | Purpose                                        |
 | ---------------------- | ---------------------------------------------- |
-| `--env-file PATH`      | Override secrets file location                 |
 | `--max-activities N`   | Number of recent rides to process (default: 5) |
 | `--force-resync`       | Re-upload even if already on intervals.icu     |
 | `--activity-type TYPE` | Set intervals.icu sport after upload           |
 | `--download-dir PATH`  | Directory for temporary `.fit` files           |
 | `--keep-files`         | Do not delete `.fit` files after upload        |
 
+`upload-workouts` flags:
+
+| Flag                     | Purpose                                              |
+| ------------------------ | ---------------------------------------------------- |
+| `--workout-days-ahead N` | Calendar days to upload (default: 1 = today only)    |
+| `--force-resync`         | Re-upload even if already on iGPSPORT                |
+
 
 ## Subcommands
 
 
-| Command         | Description                                                         |
-| --------------- | ------------------------------------------------------------------- |
-| `igpsync sync`  | Full pipeline: list → download → upload to intervals.icu            |
-| `igpsync check` | Validate `.env` exists and has all three required keys (no network) |
+| Command                    | Description                                                         |
+| -------------------------- | ------------------------------------------------------------------- |
+| `igpsync sync`             | Full pipeline: list → download → upload to intervals.icu            |
+| `igpsync upload-workouts`  | Upload planned workouts from intervals.icu to iGPSPORT              |
+| `igpsync check`            | Validate `.env` exists and has all three required keys (no network) |
+
+
+## CLI config
+
+Non-secret defaults are persisted in `config.json` under the `igpsync-cli`
+app config directory (`platformdirs`). CLI flags override these per run.
+Fields include `max_activities`, `workout_days_ahead`, `force_resync`,
+`uploaded_workouts` (intervals.icu event id → iGPSPORT workoutId dedup map),
+and activity-sync settings. Secrets never go in this file.
 
 
 ## What it does
+
+### Activity sync (`sync`)
 
 Same as the GUI one-click sync:
 
@@ -144,4 +193,14 @@ Same as the GUI one-click sync:
 - Downloads `.fit` files and uploads to intervals.icu
 - Deletes local `.fit` files after successful upload (unless `--keep-files`)
 - Does **not** upload to Dropbox
+
+### Workout upload (`upload-workouts`)
+
+Same as the GUI **Upload workouts** button:
+
+- Fetches planned cycling workouts from the intervals.icu calendar
+- Skips workouts already uploaded (unless `--force-resync`)
+- Skips non-cycling activity types (v1)
+- Skips workouts with no structured steps (`no_steps` in JSON) — open the workout in intervals.icu first
+- Persists the `uploaded_workouts` dedup map in CLI `config.json` after each run
 

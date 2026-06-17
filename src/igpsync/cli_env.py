@@ -17,14 +17,47 @@ INTERVALS_API_KEY_KEY = "IGPSYNC_INTERVALS_API_KEY"
 
 REQUIRED_KEYS = (IGP_USER_KEY, IGP_PASSWORD_KEY, INTERVALS_API_KEY_KEY)
 
+_CREDENTIALS_BODY = (
+    f"  {IGP_USER_KEY}=<email>\n"
+    f"  {IGP_PASSWORD_KEY}=<password>\n"
+    f"  {INTERVALS_API_KEY_KEY}=<api-key>"
+)
+
+ENV_OVERRIDE_HINT = (
+    "Point igpsync at a different file:\n"
+    "  igpsync <command> --env-file /path/to/.env\n"
+    "You can also set env_file in the igpsync-cli config.json."
+)
+
 SETUP_HINT = (
-    "Ask the user to append all three keys to their Hermes profile .env "
+    "Ask the user to add all three keys to their Hermes profile .env "
     "(replace {profile_home} with the profile directory, e.g. "
-    "~/.hermes/profiles/coach):\n"
+    "~/.hermes/profiles/coach). Do not use `hermes config set` for the "
+    "email or password — those belong in .env only:\n"
     f"  echo '{IGP_USER_KEY}=<email>' >> {{profile_home}}/.env\n"
     f"  echo '{IGP_PASSWORD_KEY}=<password>' >> {{profile_home}}/.env\n"
     f"  echo '{INTERVALS_API_KEY_KEY}=<api-key>' >> {{profile_home}}/.env"
 )
+
+
+def _secrets_file_not_found_message(env_path: Path) -> str:
+    return (
+        f"Secrets file not found: {env_path}\n\n"
+        f"Create that file with:\n{_CREDENTIALS_BODY}\n\n"
+        f"{ENV_OVERRIDE_HINT}\n\n"
+        "Default location: $HERMES_HOME/.env (active Hermes profile), or "
+        "~/.hermes/.env when HERMES_HOME is unset. For local development, "
+        "copy .env.example to .env and pass --env-file .env.\n\n"
+        f"{SETUP_HINT}"
+    )
+
+
+def _missing_keys_message(env_path: Path, missing: list[str]) -> str:
+    return (
+        f"Missing required keys in {env_path}: {', '.join(missing)}\n\n"
+        f"Add them to the file:\n{_CREDENTIALS_BODY}\n\n"
+        f"{SETUP_HINT}"
+    )
 
 
 class CliConfigError(Exception):
@@ -83,16 +116,12 @@ def parse_dotenv(text: str) -> dict[str, str]:
 def load_credentials(env_path: Path) -> CliCredentials:
     """Load and validate the three required credentials from a .env file."""
     if not env_path.is_file():
-        raise CliConfigError(
-            f"Secrets file not found: {env_path}\n{SETUP_HINT}"
-        )
+        raise CliConfigError(_secrets_file_not_found_message(env_path))
 
     values = parse_dotenv(env_path.read_text(encoding="utf-8"))
     missing = [key for key in REQUIRED_KEYS if not values.get(key)]
     if missing:
-        raise CliConfigError(
-            f"Missing required keys in {env_path}: {', '.join(missing)}\n{SETUP_HINT}"
-        )
+        raise CliConfigError(_missing_keys_message(env_path, missing))
 
     return CliCredentials(
         igp_user=values[IGP_USER_KEY],

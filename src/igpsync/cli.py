@@ -1,7 +1,10 @@
-"""Headless CLI for syncing iGPSPORT activities to intervals.icu.
+"""Headless CLI for iGPSPORT ↔ intervals.icu sync.
 
 Designed for agent use (e.g. Hermes): credentials are read from the profile
 .env file; progress goes to stderr; structured results go to stdout with --json.
+
+Subcommands: activity sync (iGPSPORT → intervals.icu) and workout upload
+(intervals.icu → iGPSPORT).
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from pathlib import Path
 from . import cli_config as cli_config_module
 from .cli_env import CliConfigError, load_credentials, resolve_env_path
 from .core import SyncConfig, SyncError, SyncResult, sync
+from .workout import WorkoutUploadConfig, WorkoutUploadResult, upload_workouts
 
 EXIT_OK = 0
 EXIT_SYNC_ERROR = 1
@@ -80,6 +84,50 @@ def _emit_text_summary(result: SyncResult) -> None:
         f"Done — uploaded {result.uploaded}, "
         f"downloaded {result.downloaded}, "
         f"skipped {result.skipped}, "
+        f"failed {result.failed}."
+    )
+
+
+def _build_workout_upload_config(
+    credentials,
+    config: cli_config_module.CliConfig,
+    *,
+    workout_days_ahead: int | None,
+    force_resync: bool | None,
+) -> WorkoutUploadConfig:
+    return WorkoutUploadConfig(
+        igp_user=credentials.igp_user,
+        igp_password=credentials.igp_password,
+        intervals_api_key=credentials.intervals_api_key,
+        workout_days_ahead=(
+            workout_days_ahead if workout_days_ahead is not None else config.workout_days_ahead
+        ),
+        uploaded_workouts=dict(config.uploaded_workouts),
+        force_resync=force_resync if force_resync is not None else config.force_resync,
+    )
+
+
+def _workout_result_payload(
+    result: WorkoutUploadResult, *, ok: bool, error: str | None = None
+) -> dict:
+    payload = {
+        "ok": ok,
+        "listed": result.listed,
+        "uploaded": result.uploaded,
+        "skipped": result.skipped,
+        "failed": result.failed,
+        "no_steps": result.no_steps,
+    }
+    if error is not None:
+        payload["error"] = error
+    return payload
+
+
+def _emit_workout_text_summary(result: WorkoutUploadResult) -> None:
+    print(
+        f"Done — uploaded {result.uploaded}, "
+        f"skipped {result.skipped}, "
+        f"no steps {result.no_steps}, "
         f"failed {result.failed}."
     )
 
@@ -162,6 +210,61 @@ def cmd_sync(args: argparse.Namespace) -> int:
     return EXIT_OK if ok else EXIT_SYNC_ERROR
 
 
+def cmd_upload_workouts(args: argparse.Namespace) -> int:
+    config = cli_config_module.load()
+    use_json = args.json
+
+    try:
+        env_path = resolve_env_path(
+            env_file=Path(args.env_file) if args.env_file else None,
+            config_env_file=config.env_file or None,
+        )
+        credentials = load_credentials(env_path)
+    except CliConfigError as exc:
+        if use_json:
+            _emit_json({"ok": False, "error": str(exc)})
+        else:
+            print(exc, file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    upload_config = _build_workout_upload_config(
+        credentials,
+        config,
+        workout_days_ahead=args.workout_days_ahead,
+        force_resync=True if args.force_resync else None,
+    )
+
+    def progress(message: str) -> None:
+        print(message, file=sys.stderr)
+
+    try:
+        result = upload_workouts(upload_config, progress=progress)
+    except SyncError as exc:
+        if use_json:
+            _emit_json(_workout_result_payload(WorkoutUploadResult(), ok=False, error=str(exc)))
+        else:
+            print(f"✗ {exc}", file=sys.stderr)
+        return EXIT_SYNC_ERROR
+    except Exception as exc:  # noqa: BLE001 — surface unexpected failures to agents
+        if use_json:
+            _emit_json(_workout_result_payload(WorkoutUploadResult(), ok=False, error=str(exc)))
+        else:
+            print(f"✗ Unexpected error: {exc}", file=sys.stderr)
+        return EXIT_SYNC_ERROR
+
+    if result.uploaded_map:
+        config.uploaded_workouts.update(result.uploaded_map)
+        cli_config_module.save(config)
+
+    ok = result.failed == 0
+    if use_json:
+        _emit_json(_workout_result_payload(result, ok=ok))
+    else:
+        _emit_workout_text_summary(result)
+
+    return EXIT_OK if ok else EXIT_SYNC_ERROR
+
+
 def _build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -177,7 +280,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="igpsync",
-        description="Sync cycling activities from iGPSPORT to intervals.icu.",
+        description="Sync cycling activities and planned workouts between iGPSPORT and intervals.icu.",
     )
 
     subparsers = parser.add_subparsers(dest="command")
@@ -222,6 +325,24 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Keep .fit files after upload instead of deleting them.",
     )
     sync_parser.set_defaults(func=cmd_sync)
+
+    upload_workouts_parser = subparsers.add_parser(
+        "upload-workouts",
+        parents=[common],
+        help="Upload planned workouts from intervals.icu to iGPSPORT.",
+    )
+    upload_workouts_parser.add_argument(
+        "--workout-days-ahead",
+        type=int,
+        metavar="N",
+        help="Number of calendar days to upload (default: from cli config).",
+    )
+    upload_workouts_parser.add_argument(
+        "--force-resync",
+        action="store_true",
+        help="Re-upload workouts even if already on iGPSPORT.",
+    )
+    upload_workouts_parser.set_defaults(func=cmd_upload_workouts)
 
     return parser
 

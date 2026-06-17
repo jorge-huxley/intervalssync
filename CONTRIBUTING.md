@@ -42,7 +42,8 @@ minimal change (see `CLAUDE.md` for the full picture):
 
 - `src/igpsync/core.py` — pure sync logic (no UI, no side effects)
 - `src/igpsync/config.py` + `secrets.py` — settings (JSON) and secrets (OS vault)
-- `src/igpsync/gui/` — the Flet UI; `cli.py` / `main.py` — the headless entry
+- `src/igpsync/gui/` — the Flet UI (`main.py` / `igpsync-gui` entry)
+- `src/igpsync/cli.py` — headless CLI (`igpsync` entry; see `docs/AGENT.md`)
 
 Keep new logic in `core` testable and UI-free; the GUI and CLI should stay thin.
 

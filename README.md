@@ -24,7 +24,7 @@ source, for **Windows** and **Android**.
 - Optionally deletes the local `.fit` files after a successful upload
 - Stores your credentials in the **OS secure vault** (Windows Credential Manager / Android Keystore), never in a file
 - Lets you know when a newer version is available
-- **Headless CLI** — same sync pipeline from the terminal, with JSON output and exit codes for automation and AI agents (see [CLI & automation](#cli--automation-ai-agents))
+- **Headless CLI** — activity sync and workout upload from the terminal, with JSON output and exit codes for automation and AI agents (see [CLI & automation](#cli--automation-ai-agents))
 
 > Prefer the terminal, or want to help out? It's open source (Python + [Flet](https://flet.dev), MIT) — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -53,7 +53,7 @@ isn't on the Play Store, so the "unknown source" prompt is expected.
 
 ## CLI & automation (AI agents)
 
-Headless `igpsync` CLI for scripts and AI agents ([Hermes](https://hermes-agent.nousresearch.com), [OpenClaw](https://openclaw.ai/)) — same sync as the GUI, JSON on stdout, credentials in `.env`. Setup, flags, and invocation: [Agent / headless sync](docs/AGENT.md).
+Headless `igpsync` CLI for scripts and AI agents ([Hermes](https://hermes-agent.nousresearch.com), [OpenClaw](https://openclaw.ai/)) — sync activities to intervals.icu, upload planned workouts to iGPSPORT, JSON on stdout, credentials in `.env`. Setup, flags, and invocation: [Agent / headless sync](docs/AGENT.md).
 
 ## Run from source
 
