@@ -23,11 +23,24 @@ _DESKTOP = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINU
 _MOBILE = {ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV, ft.PagePlatform.IOS}
 # Standard public Downloads directory on Android (the filesystem name is the
 # singular "Download"). Used when the user opts in and grants storage access.
-ANDROID_DOWNLOADS = "/storage/emulated/0/Download/igpsport-fit"
+ANDROID_DOWNLOADS = "/storage/emulated/0/Download/intervalssync-fit"
+
+APP_TITLE = "Intervals Sync"
+
+
+async def _has_credentials(
+    config: config_module.AppConfig,
+    store: secrets_module.SecretStore,
+) -> bool:
+    if config.enable_igpsport and config.igp_user and await store.get(secrets_module.IGP_PASSWORD):
+        return True
+    if config.enable_bryton and config.bryton_user and await store.get(secrets_module.BRYTON_PASSWORD):
+        return True
+    return False
 
 
 async def _app(page: ft.Page) -> None:
-    page.title = "iGPSPORT → intervals.icu"
+    page.title = APP_TITLE
     page.theme_mode = ft.ThemeMode.SYSTEM
     page.theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO)
     page.dark_theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO)
@@ -50,7 +63,7 @@ async def _app(page: ft.Page) -> None:
     def _private_download_dir() -> str:
         # App-private, always-writable per-app dir (Flet pre-creates it).
         base = os.getenv("FLET_APP_STORAGE_DATA") or tempfile.gettempdir()
-        return str(Path(base) / "igpsport-fit")
+        return str(Path(base) / "intervalssync-fit")
 
     async def apply_download_location() -> None:
         # Desktop keeps the user's chosen/Downloads folder. On mobile we use
@@ -129,7 +142,7 @@ async def _app(page: ft.Page) -> None:
                     tight=True,
                     spacing=6,
                     controls=[
-                        ft.Text("iGPSPORT → intervals.icu", weight=ft.FontWeight.BOLD),
+                        ft.Text(APP_TITLE, weight=ft.FontWeight.BOLD),
                         ft.Text(f"Version {__version__}"),
                     ],
                 ),
@@ -145,7 +158,7 @@ async def _app(page: ft.Page) -> None:
         )
 
     page.appbar = ft.AppBar(
-        title=ft.Text("iGPSPORT → intervals.icu"),
+        title=ft.Text(APP_TITLE),
         center_title=False,
         bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
         actions=[
@@ -158,7 +171,7 @@ async def _app(page: ft.Page) -> None:
     page.add(body)
 
     # First run (no credentials yet) opens Settings; otherwise go to Sync.
-    if config.igp_user and await store.get(secrets_module.IGP_PASSWORD):
+    if await _has_credentials(config, store):
         await show_sync()
     else:
         await show_settings()

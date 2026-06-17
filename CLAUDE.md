@@ -30,7 +30,7 @@ Package root: `src/intervalssync/`. **CLI** and **GUI** are separate subpackages
 ```
 src/intervalssync/
   cli/main.py, env.py, config.py                 # headless CLI
-  gui/app.py, views, config.py, secrets.py       # Flet UI (iGPSPORT today; Bryton later)
+  gui/app.py, views, config.py, secrets.py       # Flet UI (dual-source: iGPSPORT + Bryton)
   igpsport/core.py, workout.py                   # iGPSPORT source
   bryton/ddp.py, api.py, core.py                 # Bryton source
   intervals_icu.py, dropbox_client.py            # shared by sources
@@ -43,7 +43,8 @@ src/intervalssync/
 - **`bryton/api.py`** — `GET https://m3.brytonactive.com/api/activity?id=…` (FIT download; Android app API).
 - **`bryton/core.py`** — `sync(SyncConfig, progress)`. `external_id`: `bryton_{activity_id}`.
 - **`gui/secrets.py`** — async OS vault via `flet-secure-storage`.
-- **`gui/config.py`** — GUI JSON settings including `activity_source` (`igpsport` | `bryton`).
+- **`gui/config.py`** — GUI JSON settings: `enable_igpsport` / `enable_bryton`, per-source usernames, shared sync options.
+- **`gui/sync_view.py`** — dispatches to `igpsport.core.sync` or `bryton.core.sync` per enabled source; workout upload is iGPSPORT-only.
 - **`cli/env.py`** — `.env` credential loading for the headless CLI.
 
 ## iGPSPORT API notes

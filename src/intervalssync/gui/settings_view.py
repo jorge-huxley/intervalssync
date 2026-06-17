@@ -19,6 +19,48 @@ from ..dropbox_client import (
 from .system import open_folder
 
 
+_NARROW_FIELD_WIDTH = 220
+
+
+def _narrow_number_field(
+    label: str,
+    value: str,
+    icon: str | None,
+    caption: str,
+) -> tuple[ft.TextField, ft.Column]:
+    """Compact numeric input (phone-width) with a full-width caption below."""
+    field = ft.TextField(
+        label=label,
+        value=value,
+        prefix_icon=icon,
+        keyboard_type=ft.KeyboardType.NUMBER,
+        width=_NARROW_FIELD_WIDTH,
+    )
+    block = ft.Column(
+        spacing=4,
+        tight=True,
+        controls=[
+            field,
+            ft.Text(
+                caption,
+                size=12,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            ),
+        ],
+    )
+    return field, block
+
+
+def _developer_step_controls(config: config_module.AppConfig) -> list[ft.Control]:
+    """Pipeline step toggles — not shown in Settings; kept for local/dev use."""
+    return [
+        ft.Switch(label="List activities", value=config.step_list_activities),
+        ft.Switch(label="Resolve download URLs", value=config.step_get_download_url),
+        ft.Switch(label="Download .fit files", value=config.step_download_fit),
+        ft.Switch(label="Upload to intervals.icu", value=config.step_upload_intervals),
+    ]
+
+
 async def build_settings_view(
     page: ft.Page,
     config: config_module.AppConfig,
@@ -29,25 +71,46 @@ async def build_settings_view(
 ) -> ft.Control:
     """Return the settings card. `on_saved` is awaited after a successful save."""
 
-    # Prefetch the currently-stored secrets to prefill the fields.
-    existing_password = await store.get(secrets_module.IGP_PASSWORD) or ""
+    existing_igp_password = await store.get(secrets_module.IGP_PASSWORD) or ""
+    existing_bryton_password = await store.get(secrets_module.BRYTON_PASSWORD) or ""
     existing_api_key = await store.get(secrets_module.INTERVALS_API_KEY) or ""
     existing_dropbox_token = await store.get(secrets_module.DROPBOX_REFRESH_TOKEN)
     dropbox_app_key = get_dropbox_app_key()
 
+    enable_igpsport = ft.Switch(
+        label="Enable iGPSPORT",
+        value=config.enable_igpsport,
+    )
     igp_user = ft.TextField(
         label="iGPSPORT email",
         value=config.igp_user,
         prefix_icon=ft.Icons.PERSON,
-        autofocus=not config.igp_user,
     )
     igp_password = ft.TextField(
         label="iGPSPORT password",
-        value=existing_password,
+        value=existing_igp_password,
         prefix_icon=ft.Icons.LOCK,
         password=True,
         can_reveal_password=True,
     )
+
+    enable_bryton = ft.Switch(
+        label="Enable Bryton Active",
+        value=config.enable_bryton,
+    )
+    bryton_user = ft.TextField(
+        label="Bryton Active email",
+        value=config.bryton_user,
+        prefix_icon=ft.Icons.PERSON,
+    )
+    bryton_password = ft.TextField(
+        label="Bryton Active password",
+        value=existing_bryton_password,
+        prefix_icon=ft.Icons.LOCK,
+        password=True,
+        can_reveal_password=True,
+    )
+
     api_key = ft.TextField(
         label="intervals.icu API key",
         value=existing_api_key,
@@ -57,21 +120,18 @@ async def build_settings_view(
         helper="Settings → Developer on intervals.icu",
     )
 
-    max_activities = ft.TextField(
-        label="Activities to sync",
-        value=str(config.max_activities),
-        prefix_icon=ft.Icons.FORMAT_LIST_NUMBERED,
-        keyboard_type=ft.KeyboardType.NUMBER,
-        width=220,
+    max_activities, max_activities_block = _narrow_number_field(
+        "Activities",
+        str(config.max_activities),
+        ft.Icons.FORMAT_LIST_NUMBERED,
+        "Number of recent activities to sync on each run.",
     )
 
-    workout_days_ahead = ft.TextField(
-        label="Workout upload window (days)",
-        value=str(config.workout_days_ahead),
-        prefix_icon=ft.Icons.CALENDAR_MONTH,
-        keyboard_type=ft.KeyboardType.NUMBER,
-        width=220,
-        helper="Planned workouts from intervals.icu; 1 = today only",
+    workout_days_ahead, workout_days_ahead_block = _narrow_number_field(
+        "Days ahead",
+        str(config.workout_days_ahead),
+        ft.Icons.CALENDAR_MONTH,
+        "Planned workouts from intervals.icu to upload to iGPSPORT. 1 = today only.",
     )
 
     activity_type = ft.Dropdown(
@@ -247,19 +307,14 @@ async def build_settings_view(
         ft.PagePlatform.IOS,
     }
 
-    # Android only: opt in to saving into the public Downloads folder (needs the
-    # "all files access" permission, requested on save). Off = app-private.
     save_to_downloads = ft.Switch(
         label="Save to phone's Downloads folder",
         value=config.save_to_downloads,
     )
 
-    # On desktop we show the path and an "open folder" button. On mobile the
-    # text depends on whether files go to the (browsable) Downloads folder or to
-    # app-private storage that no file manager can reach.
     if is_mobile:
         if config.save_to_downloads:
-            note = "Saved to your phone's Downloads folder (Download/igpsport-fit)."
+            note = "Saved to your phone's Downloads folder (Download/intervalssync-fit)."
         else:
             note = (
                 "Kept in the app's private storage and uploaded to intervals.icu "
@@ -295,46 +350,77 @@ async def build_settings_view(
         ],
     )
 
-    # Developer options — pick which pipeline steps run. Each step builds on
-    # the previous one (upload needs a download, which needs the FIT URL).
-    step_list = ft.Switch(label="List activities", value=config.step_list_activities)
-    step_url = ft.Switch(label="Resolve download URLs", value=config.step_get_download_url)
-    step_download = ft.Switch(label="Download .fit files", value=config.step_download_fit)
-    step_upload = ft.Switch(label="Upload to intervals.icu", value=config.step_upload_intervals)
-
-    developer_options = ft.ExpansionTile(
-        title=ft.Text("Developer options"),
-        leading=ft.Icon(ft.Icons.DEVELOPER_MODE),
-        affinity=ft.TileAffinity.LEADING,
-        expanded=False,
+    igp_credentials = ft.Column(
+        spacing=8,
+        controls=[igp_user, igp_password],
+    )
+    bryton_credentials = ft.Column(
+        spacing=8,
+        controls=[bryton_user, bryton_password],
+    )
+    workout_sync_section = ft.Column(
+        spacing=12,
+        visible=config.enable_igpsport,
         controls=[
-            ft.Container(
-                padding=ft.Padding(left=16, top=0, right=16, bottom=8),
-                content=ft.Column(
-                    spacing=4,
-                    controls=[
-                        ft.Text(
-                            "Choose which steps run during a sync. Each step depends "
-                            "on the ones above it.",
-                            size=12,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                        step_list,
-                        step_url,
-                        step_download,
-                        step_upload,
-                    ],
-                ),
-            )
+            ft.Divider(),
+            ft.Text("Workout sync options", size=16, weight=ft.FontWeight.BOLD),
+            workout_days_ahead_block,
         ],
     )
+    dropbox_section = ft.Container(
+        visible=config.enable_igpsport,
+        content=dropbox_options,
+    )
+
+    def update_source_visibility(_: ft.ControlEvent | None = None) -> None:
+        igp_credentials.visible = bool(enable_igpsport.value)
+        workout_sync_section.visible = bool(enable_igpsport.value)
+        dropbox_section.visible = bool(enable_igpsport.value)
+        bryton_credentials.visible = bool(enable_bryton.value)
+        page.update()
+
+    enable_igpsport.on_change = update_source_visibility
+    enable_bryton.on_change = update_source_visibility
+    update_source_visibility()
 
     async def save(_: ft.ControlEvent) -> None:
-        if not igp_user.value or not igp_password.value:
-            page.show_dialog(ft.SnackBar(ft.Text("iGPSPORT email and password are required.")))
+        if not enable_igpsport.value and not enable_bryton.value:
+            page.show_dialog(
+                ft.SnackBar(ft.Text("Enable at least one activity source."))
+            )
             return
 
+        igp_pw = igp_password.value or existing_igp_password
+        bryton_pw = bryton_password.value or existing_bryton_password
+
+        if enable_igpsport.value:
+            if not igp_user.value.strip():
+                page.show_dialog(
+                    ft.SnackBar(ft.Text("iGPSPORT email is required when enabled."))
+                )
+                return
+            if not igp_pw:
+                page.show_dialog(
+                    ft.SnackBar(ft.Text("iGPSPORT password is required when enabled."))
+                )
+                return
+
+        if enable_bryton.value:
+            if not bryton_user.value.strip():
+                page.show_dialog(
+                    ft.SnackBar(ft.Text("Bryton Active email is required when enabled."))
+                )
+                return
+            if not bryton_pw:
+                page.show_dialog(
+                    ft.SnackBar(ft.Text("Bryton Active password is required when enabled."))
+                )
+                return
+
+        config.enable_igpsport = bool(enable_igpsport.value)
+        config.enable_bryton = bool(enable_bryton.value)
         config.igp_user = igp_user.value.strip()
+        config.bryton_user = bryton_user.value.strip()
         try:
             config.max_activities = max(1, int(max_activities.value))
         except (TypeError, ValueError):
@@ -348,10 +434,6 @@ async def build_settings_view(
         config.delete_after_upload = delete_after_upload.value
         config.force_resync = force_resync.value
         config.activity_type = activity_type.value or ""
-        config.step_list_activities = step_list.value
-        config.step_get_download_url = step_url.value
-        config.step_download_fit = step_download.value
-        config.step_upload_intervals = step_upload.value
         config.dropbox_folder = dropbox_folder.value.strip() or DEFAULT_DROPBOX_FOLDER
         config.dropbox_date_filenames = bool(dropbox_date_filenames.value)
         config.upload_dropbox = bool(upload_dropbox.value)
@@ -370,7 +452,6 @@ async def build_settings_view(
         if is_mobile:
             want_downloads = bool(save_to_downloads.value)
             if want_downloads and perms is not None:
-                # Requesting an already-granted permission just returns GRANTED.
                 status = await perms.request(Permission.MANAGE_EXTERNAL_STORAGE)
                 if status != PermissionStatus.GRANTED:
                     want_downloads = False
@@ -382,7 +463,10 @@ async def build_settings_view(
             config.save_to_downloads = want_downloads
         config_module.save(config)
 
-        await store.set(secrets_module.IGP_PASSWORD, igp_password.value)
+        if igp_password.value:
+            await store.set(secrets_module.IGP_PASSWORD, igp_password.value)
+        if bryton_password.value:
+            await store.set(secrets_module.BRYTON_PASSWORD, bryton_password.value)
         if api_key.value:
             await store.set(secrets_module.INTERVALS_API_KEY, api_key.value)
         else:
@@ -400,25 +484,32 @@ async def build_settings_view(
             content=ft.Column(
                 spacing=16,
                 controls=[
-                    ft.Text("Account", size=20, weight=ft.FontWeight.BOLD),
+                    ft.Text("Settings", size=20, weight=ft.FontWeight.BOLD),
                     ft.Text(
-                        "Your password and API key are stored in your operating "
+                        "Passwords and API keys are stored in your operating "
                         "system's secure credential vault, never in a file.",
                         size=12,
                         color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
-                    igp_user,
-                    igp_password,
                     api_key,
-                    max_activities,
-                    workout_days_ahead,
+                    ft.Divider(),
+                    ft.Text("iGPSPORT", size=16, weight=ft.FontWeight.BOLD),
+                    enable_igpsport,
+                    igp_credentials,
+                    ft.Divider(),
+                    ft.Text("Bryton Active", size=16, weight=ft.FontWeight.BOLD),
+                    enable_bryton,
+                    bryton_credentials,
+                    ft.Divider(),
+                    ft.Text("Activity sync options", size=16, weight=ft.FontWeight.BOLD),
+                    max_activities_block,
                     activity_type,
                     delete_after_upload,
                     force_resync,
-                    dropbox_options,
+                    workout_sync_section,
+                    dropbox_section,
                     *([save_to_downloads] if is_mobile else []),
                     download_folder_row,
-                    developer_options,
                     ft.FilledButton(
                         "Save",
                         icon=ft.Icons.SAVE,

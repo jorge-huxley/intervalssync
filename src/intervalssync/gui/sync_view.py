@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import flet as ft
 
 from . import config as config_module
 from . import secrets as secrets_module
-from ..igpsport.core import SyncConfig, SyncError, sync
+from ..bryton.core import SyncConfig as BrytonSyncConfig, sync as bryton_sync
+from ..bryton.exceptions import BrytonSyncError
+from ..igpsport.core import SyncConfig as IgpSyncConfig, SyncError, sync as igpsport_sync
 from ..dropbox_client import get_dropbox_app_key
 from ..igpsport.workout import WorkoutUploadConfig, apply_uploaded_workout_map, upload_workouts
 
@@ -19,36 +23,46 @@ def build_sync_view(
     progress = ft.ProgressBar(visible=False)
     log = ft.ListView(spacing=2, auto_scroll=True, height=260)
 
-    sync_button = ft.FilledButton(
-        "Sync activities",
+    sync_igp_button = ft.FilledButton(
+        "Sync iGPSPORT",
         icon=ft.Icons.SYNC,
         height=52,
+        visible=config.enable_igpsport,
+    )
+    sync_bryton_button = ft.FilledButton(
+        "Sync Bryton",
+        icon=ft.Icons.SYNC,
+        height=52,
+        visible=config.enable_bryton,
     )
     upload_workouts_button = ft.OutlinedButton(
         "Upload workouts",
         icon=ft.Icons.FITNESS_CENTER,
         height=52,
+        visible=config.enable_igpsport,
     )
 
+    action_buttons = [
+        btn
+        for btn in (sync_igp_button, sync_bryton_button, upload_workouts_button)
+        if btn.visible
+    ]
+
     def set_buttons_enabled(enabled: bool) -> None:
-        sync_button.disabled = not enabled
-        upload_workouts_button.disabled = not enabled
+        for button in action_buttons:
+            button.disabled = not enabled
 
     def append_log(message: str) -> None:
         log.controls.append(ft.Text(message, size=13, selectable=True))
-        # Flush this single message to the UI immediately so the activity box
-        # fills in step by step rather than all at once when the sync ends.
         page.update()
 
-    def run_sync(
+    def run_igpsport_sync(
         igp_password: str,
         api_key: str | None,
         dropbox_refresh_token: str | None,
         dropbox_app_key: str | None,
     ) -> None:
-        # Secrets are resolved on the async side and passed in, because the
-        # secret store is async/page-bound and this runs on a worker thread.
-        sync_config = SyncConfig(
+        sync_config = IgpSyncConfig(
             igp_user=config.igp_user,
             igp_password=igp_password,
             intervals_api_key=api_key,
@@ -69,7 +83,7 @@ def build_sync_view(
         )
 
         try:
-            result = sync(sync_config, progress=append_log)
+            result = igpsport_sync(sync_config, progress=append_log)
             append_log(
                 f"\nDone — intervals uploaded {result.uploaded}, "
                 f"Dropbox uploaded {result.uploaded_dropbox}, "
@@ -78,6 +92,37 @@ def build_sync_view(
                 f"failed {result.failed}, Dropbox failed {result.failed_dropbox}."
             )
         except SyncError as exc:
+            append_log(f"✗ {exc}")
+        except Exception as exc:  # noqa: BLE001 — surface any failure to the user
+            append_log(f"✗ Unexpected error: {exc}")
+        finally:
+            progress.visible = False
+            set_buttons_enabled(True)
+            page.update()
+
+    def run_bryton_sync(bryton_password: str, api_key: str | None) -> None:
+        sync_config = BrytonSyncConfig(
+            bryton_email=config.bryton_user,
+            bryton_password=bryton_password,
+            intervals_api_key=api_key,
+            max_activities=config.max_activities,
+            download_dir=Path(config.download_dir),
+            delete_after_upload=config.delete_after_upload,
+            force_resync=config.force_resync,
+            activity_type=config.activity_type,
+            list_activities=config.step_list_activities,
+            download_fit=config.step_download_fit,
+            upload_intervals=config.step_upload_intervals,
+        )
+
+        try:
+            result = bryton_sync(sync_config, progress=append_log)
+            append_log(
+                f"\nDone — uploaded {result.uploaded}, "
+                f"downloaded {result.downloaded}, "
+                f"skipped {result.skipped}, failed {result.failed}."
+            )
+        except BrytonSyncError as exc:
             append_log(f"✗ {exc}")
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
             append_log(f"✗ Unexpected error: {exc}")
@@ -115,10 +160,10 @@ def build_sync_view(
             set_buttons_enabled(True)
             page.update()
 
-    async def on_sync_click(_: ft.ControlEvent) -> None:
+    async def on_sync_igp_click(_: ft.ControlEvent) -> None:
         igp_password = await store.get(secrets_module.IGP_PASSWORD)
         if not config.igp_user or not igp_password:
-            page.show_dialog(ft.SnackBar(ft.Text("Add your credentials in Settings first.")))
+            page.show_dialog(ft.SnackBar(ft.Text("Add your iGPSPORT credentials in Settings first.")))
             return
         api_key = await store.get(secrets_module.INTERVALS_API_KEY)
         dropbox_refresh_token = await store.get(secrets_module.DROPBOX_REFRESH_TOKEN)
@@ -129,17 +174,30 @@ def build_sync_view(
         set_buttons_enabled(False)
         page.update()
         page.run_thread(
-            run_sync,
+            run_igpsport_sync,
             igp_password,
             api_key,
             dropbox_refresh_token,
             dropbox_app_key,
         )
 
+    async def on_sync_bryton_click(_: ft.ControlEvent) -> None:
+        bryton_password = await store.get(secrets_module.BRYTON_PASSWORD)
+        if not config.bryton_user or not bryton_password:
+            page.show_dialog(ft.SnackBar(ft.Text("Add your Bryton credentials in Settings first.")))
+            return
+        api_key = await store.get(secrets_module.INTERVALS_API_KEY)
+
+        log.controls.clear()
+        progress.visible = True
+        set_buttons_enabled(False)
+        page.update()
+        page.run_thread(run_bryton_sync, bryton_password, api_key)
+
     async def on_upload_workouts_click(_: ft.ControlEvent) -> None:
         igp_password = await store.get(secrets_module.IGP_PASSWORD)
         if not config.igp_user or not igp_password:
-            page.show_dialog(ft.SnackBar(ft.Text("Add your credentials in Settings first.")))
+            page.show_dialog(ft.SnackBar(ft.Text("Add your iGPSPORT credentials in Settings first.")))
             return
         api_key = await store.get(secrets_module.INTERVALS_API_KEY)
         if not api_key:
@@ -154,21 +212,22 @@ def build_sync_view(
         page.update()
         page.run_thread(run_upload_workouts, igp_password, api_key)
 
-    sync_button.on_click = on_sync_click
+    sync_igp_button.on_click = on_sync_igp_click
+    sync_bryton_button.on_click = on_sync_bryton_click
     upload_workouts_button.on_click = on_upload_workouts_click
 
     return ft.Column(
         spacing=16,
         controls=[
             ft.Text(
-                "Sync rides from iGPSPORT to intervals.icu, or upload planned "
-                "workouts from intervals.icu to iGPSPORT.",
+                "Sync activities to intervals.icu from your enabled sources.",
                 size=14,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
             ft.Row(
-                controls=[sync_button, upload_workouts_button],
+                controls=action_buttons,
                 spacing=12,
+                wrap=True,
             ),
             progress,
             ft.Card(
