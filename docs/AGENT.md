@@ -199,8 +199,8 @@ Same as the GUI one-click sync:
 Same as the GUI **Upload workouts** button:
 
 - Fetches planned cycling workouts from the intervals.icu calendar
-- Skips workouts already uploaded (unless `--force-resync`)
+- Skips workouts already on iGPSPORT (validates stored workout IDs against the live custom-workout list; re-uploads if deleted in the app)
 - Skips non-cycling activity types (v1)
 - Skips workouts with no structured steps (`no_steps` in JSON) — open the workout in intervals.icu first
-- Persists the `uploaded_workouts` dedup map in CLI `config.json` after each run
+- Persists the `uploaded_workouts` dedup map in CLI `config.json` after each run (stale entries pruned)
 

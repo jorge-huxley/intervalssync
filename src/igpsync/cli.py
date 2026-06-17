@@ -17,7 +17,12 @@ from pathlib import Path
 from . import cli_config as cli_config_module
 from .cli_env import CliConfigError, load_credentials, resolve_env_path
 from .core import SyncConfig, SyncError, SyncResult, sync
-from .workout import WorkoutUploadConfig, WorkoutUploadResult, upload_workouts
+from .workout import (
+    WorkoutUploadConfig,
+    WorkoutUploadResult,
+    apply_uploaded_workout_map,
+    upload_workouts,
+)
 
 EXIT_OK = 0
 EXIT_SYNC_ERROR = 1
@@ -252,8 +257,8 @@ def cmd_upload_workouts(args: argparse.Namespace) -> int:
             print(f"✗ Unexpected error: {exc}", file=sys.stderr)
         return EXIT_SYNC_ERROR
 
-    if result.uploaded_map:
-        config.uploaded_workouts.update(result.uploaded_map)
+    if result.uploaded_map or result.pruned_keys:
+        apply_uploaded_workout_map(config.uploaded_workouts, result)
         cli_config_module.save(config)
 
     ok = result.failed == 0

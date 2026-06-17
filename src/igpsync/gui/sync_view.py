@@ -8,7 +8,7 @@ from .. import config as config_module
 from .. import secrets as secrets_module
 from ..core import SyncConfig, SyncError, sync
 from ..dropbox_client import get_dropbox_app_key
-from ..workout import WorkoutUploadConfig, upload_workouts
+from ..workout import WorkoutUploadConfig, apply_uploaded_workout_map, upload_workouts
 
 
 def build_sync_view(
@@ -98,8 +98,8 @@ def build_sync_view(
 
         try:
             result = upload_workouts(upload_config, progress=append_log)
-            if result.uploaded_map:
-                config.uploaded_workouts.update(result.uploaded_map)
+            if result.uploaded_map or result.pruned_keys:
+                apply_uploaded_workout_map(config.uploaded_workouts, result)
                 config_module.save(config)
             append_log(
                 f"\nDone — uploaded {result.uploaded}, "

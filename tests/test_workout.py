@@ -187,8 +187,35 @@ def test_list_custom_workouts(monkeypatch):
     assert captured["params"] == {"PageIndex": 2, "PageSize": 5}
 
 
+def test_fetch_all_custom_workout_ids_paginates(monkeypatch):
+    pages = {
+        1: {"code": 0, "data": {"items": [{"workoutId": 10}, {"workoutId": 11}]}},
+        2: {"code": 0, "data": {"items": [{"id": 12}]}},
+        3: {"code": 0, "data": {"items": []}},
+    }
+
+    def fake_list(session, auth_headers, page_index, page_size):
+        return pages[page_index]
+
+    monkeypatch.setattr(workout, "list_custom_workouts", fake_list)
+    session = workout.requests.Session()
+    ids = workout.fetch_all_custom_workout_ids(session, {}, page_size=2)
+    assert ids == {10, 11, 12}
+
+
+def test_apply_uploaded_workout_map_updates_and_prunes():
+    uploaded = {"1": 100, "2": 200, "3": 300}
+    result = workout.WorkoutUploadResult(
+        uploaded_map={"4": 400},
+        pruned_keys=["2"],
+    )
+    workout.apply_uploaded_workout_map(uploaded, result)
+    assert uploaded == {"1": 100, "3": 300, "4": 400}
+
+
 def test_upload_workouts_skips_already_uploaded(monkeypatch):
     monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
+    monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: {100})
     monkeypatch.setattr(
         workout,
         "fetch_calendar_workouts",
@@ -221,8 +248,90 @@ def test_upload_workouts_skips_already_uploaded(monkeypatch):
     assert upload_calls == []
 
 
+def test_upload_workouts_reuploads_when_deleted_on_igpsport(monkeypatch):
+    monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
+    monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: set())
+    monkeypatch.setattr(
+        workout,
+        "fetch_calendar_workouts",
+        lambda *a, **k: [
+            workout.CalendarWorkout(
+                event_id=42,
+                name="Done",
+                description="",
+                activity_type="Ride",
+                workout_doc={"steps": [{"duration": 60}]},
+            )
+        ],
+    )
+    monkeypatch.setattr(workout, "upload_custom_workout", lambda *a, **k: 200)
+
+    cfg = workout.WorkoutUploadConfig(
+        igp_user="u",
+        igp_password="p",
+        intervals_api_key="k",
+        uploaded_workouts={"42": 100},
+    )
+    result = workout.upload_workouts(cfg)
+    assert result.uploaded == 1
+    assert result.uploaded_map == {"42": 200}
+    assert result.pruned_keys == []
+
+
+def test_upload_workouts_force_resync_updates_live_workout(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
+    monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: {100})
+    monkeypatch.setattr(
+        workout,
+        "fetch_calendar_workouts",
+        lambda *a, **k: [
+            workout.CalendarWorkout(
+                event_id=42,
+                name="Update me",
+                description="",
+                activity_type="Ride",
+                workout_doc={"steps": [{"duration": 60}]},
+            )
+        ],
+    )
+
+    def fake_upload(session, auth_headers, body):
+        captured["body"] = body
+        return 100
+
+    monkeypatch.setattr(workout, "upload_custom_workout", fake_upload)
+
+    cfg = workout.WorkoutUploadConfig(
+        igp_user="u",
+        igp_password="p",
+        intervals_api_key="k",
+        uploaded_workouts={"42": 100},
+        force_resync=True,
+    )
+    result = workout.upload_workouts(cfg)
+    assert result.uploaded == 1
+    assert captured["body"]["data"]["id"] == "100"
+
+
+def test_upload_workouts_prunes_stale_config_entries(monkeypatch):
+    monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
+    monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: set())
+    monkeypatch.setattr(workout, "fetch_calendar_workouts", lambda *a, **k: [])
+
+    cfg = workout.WorkoutUploadConfig(
+        igp_user="u",
+        igp_password="p",
+        intervals_api_key="k",
+        uploaded_workouts={"99": 100},
+    )
+    result = workout.upload_workouts(cfg)
+    assert result.pruned_keys == ["99"]
+
+
 def test_upload_workouts_uploads_new_workout(monkeypatch):
     monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
+    monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: set())
     monkeypatch.setattr(
         workout,
         "fetch_calendar_workouts",
@@ -250,6 +359,7 @@ def test_upload_workouts_uploads_new_workout(monkeypatch):
 
 def test_upload_workouts_skips_non_cycling_type(monkeypatch):
     monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
+    monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: set())
     monkeypatch.setattr(
         workout,
         "fetch_calendar_workouts",
@@ -281,6 +391,7 @@ def test_upload_workouts_one_day_window_uses_today_only(monkeypatch):
 
     monkeypatch.setattr(workout, "date", FixedDate)
     monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
+    monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: set())
 
     def fake_fetch(api_key, oldest, newest):
         captured["oldest"] = oldest

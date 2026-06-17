@@ -61,6 +61,7 @@ class WorkoutUploadResult:
     failed: int = 0
     no_steps: int = 0
     uploaded_map: dict[str, int] = field(default_factory=dict)
+    pruned_keys: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -89,6 +90,55 @@ def list_custom_workouts(
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def _workout_id_from_item(item: dict[str, Any]) -> int | None:
+    for key in ("workoutId", "id", "workout_id"):
+        value = item.get(key)
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def fetch_all_custom_workout_ids(
+    session: requests.Session,
+    auth_headers: dict[str, str],
+    *,
+    page_size: int = 50,
+) -> set[int]:
+    """Return every custom-workout ID currently on iGPSPORT."""
+    ids: set[int] = set()
+    page_index = 1
+    while True:
+        data = list_custom_workouts(session, auth_headers, page_index, page_size)
+        if data.get("code") != 0:
+            break
+        items = (data.get("data") or {}).get("items") or []
+        if not items:
+            break
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            workout_id = _workout_id_from_item(item)
+            if workout_id is not None:
+                ids.add(workout_id)
+        if len(items) < page_size:
+            break
+        page_index += 1
+    return ids
+
+
+def apply_uploaded_workout_map(
+    uploaded_workouts: dict[str, int],
+    result: WorkoutUploadResult,
+) -> None:
+    """Merge upload results into config and drop entries for deleted workouts."""
+    uploaded_workouts.update(result.uploaded_map)
+    for key in result.pruned_keys:
+        uploaded_workouts.pop(key, None)
 
 
 def upload_custom_workout(
@@ -420,6 +470,9 @@ def upload_workouts(
     auth_headers = login(session, config.igp_user, config.igp_password)
     report("Logged in.")
 
+    live_ids = fetch_all_custom_workout_ids(session, auth_headers)
+    report(f"Found {len(live_ids)} custom workouts on iGPSPORT.")
+
     report("Fetching planned workouts from intervals.icu…")
     try:
         calendar = fetch_calendar_workouts(config.intervals_api_key, oldest, newest)
@@ -440,13 +493,15 @@ def upload_workouts(
             result.skipped += 1
             continue
 
-        existing_id = config.uploaded_workouts.get(event_key)
-        if existing_id and not config.force_resync:
+        stored_id = config.uploaded_workouts.get(event_key)
+        on_igpsport = stored_id is not None and stored_id in live_ids
+
+        if on_igpsport and not config.force_resync:
             report(f"↷ Skipping {workout.name} — already on iGPSPORT.")
             result.skipped += 1
             continue
 
-        update_id = existing_id if config.force_resync and existing_id else None
+        update_id = stored_id if config.force_resync and on_igpsport else None
         body = icu_workout_doc_to_igps(
             workout.name,
             workout.description,
@@ -467,8 +522,15 @@ def upload_workouts(
             report(f"✓ Uploaded {workout.name} (workoutId {workout_id})")
             result.uploaded += 1
             result.uploaded_map[event_key] = workout_id
+            live_ids.add(workout_id)
         else:
             report(f"✗ Failed to upload {workout.name}.")
             result.failed += 1
+
+    for event_key, workout_id in config.uploaded_workouts.items():
+        if event_key in result.uploaded_map:
+            continue
+        if workout_id not in live_ids:
+            result.pruned_keys.append(event_key)
 
     return result
