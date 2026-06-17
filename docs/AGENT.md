@@ -14,21 +14,22 @@ activities and only need a reliable upload trigger.
 ## User setup (human — not the agent)
 
 Agents cannot write secrets. The **user** must add all three credentials to a
-**`.env` file only** — never use `hermes config set` for the email or password.
+`**.env` file only** — never use `hermes config set` for the email or password.
 Hermes routes `config set` by key name: only names ending in `_API_KEY` /
 `_TOKEN` go to `.env`; everything else (including `IGPSYNC_IGP_USER` and
-`IGPSYNC_IGP_PASSWORD`) goes to **`config.yaml` in plaintext**, which we do not
-use.
+`IGPSYNC_IGP_PASSWORD`) goes to `config.yaml` **in plaintext**, which we do not use.
 
 ### Which `.env` file?
 
 Hermes sets `HERMES_HOME` in subprocesses to the **active profile** directory.
 The CLI reads `$HERMES_HOME/.env` automatically.
 
-| Profile | `.env` path | Auto-detected when |
-|---------|-------------|-------------------|
-| Default | `~/.hermes/.env` | `HERMES_HOME` unset |
+
+| Profile              | `.env` path                     | Auto-detected when       |
+| -------------------- | ------------------------------- | ------------------------ |
+| Default              | `~/.hermes/.env`                | `HERMES_HOME` unset      |
 | Named (e.g. `coach`) | `~/.hermes/profiles/coach/.env` | agent runs under `coach` |
+
 
 So for a named profile, put secrets in **that profile's** `.env`, not the
 global `~/.hermes/.env` — otherwise `igpsync` won't find them.
@@ -114,21 +115,25 @@ handle or write secrets.
 
 ## Optional flags
 
-| Flag | Purpose |
-|------|---------|
-| `--env-file PATH` | Override secrets file location |
-| `--max-activities N` | Number of recent rides to process (default: 5) |
-| `--force-resync` | Re-upload even if already on intervals.icu |
-| `--activity-type TYPE` | Set intervals.icu sport after upload |
-| `--download-dir PATH` | Directory for temporary `.fit` files |
-| `--keep-files` | Do not delete `.fit` files after upload |
+
+| Flag                   | Purpose                                        |
+| ---------------------- | ---------------------------------------------- |
+| `--env-file PATH`      | Override secrets file location                 |
+| `--max-activities N`   | Number of recent rides to process (default: 5) |
+| `--force-resync`       | Re-upload even if already on intervals.icu     |
+| `--activity-type TYPE` | Set intervals.icu sport after upload           |
+| `--download-dir PATH`  | Directory for temporary `.fit` files           |
+| `--keep-files`         | Do not delete `.fit` files after upload        |
+
 
 ## Subcommands
 
-| Command | Description |
-|---------|-------------|
-| `igpsync sync` | Full pipeline: list → download → upload to intervals.icu |
+
+| Command         | Description                                                         |
+| --------------- | ------------------------------------------------------------------- |
+| `igpsync sync`  | Full pipeline: list → download → upload to intervals.icu            |
 | `igpsync check` | Validate `.env` exists and has all three required keys (no network) |
+
 
 ## What it does
 
@@ -139,3 +144,4 @@ Same as the GUI one-click sync:
 - Downloads `.fit` files and uploads to intervals.icu
 - Deletes local `.fit` files after successful upload (unless `--keep-files`)
 - Does **not** upload to Dropbox
+
