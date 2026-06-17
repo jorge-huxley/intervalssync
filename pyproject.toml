@@ -10,9 +10,9 @@ license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "dropbox>=12.0.2",
-    "flet>=0.28",
-    "flet-permission-handler>=0.85.2",
-    "flet-secure-storage>=0.85.2",
+    "flet>=0.85.3",
+    "flet-permission-handler>=0.85.3",
+    "flet-secure-storage>=0.85.3",
     "packaging>=26.2",
     "platformdirs>=4.0",
     "requests>=2.33.1",

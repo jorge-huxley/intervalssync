@@ -105,7 +105,7 @@ wheels = [
 
 [[package]]
 name = "flet"
-version = "0.85.2"
+version = "0.85.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx", marker = "sys_platform != 'emscripten'" },
@@ -113,33 +113,33 @@ dependencies = [
     { name = "oauthlib", marker = "sys_platform != 'emscripten'" },
     { name = "repath" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f8/8c/277e92494a15aa8e630aebb55f8db8fc6dacbd18a8618df4e046acd5e214/flet-0.85.2.tar.gz", hash = "sha256:17ad1958cc82a17cca32716413eb07b0145641c9ba3f5055ec9341b6146aef60", size = 508302, upload-time = "2026-05-25T17:32:51.707Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/92/9f/fd4d2adfe7220291242ca6d16879706cfdf4581190c69b271cc3ce214ee8/flet-0.85.3.tar.gz", hash = "sha256:5b606cd86da5866e7071e991dbe4019f09c69360f5993f8c47f93f05aee4ea42", size = 509336, upload-time = "2026-06-08T01:56:39.115Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/62/38/8dc6aadd870ba4138b0bc6727ad83965e428c0b29f34dcd51fa478e2dceb/flet-0.85.2-py3-none-any.whl", hash = "sha256:b2839fabf25e2db4c716ac9e0d973c6dd2fc62082d843469684ce986d0556b57", size = 582803, upload-time = "2026-05-25T17:32:53.187Z" },
+    { url = "https://files.pythonhosted.org/packages/82/b0/f2dc1ce301c88911046f7da4e8f1efa4418cb4b24fa326c391ec54b5f0f6/flet-0.85.3-py3-none-any.whl", hash = "sha256:c486adc2b6b7640ace3a614e450c5a02f731ef4698e0f0c9b823a6b906484236", size = 582912, upload-time = "2026-06-08T01:56:40.31Z" },
 ]
 
 [[package]]
 name = "flet-permission-handler"
-version = "0.85.2"
+version = "0.85.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "flet" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/63/f3/1f90351acc3c17769cb8268aed3f58f8b0064c738782e9cba5a36edac2bd/flet_permission_handler-0.85.2.tar.gz", hash = "sha256:0a1d05538c34ad305980643f25c9ed05f66f2d81d787259083db0b6464eb7ab1", size = 12241, upload-time = "2026-05-25T17:33:40.236Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9a/0e/0a4c8beadb7423a06fdcc6aeaa4b6c9f5393eaa59dcc9cfe710cc56a67d1/flet_permission_handler-0.85.3.tar.gz", hash = "sha256:7f2fc4bf5cdb0a7a64c78b6913a0ae0d2dfa8538ec9ade3ac19070f1e4a131a6", size = 12258, upload-time = "2026-06-08T01:57:20.167Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f0/93/348a0c1259c176b7a7f903dc08692696c7640e9385a6217df8fe21fcc02f/flet_permission_handler-0.85.2-py3-none-any.whl", hash = "sha256:58072efa14d953c15a7137f50d448d1fd6c4e304f26cf482e386a3a7a2a549d3", size = 13552, upload-time = "2026-05-25T17:33:39.375Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/56/c7202d2eed61387d4b344e4e0fe69219575aaace91298210bb6f85ae5cce/flet_permission_handler-0.85.3-py3-none-any.whl", hash = "sha256:1d8d0b87136a8f6fa97c04380d7791d599e577b225e8a6ac7b71dc0c7c211cb8", size = 13552, upload-time = "2026-06-08T01:57:19.413Z" },
 ]
 
 [[package]]
 name = "flet-secure-storage"
-version = "0.85.2"
+version = "0.85.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "flet" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ec/57/d925083d5bc636ea64b1ac1182cf6bdc00403f75d03ec671603129786a17/flet_secure_storage-0.85.2.tar.gz", hash = "sha256:c788c27474ae3c7843930582e03bb624b3f7cd30026123fa1979b1f741d4b9e6", size = 15689, upload-time = "2026-05-25T17:33:43.821Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/79/ea/edf5185770d49b0ff7f8cce77ff57155b6b35fd5161879a84ee154513348/flet_secure_storage-0.85.3.tar.gz", hash = "sha256:4870aac748c29696c9cb7717ea7662e9ace068a8ac3e5ca08e0ec9692256c5c8", size = 15688, upload-time = "2026-06-08T01:57:23.768Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/43/10/2d68c54e56e037e6e61271a475071b9452d85b1f325b709702e80f1e8db4/flet_secure_storage-0.85.2-py3-none-any.whl", hash = "sha256:41cccb04b54c458847e127cc5005e38698d58d401230e74ff6c1e5f297d72cf5", size = 16550, upload-time = "2026-05-25T17:33:44.544Z" },
+    { url = "https://files.pythonhosted.org/packages/db/cb/70308b53dee319a5357ab5caef6efe46b48fe66b83d9de543d0cf2fc6424/flet_secure_storage-0.85.3-py3-none-any.whl", hash = "sha256:06cdee4004183acb0fc55dd3ab615cb2387e2c4e17d0c0e0f3c0d9e64cda16c5", size = 16550, upload-time = "2026-06-08T01:57:24.408Z" },
 ]
 
 [[package]]
@@ -210,9 +210,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dropbox", specifier = ">=12.0.2" },
-    { name = "flet", specifier = ">=0.28" },
-    { name = "flet-permission-handler", specifier = ">=0.85.2" },
-    { name = "flet-secure-storage", specifier = ">=0.85.2" },
+    { name = "flet", specifier = ">=0.85.3" },
+    { name = "flet-permission-handler", specifier = ">=0.85.3" },
+    { name = "flet-secure-storage", specifier = ">=0.85.3" },
     { name = "packaging", specifier = ">=26.2" },
     { name = "platformdirs", specifier = ">=4.0" },
     { name = "requests", specifier = ">=2.33.1" },
