@@ -2,7 +2,7 @@
 
 Use the `intervalssync` CLI to sync cycling activities to intervals.icu without
 the GUI. Sources: **iGPSPORT** (default) or **Bryton Active** (`--source bryton`).
-Also uploads planned workouts from intervals.icu to iGPSPORT.
+Also uploads planned workouts from intervals.icu to **iGPSPORT** or **Bryton Active**.
 
 ## Prerequisites
 
@@ -76,19 +76,20 @@ iGPSPORT success example:
 
 Bryton success uses `"source": "bryton"` and `activity_id` instead of `ride_id`.
 
-### Workout upload (intervals.icu → iGPSPORT)
+### Workout upload (intervals.icu → iGPSPORT or Bryton)
 
 ```bash
-uv run intervalssync upload-workouts --json
+uv run intervalssync upload-workouts --json                        # iGPSPORT
+uv run intervalssync upload-workouts --source bryton --json        # Bryton Active
 ```
 
-Requires iGPSPORT credentials. Same exit-code rules.
+Requires credentials for the chosen target. Same exit-code rules.
 
 ## Optional flags
 
 | Flag | Purpose |
 |------|---------|
-| `--source {igpsport,bryton}` | Activity source (`sync` / `check` only; default: igpsport) |
+| `--source {igpsport,bryton}` | Activity source or workout upload target (default: igpsport) |
 | `--env-file PATH` | Override secrets file |
 | `--json` | JSON on stdout |
 
@@ -99,7 +100,7 @@ Requires iGPSPORT credentials. Same exit-code rules.
 | Command | Description |
 |---------|-------------|
 | `intervalssync sync` | Download recent rides → upload to intervals.icu |
-| `intervalssync upload-workouts` | Planned workouts → iGPSPORT (iGPSPORT only) |
+| `intervalssync upload-workouts` | Planned workouts → iGPSPORT or Bryton (`--source`) |
 | `intervalssync check` | Validate `.env` keys (no network) |
 
 ## CLI config
@@ -116,4 +117,4 @@ Non-secret defaults in `intervalssync-cli` `config.json` (`platformdirs`). Secre
 
 ### Workout upload
 
-Same as GUI **Upload workouts** — intervals.icu calendar → iGPSPORT custom workouts.
+Same as GUI **Upload to iGPSPORT** / **Upload to Bryton** — intervals.icu calendar → custom workouts on the chosen device platform.

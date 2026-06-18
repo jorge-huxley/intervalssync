@@ -52,6 +52,8 @@ class AppConfig:
     dropbox_date_filenames: bool = True
     # Planned workouts: intervals.icu event id → iGPSPORT workoutId.
     uploaded_workouts: dict[str, int] = field(default_factory=dict)
+    # Planned workouts: intervals.icu event id → Bryton file id or filename stem.
+    uploaded_bryton_workouts: dict[str, str] = field(default_factory=dict)
     # How many calendar days of planned workouts to upload (1 = today only).
     workout_days_ahead: int = 1
 

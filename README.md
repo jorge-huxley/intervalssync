@@ -11,12 +11,12 @@
 A small, friendly app that syncs your cycling activities to **intervals.icu** from
 **iGPSPORT** or **Bryton Active**. Enter your credentials once, press **Sync**, and
 your latest rides land on intervals.icu. You can also push planned workouts from
-intervals.icu to iGPSPORT. Free and open source, for **Windows** and **Android**.
+intervals.icu to **iGPSPORT** or **Bryton Active**. Free and open source, for **Windows** and **Android**.
 
 ## Features
 
 - Syncs recent rides from **iGPSPORT** or **Bryton Active** to intervals.icu (original `.fit` files)
-- **Upload workouts** — push planned cycling workouts from your intervals.icu calendar to iGPSPORT custom workouts (sync to your head unit from the iGPSPORT app)
+- **Upload workouts** — push planned cycling workouts from your intervals.icu calendar to iGPSPORT custom workouts or Bryton Active (sync to your head unit from the vendor app)
 - **Skips activities already uploaded** so re-running is safe — with an optional *force re-sync*
 - Lets you choose how many recent activities to process
 - **Workout upload window** in Settings — how many calendar days to upload (default: today only)
@@ -35,7 +35,7 @@ intervals.icu to iGPSPORT. Free and open source, for **Windows** and **Android**
 3. On first launch, open **Settings** and enter:
    - your iGPSPORT **email** and **password**
    - your intervals.icu **API key** (intervals.icu → Settings → Developer)
-4. Click **Save**, then go back and press **Sync activities** (or **Upload workouts** for planned sessions on your intervals.icu calendar).
+4. Click **Save**, then go back and press **Sync** (or **Upload to iGPSPORT** / **Upload to Bryton** for planned sessions on your intervals.icu calendar).
 
 Your password and API key are stored in your operating system's **secure
 credential store** — Windows Credential Manager on Windows (the same vault
@@ -46,14 +46,14 @@ Windows uses for its own logins) — never in a plain text file.
 1. On the [Releases](../../releases) page, download the latest `.apk`.
 2. Open it on your phone. Android will ask you to allow installing from this
    source — accept (Settings → "Install unknown apps" for your browser/files app).
-3. Open the app, fill in **Settings** (same fields as above), then **Sync activities** or **Upload workouts**.
+3. Open the app, fill in **Settings** (same fields as above), then **Sync** or **Upload to iGPSPORT** / **Upload to Bryton**.
 
 On Android your credentials are stored in the **Android Keystore**. The app
 isn't on the Play Store, so the "unknown source" prompt is expected.
 
 ## CLI & automation (AI agents)
 
-Headless `intervalssync` CLI — sync from iGPSPORT or Bryton, upload workouts to iGPSPORT, JSON on stdout. See [Agent / headless sync](docs/AGENT.md).
+Headless `intervalssync` CLI — sync from iGPSPORT or Bryton, upload workouts to iGPSPORT or Bryton, JSON on stdout. See [Agent / headless sync](docs/AGENT.md).
 
 ## Run from source
 

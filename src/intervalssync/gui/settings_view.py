@@ -131,7 +131,8 @@ async def build_settings_view(
         "Days ahead",
         str(config.workout_days_ahead),
         ft.Icons.CALENDAR_MONTH,
-        "Planned workouts from intervals.icu to upload to iGPSPORT. 1 = today only.",
+        "Planned workouts from intervals.icu to upload to iGPSPORT and/or Bryton. "
+        "1 = today only.",
     )
 
     activity_type = ft.Dropdown(
@@ -360,7 +361,7 @@ async def build_settings_view(
     )
     workout_sync_section = ft.Column(
         spacing=12,
-        visible=config.enable_igpsport,
+        visible=config.enable_igpsport or config.enable_bryton,
         controls=[
             ft.Divider(),
             ft.Text("Workout sync options", size=16, weight=ft.FontWeight.BOLD),
@@ -374,7 +375,7 @@ async def build_settings_view(
 
     def update_source_visibility(_: ft.ControlEvent | None = None) -> None:
         igp_credentials.visible = bool(enable_igpsport.value)
-        workout_sync_section.visible = bool(enable_igpsport.value)
+        workout_sync_section.visible = bool(enable_igpsport.value or enable_bryton.value)
         dropbox_section.visible = bool(enable_igpsport.value)
         bryton_credentials.visible = bool(enable_bryton.value)
         page.update()

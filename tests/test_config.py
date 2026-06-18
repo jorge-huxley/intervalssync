@@ -19,6 +19,7 @@ def test_defaults():
     assert cfg.dropbox_folder == "/igpsport-fit"
     assert cfg.dropbox_date_filenames is True
     assert cfg.uploaded_workouts == {}
+    assert cfg.uploaded_bryton_workouts == {}
     assert cfg.workout_days_ahead == 1
     assert config_module.any_source_enabled(cfg) is True
 
