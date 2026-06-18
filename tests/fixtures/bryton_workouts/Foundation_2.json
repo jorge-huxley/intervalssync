@@ -1,0 +1,94 @@
+{
+  "errors": [],
+  "messages": {
+    "file_id_mesgs": [
+      {
+        "type": "workout",
+        "manufacturer": "development",
+        "time_created": "2026-06-18T00:14:04+00:00"
+      }
+    ],
+    "workout_mesgs": [
+      {
+        "sport": "cycling",
+        "num_valid_steps": 6,
+        "wkt_name": "Foundation_2"
+      }
+    ],
+    "workout_step_mesgs": [
+      {
+        "message_index": 0,
+        "wkt_step_name": "Warm Up",
+        "duration_type": "time",
+        "intensity": "warmup",
+        "target_type": "power",
+        "target_value": 0,
+        "custom_target_value_low": 1127,
+        "custom_target_value_high": 1135,
+        "target_power_zone": 0,
+        "custom_target_power_low": 1127,
+        "custom_target_power_high": 1135
+      },
+      {
+        "message_index": 1,
+        "wkt_step_name": "Work",
+        "duration_type": "time",
+        "intensity": "active",
+        "target_type": "power",
+        "target_value": 0,
+        "custom_target_value_low": 1210,
+        "custom_target_value_high": 1224,
+        "target_power_zone": 0,
+        "custom_target_power_low": 1210,
+        "custom_target_power_high": 1224
+      },
+      {
+        "message_index": 2,
+        "wkt_step_name": "Recovery",
+        "duration_type": "time",
+        "intensity": "rest",
+        "target_type": "power",
+        "target_value": 0,
+        "custom_target_value_low": 1116,
+        "custom_target_value_high": 1122,
+        "target_power_zone": 0,
+        "custom_target_power_low": 1116,
+        "custom_target_power_high": 1122
+      },
+      {
+        "message_index": 3,
+        "duration_type": "repeat_until_steps_cmplt",
+        "duration_value": 1,
+        "target_value": 3,
+        "duration_step": 1,
+        "repeat_steps": 3
+      },
+      {
+        "message_index": 4,
+        "wkt_step_name": "Work",
+        "duration_type": "time",
+        "intensity": "active",
+        "target_type": "power",
+        "target_value": 0,
+        "custom_target_value_low": 1186,
+        "custom_target_value_high": 1196,
+        "target_power_zone": 0,
+        "custom_target_power_low": 1186,
+        "custom_target_power_high": 1196
+      },
+      {
+        "message_index": 5,
+        "wkt_step_name": "Cool Down",
+        "duration_type": "time",
+        "intensity": "cooldown",
+        "target_type": "power",
+        "target_value": 0,
+        "custom_target_value_low": 1116,
+        "custom_target_value_high": 1122,
+        "target_power_zone": 0,
+        "custom_target_power_low": 1116,
+        "custom_target_power_high": 1122
+      }
+    ]
+  }
+}

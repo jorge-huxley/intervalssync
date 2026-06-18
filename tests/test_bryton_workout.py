@@ -78,24 +78,6 @@ def _valid_fit_bytes() -> bytes:
     return b"\x00" * 8 + b".FIT" + b"\x00" * 6
 
 
-def test_download_event_fit_validates_header(monkeypatch):
-    fit = _valid_fit_bytes()
-
-    def fake_get(url, auth, timeout):
-        return FakeResponse(content=fit)
-
-    monkeypatch.setattr(workout.requests, "get", fake_get)
-    data = workout.download_event_fit(42, "key")
-    assert data == fit
-
-
-def test_download_event_fit_rejects_non_fit(monkeypatch):
-    def fake_get(url, auth, timeout):
-        return FakeResponse(content=b"not-a-fit")
-
-    monkeypatch.setattr(workout.requests, "get", fake_get)
-    assert workout.download_event_fit(42, "key") is None
-
 
 def test_upload_workout_fit_posts_multipart():
     session = BrytonSession(user_id="user1", auth_token="tok", host="active.brytonsport.com")
@@ -114,6 +96,7 @@ def test_upload_workout_fit_posts_multipart():
     assert captured["url"] == "https://active.brytonsport.com/workout/upload/user1"
     assert captured["files"]["file"][0] == "Test Ride.fit"
     assert captured["data"]["name"] == "Test Ride.fit"
+    assert captured["data"]["provider"] == "bryton"
     assert captured["headers"]["X-User-Id"] == "user1"
 
 
@@ -167,7 +150,7 @@ def test_upload_workouts_reuploads_when_deleted_on_bryton(monkeypatch):
     monkeypatch.setattr(workout, "web_login", lambda *a, **k: session)
     monkeypatch.setattr(workout, "_fetch_workout_library", lambda *a, **k: (set(), set()))
     monkeypatch.setattr(workout, "fetch_calendar_workouts", lambda *a, **k: [CW()])
-    monkeypatch.setattr(workout, "download_event_fit", lambda *a, **k: fit)
+    monkeypatch.setattr(workout, "icu_workout_doc_to_bryton_fit", lambda *a, **k: fit)
     monkeypatch.setattr(workout, "upload_workout_fit", lambda *a, **k: True)
 
     cfg = workout.BrytonWorkoutUploadConfig(
@@ -196,7 +179,7 @@ def test_upload_workouts_uploads_new_workout(monkeypatch):
     monkeypatch.setattr(workout, "web_login", lambda *a, **k: session)
     monkeypatch.setattr(workout, "_fetch_workout_library", lambda *a, **k: (set(), set()))
     monkeypatch.setattr(workout, "fetch_calendar_workouts", lambda *a, **k: [CW()])
-    monkeypatch.setattr(workout, "download_event_fit", lambda *a, **k: fit)
+    monkeypatch.setattr(workout, "icu_workout_doc_to_bryton_fit", lambda *a, **k: fit)
 
     calls: list[str] = []
 

@@ -1,7 +1,8 @@
 """Upload planned workouts from intervals.icu to Bryton Active (web FIT API).
 
-Uses the Bryton Active website backend (active.brytonsport.com): download FIT
-from intervals.icu and POST multipart to /workout/upload/{userId}.
+Uses the Bryton Active website backend (active.brytonsport.com): map
+intervals.icu ``workout_doc`` to Bryton-native FIT and POST multipart to
+/workout/upload/{userId}.
 """
 
 from __future__ import annotations
@@ -16,8 +17,7 @@ import requests
 from ..igpsport.workout import fetch_calendar_workouts
 from .ddp import WEB_HOST, BrytonSession, call_method, login
 from .exceptions import BrytonSyncError
-
-INTERVALS_EVENT_FIT_URL = "https://intervals.icu/api/v1/athlete/0/events/{event_id}/download.fit"
+from .fit_encode import icu_workout_doc_to_bryton_fit
 
 _CYCLING_TYPES = frozenset(
     {
@@ -172,22 +172,6 @@ def _auto_workout_filename() -> str:
     )
 
 
-def download_event_fit(event_id: int, api_key: str) -> bytes | None:
-    """Download a planned workout as FIT from intervals.icu."""
-    resp = requests.get(
-        INTERVALS_EVENT_FIT_URL.format(event_id=event_id),
-        auth=("API_KEY", api_key),
-        timeout=120,
-    )
-    if resp.status_code == 404:
-        return None
-    resp.raise_for_status()
-    data = resp.content
-    if len(data) < 14 or b".FIT" not in data[8:14]:
-        return None
-    return data
-
-
 def upload_workout_fit(
     session: BrytonSession,
     fit_bytes: bytes,
@@ -207,7 +191,7 @@ def upload_workout_fit(
     resp = client.post(
         url,
         files={"file": (filename, fit_bytes, "application/octet-stream")},
-        data={"name": filename},
+        data={"name": filename, "provider": "bryton"},
         headers=headers,
         timeout=120,
     )
@@ -270,17 +254,10 @@ def upload_workouts(
 
         ids_before = set(live_ids)
 
-        report(f"Downloading FIT for {workout.name}…")
-        try:
-            fit_bytes = download_event_fit(workout.event_id, config.intervals_api_key)
-        except requests.RequestException as exc:
-            report(f"⚠ Could not download FIT for {workout.name}: {exc}")
-            result.failed += 1
-            continue
-
+        fit_bytes = icu_workout_doc_to_bryton_fit(workout.name, workout.workout_doc)
         if fit_bytes is None:
             report(
-                f"⚠ Skipping {workout.name} — no structured workout "
+                f"⚠ Skipping {workout.name} — no structured steps "
                 "(open the workout in intervals.icu first)."
             )
             result.no_steps += 1
@@ -289,7 +266,7 @@ def upload_workouts(
         upload_name = (
             stored
             if config.force_resync and on_bryton and stored
-            else _sanitize_workout_filename(workout.name, event_id=workout.event_id)
+            else _auto_workout_filename()
         )
 
         report(f"Uploading {workout.name}…")

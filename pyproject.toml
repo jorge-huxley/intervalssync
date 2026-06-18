@@ -13,6 +13,7 @@ dependencies = [
     "flet>=0.85.3",
     "flet-permission-handler>=0.85.3",
     "flet-secure-storage>=0.85.3",
+    "garmin-fit-sdk>=21.208.0",
     "packaging>=26.2",
     "platformdirs>=4.0",
     "requests>=2.33.1",

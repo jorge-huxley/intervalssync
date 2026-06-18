@@ -143,6 +143,15 @@ wheels = [
 ]
 
 [[package]]
+name = "garmin-fit-sdk"
+version = "21.208.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3d/bb/e4ff8a3d0d60113bc1ca6602c9f1facfe18b9dc8182a8212549290f54d68/garmin_fit_sdk-21.208.0.tar.gz", hash = "sha256:f8ec08c409729650e0084720c65c35f871c53c63d40ed7c5607b4165e0d91143", size = 151316, upload-time = "2026-06-16T17:53:10.274Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/7e/120bd93c52ec17b1e4b3903dcafbb6e80ecf856c49f8861517193a354906/garmin_fit_sdk-21.208.0-py3-none-any.whl", hash = "sha256:82ea1ed322dd5d68d7484b71ca76f301ae4b837b98396a00819f4fc3672fddc0", size = 166821, upload-time = "2026-06-16T17:53:08.74Z" },
+]
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -206,6 +215,7 @@ dependencies = [
     { name = "flet" },
     { name = "flet-permission-handler" },
     { name = "flet-secure-storage" },
+    { name = "garmin-fit-sdk" },
     { name = "packaging" },
     { name = "platformdirs" },
     { name = "requests" },
@@ -223,6 +233,7 @@ requires-dist = [
     { name = "flet", specifier = ">=0.85.3" },
     { name = "flet-permission-handler", specifier = ">=0.85.3" },
     { name = "flet-secure-storage", specifier = ">=0.85.3" },
+    { name = "garmin-fit-sdk", specifier = ">=21.208.0" },
     { name = "packaging", specifier = ">=26.2" },
     { name = "platformdirs", specifier = ">=4.0" },
     { name = "requests", specifier = ">=2.33.1" },
