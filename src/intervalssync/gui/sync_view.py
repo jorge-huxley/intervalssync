@@ -116,11 +116,18 @@ def build_sync_view(
             set_buttons_enabled(True)
             page.update()
 
-    def run_bryton_sync(bryton_password: str, api_key: str | None) -> None:
+    def run_bryton_sync(
+        bryton_password: str,
+        api_key: str | None,
+        dropbox_refresh_token: str | None,
+        dropbox_app_key: str | None,
+    ) -> None:
         sync_config = BrytonSyncConfig(
             bryton_email=config.bryton_user,
             bryton_password=bryton_password,
             intervals_api_key=api_key,
+            dropbox_refresh_token=dropbox_refresh_token,
+            dropbox_app_key=dropbox_app_key,
             max_activities=config.max_activities,
             download_dir=Path(config.download_dir),
             delete_after_upload=config.delete_after_upload,
@@ -129,14 +136,19 @@ def build_sync_view(
             list_activities=config.step_list_activities,
             download_fit=config.step_download_fit,
             upload_intervals=config.step_upload_intervals,
+            upload_dropbox=config.upload_dropbox,
+            dropbox_folder=config.dropbox_folder,
+            dropbox_date_filenames=config.dropbox_date_filenames,
         )
 
         try:
             result = bryton_sync(sync_config, progress=append_log)
             append_log(
-                f"\nDone — uploaded {result.uploaded}, "
+                f"\nDone — intervals uploaded {result.uploaded}, "
+                f"Dropbox uploaded {result.uploaded_dropbox}, "
                 f"downloaded {result.downloaded}, "
-                f"skipped {result.skipped}, failed {result.failed}."
+                f"skipped {result.skipped}, Dropbox skipped {result.skipped_dropbox}, "
+                f"failed {result.failed}, Dropbox failed {result.failed_dropbox}."
             )
         except BrytonSyncError as exc:
             append_log(f"✗ {exc}")
@@ -232,12 +244,20 @@ def build_sync_view(
             page.show_dialog(ft.SnackBar(ft.Text("Add your Bryton credentials in Settings first.")))
             return
         api_key = await store.get(secrets_module.INTERVALS_API_KEY)
+        dropbox_refresh_token = await store.get(secrets_module.DROPBOX_REFRESH_TOKEN)
+        dropbox_app_key = get_dropbox_app_key()
 
         log.controls.clear()
         progress.visible = True
         set_buttons_enabled(False)
         page.update()
-        page.run_thread(run_bryton_sync, bryton_password, api_key)
+        page.run_thread(
+            run_bryton_sync,
+            bryton_password,
+            api_key,
+            dropbox_refresh_token,
+            dropbox_app_key,
+        )
 
     async def on_upload_igp_workouts_click(_: ft.ControlEvent) -> None:
         igp_password = await store.get(secrets_module.IGP_PASSWORD)

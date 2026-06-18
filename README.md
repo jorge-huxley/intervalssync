@@ -16,6 +16,7 @@ intervals.icu to **iGPSPORT** or **Bryton Active**. Free and open source, for **
 ## Features
 
 - Syncs recent rides from **iGPSPORT** or **Bryton Active** to intervals.icu (original `.fit` files)
+- **Optional Dropbox upload** — mirror activities to a Dropbox folder from the GUI (iGPSPORT or Bryton sync);
 - **Upload workouts** — push planned cycling workouts from your intervals.icu calendar to iGPSPORT custom workouts or Bryton Active (sync to your head unit from the vendor app)
 - **Skips activities already uploaded** so re-running is safe — with an optional *force re-sync*
 - Lets you choose how many recent activities to process

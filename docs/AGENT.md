@@ -114,6 +114,9 @@ Non-secret defaults in `intervalssync-cli` `config.json` (`platformdirs`). Secre
 - **iGPSPORT:** list → FIT URL → download → upload (`igpsport_{ride_id}` external_id).
 - **Bryton:** DDP login → activity list → `GET /api/activity?id=…` FIT → upload (`bryton_{id}` external_id).
 - Skips already on intervals.icu unless `--force-resync`.
+- **Dropbox** is GUI-only (Settings → connect Dropbox, enable upload). iGPSPORT
+  uses `ride-0-YYYY-MM-DD-HH-MM-SS.fit` or `igpsport_{id}.fit`; Bryton uses
+  `YYMMDDHHMMSS.fit` or `bryton_{id}.fit`.
 
 ### Workout upload
 

@@ -176,6 +176,10 @@ async def build_settings_view(
     dropbox_date_filenames = ft.Switch(
         label="Use date in Dropbox filenames",
         value=config.dropbox_date_filenames,
+        helper_text=(
+            "iGPSPORT: ride-0-YYYY-MM-DD-HH-MM-SS.fit · "
+            "Bryton: YYMMDDHHMMSS.fit"
+        ),
     )
     dropbox_status = ft.Text(
         (
@@ -369,14 +373,14 @@ async def build_settings_view(
         ],
     )
     dropbox_section = ft.Container(
-        visible=config.enable_igpsport,
+        visible=config.enable_igpsport or config.enable_bryton,
         content=dropbox_options,
     )
 
     def update_source_visibility(_: ft.ControlEvent | None = None) -> None:
         igp_credentials.visible = bool(enable_igpsport.value)
         workout_sync_section.visible = bool(enable_igpsport.value or enable_bryton.value)
-        dropbox_section.visible = bool(enable_igpsport.value)
+        dropbox_section.visible = bool(enable_igpsport.value or enable_bryton.value)
         bryton_credentials.visible = bool(enable_bryton.value)
         page.update()
 

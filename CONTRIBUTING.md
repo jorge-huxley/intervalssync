@@ -48,9 +48,10 @@ Keep source logic testable and UI-free; CLI/GUI stay thin orchestration.
 
 ## Working on the Dropbox upload (optional)
 
-Dropbox is an optional, off-by-default upload target, so you only need to set
-this up if you're working on that feature — without a key the Dropbox switch in
-Settings stays disabled and the rest of the app works normally.
+Dropbox is an optional, off-by-default upload target in the **GUI** (iGPSPORT
+and Bryton sync). The headless CLI uploads to intervals.icu only. You only need
+to set this up if you're working on that feature — without a key the Dropbox
+switch in Settings stays disabled and the rest of the app works normally.
 
 The app authenticates with Dropbox using the **PKCE** OAuth flow, which needs a
 Dropbox **app key**. Releases get the key stamped in by CI from a repository
