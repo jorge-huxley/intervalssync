@@ -38,6 +38,17 @@ SPACE_LG = 24
 SPACE_XL = 32
 
 
+_MOBILE_PLATFORMS = {
+    ft.PagePlatform.ANDROID,
+    ft.PagePlatform.ANDROID_TV,
+    ft.PagePlatform.IOS,
+}
+
+
+def is_mobile(page: ft.Page) -> bool:
+    return page.platform in _MOBILE_PLATFORMS
+
+
 def is_dark(page: ft.Page) -> bool:
     mode = page.theme_mode
     if mode == ft.ThemeMode.DARK:

@@ -46,25 +46,31 @@ async def build_settings_view(
     existing_dropbox_token = await store.get(secrets_module.DROPBOX_REFRESH_TOKEN)
     dropbox_app_key = get_dropbox_app_key()
 
+    is_mobile = theme.is_mobile(page)
+
+    def _input_field(**kwargs: object) -> ft.TextField:
+        kwargs.setdefault("border_radius", theme.RADIUS_SM)
+        if is_mobile:
+            kwargs.setdefault("text_size", 14)
+        return ft.TextField(**kwargs)
+
     enable_igpsport = ft.Switch(
         label="Enable iGPSPORT",
         value=config.enable_igpsport,
         active_color=colors["accent"],
     )
-    igp_user = ft.TextField(
+    igp_user = _input_field(
         label="iGPSPORT email",
         value=config.igp_user,
         prefix_icon=ft.Icons.PERSON_OUTLINED,
         autofocus=not config.igp_user,
-        border_radius=theme.RADIUS_SM,
     )
-    igp_password = ft.TextField(
+    igp_password = _input_field(
         label="iGPSPORT password",
         value=existing_igp_password,
         prefix_icon=ft.Icons.LOCK_OUTLINED,
         password=True,
         can_reveal_password=True,
-        border_radius=theme.RADIUS_SM,
     )
 
     enable_bryton = ft.Switch(
@@ -72,41 +78,37 @@ async def build_settings_view(
         value=config.enable_bryton,
         active_color=colors["accent"],
     )
-    bryton_user = ft.TextField(
+    bryton_user = _input_field(
         label="Bryton Active email",
         value=config.bryton_user,
         prefix_icon=ft.Icons.PERSON_OUTLINED,
-        border_radius=theme.RADIUS_SM,
     )
-    bryton_password = ft.TextField(
+    bryton_password = _input_field(
         label="Bryton Active password",
         value=existing_bryton_password,
         prefix_icon=ft.Icons.LOCK_OUTLINED,
         password=True,
         can_reveal_password=True,
-        border_radius=theme.RADIUS_SM,
     )
 
-    api_key = ft.TextField(
+    api_key = _input_field(
         label="intervals.icu API key",
         value=existing_api_key,
         prefix_icon=ft.Icons.KEY_OUTLINED,
         password=True,
         can_reveal_password=True,
         helper="Settings → Developer on intervals.icu",
-        border_radius=theme.RADIUS_SM,
     )
 
-    max_activities = ft.TextField(
+    max_activities = _input_field(
         label="Activities to sync",
         value=str(config.max_activities),
         prefix_icon=ft.Icons.FORMAT_LIST_NUMBERED,
         keyboard_type=ft.KeyboardType.NUMBER,
         helper="Number of recent activities to sync on each run",
-        border_radius=theme.RADIUS_SM,
     )
 
-    workout_days_ahead = ft.TextField(
+    workout_days_ahead = _input_field(
         label="Workout upload window (days)",
         value=str(config.workout_days_ahead),
         prefix_icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
@@ -115,7 +117,6 @@ async def build_settings_view(
             "Planned workouts from intervals.icu to upload to iGPSPORT and/or Bryton; "
             "1 = today only"
         ),
-        border_radius=theme.RADIUS_SM,
     )
 
     activity_type = ft.Dropdown(
@@ -153,12 +154,11 @@ async def build_settings_view(
         disabled=not bool(existing_dropbox_token and dropbox_app_key),
         active_color=colors["accent"],
     )
-    dropbox_folder = ft.TextField(
+    dropbox_folder = _input_field(
         label="Dropbox folder",
         value=config.dropbox_folder or DEFAULT_DROPBOX_FOLDER,
         prefix_icon=ft.Icons.FOLDER_OUTLINED,
         helper="Dropbox path, e.g. /Fit files",
-        border_radius=theme.RADIUS_SM,
     )
     dropbox_date_filenames_switch = ft.Switch(
         label="Use date in Dropbox filenames",
@@ -189,11 +189,10 @@ async def build_settings_view(
         size=13,
         color=colors["text_muted"],
     )
-    dropbox_auth_code = ft.TextField(
+    dropbox_auth_code = _input_field(
         label="Dropbox authorization code",
         prefix_icon=ft.Icons.KEY_OUTLINED,
         visible=False,
-        border_radius=theme.RADIUS_SM,
     )
     dropbox_finish_button = ft.OutlinedButton(
         "Finish connection",
@@ -314,12 +313,6 @@ async def build_settings_view(
             )
         ],
     )
-
-    is_mobile = page.platform in {
-        ft.PagePlatform.ANDROID,
-        ft.PagePlatform.ANDROID_TV,
-        ft.PagePlatform.IOS,
-    }
 
     save_to_downloads = ft.Switch(
         label="Save to phone's Downloads folder",

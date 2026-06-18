@@ -243,31 +243,6 @@ async def _app(page: ft.Page) -> None:
         _refresh_bg()
         page.update()
 
-    async def on_tab_change(e: ft.ControlEvent) -> None:
-        index = e.control.selected_index
-        if index == _TAB_SYNC:
-            await show_sync()
-        else:
-            await show_settings()
-
-    nav_bar = ft.NavigationBar(
-        selected_index=_TAB_SYNC,
-        on_change=on_tab_change,
-        destinations=[
-            ft.NavigationBarDestination(
-                icon=ft.Icons.SYNC_OUTLINED,
-                selected_icon=ft.Icons.SYNC,
-                label="Sync",
-            ),
-            ft.NavigationBarDestination(
-                icon=ft.Icons.TUNE_OUTLINED,
-                selected_icon=ft.Icons.TUNE,
-                label="Settings",
-            ),
-        ],
-        label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_SHOW,
-    )
-
     sync_tab = ft.TextButton("Sync", on_click=show_sync)
     settings_tab = ft.TextButton("Settings", on_click=show_settings)
     desktop_tabs = ft.Container(
@@ -279,7 +254,6 @@ async def _app(page: ft.Page) -> None:
     )
 
     def _update_nav() -> None:
-        nav_bar.selected_index = current_tab
         colors = theme.palette(page)
         for idx, btn in enumerate((sync_tab, settings_tab)):
             active = idx == current_tab
@@ -293,24 +267,26 @@ async def _app(page: ft.Page) -> None:
             )
 
     page.add(
-        ft.Column(
+        ft.SafeArea(
             expand=True,
-            spacing=0,
-            controls=[
-                header_slot,
-                desktop_tabs if not is_mobile else ft.Container(height=0),
-                ft.Container(
-                    content=body,
-                    expand=True,
-                    padding=ft.Padding(
-                        theme.SPACE_LG,
-                        theme.SPACE_MD,
-                        theme.SPACE_LG,
-                        theme.SPACE_LG if not is_mobile else theme.SPACE_MD,
+            content=ft.Column(
+                expand=True,
+                spacing=0,
+                controls=[
+                    header_slot,
+                    desktop_tabs,
+                    ft.Container(
+                        content=body,
+                        expand=True,
+                        padding=ft.Padding(
+                            theme.SPACE_LG,
+                            theme.SPACE_MD,
+                            theme.SPACE_LG,
+                            theme.SPACE_LG if not is_mobile else theme.SPACE_MD,
+                        ),
                     ),
-                ),
-                nav_bar if is_mobile else ft.Container(height=0),
-            ],
+                ],
+            ),
         )
     )
 

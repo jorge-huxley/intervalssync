@@ -27,6 +27,7 @@ def build_sync_view(
     store: secrets_module.SecretStore,
 ) -> ft.Control:
     colors = theme.palette(page)
+    mobile = theme.is_mobile(page)
     progress = ft.ProgressBar(
         visible=False,
         color=colors["accent"],
@@ -37,18 +38,27 @@ def build_sync_view(
     log = ft.ListView(spacing=4, auto_scroll=True, height=280, expand=False)
 
     def _action_button(label: str, icon: str, *, outlined: bool = False) -> ft.FilledButton | ft.OutlinedButton:
+        label_size = 13 if mobile else 14
         content = ft.Row(
-            tight=True,
             spacing=theme.SPACE_XS,
             alignment=ft.MainAxisAlignment.CENTER,
             controls=[
-                ft.Icon(icon, size=18),
-                ft.Text(label, size=14, font_family=f"{theme.FONT_BODY}Medium"),
+                ft.Icon(icon, size=16 if mobile else 18),
+                ft.Text(
+                    label,
+                    size=label_size,
+                    font_family=f"{theme.FONT_BODY}Medium",
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                    max_lines=1,
+                    expand=True,
+                    text_align=ft.TextAlign.CENTER,
+                ),
             ],
         )
+        pad = theme.SPACE_SM if mobile else theme.SPACE_MD
         style = ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_SM),
-            padding=ft.Padding(theme.SPACE_MD, theme.SPACE_SM, theme.SPACE_MD, theme.SPACE_SM),
+            padding=ft.Padding(pad, theme.SPACE_SM, pad, theme.SPACE_SM),
         )
         if outlined:
             style = ft.ButtonStyle(
@@ -112,7 +122,10 @@ def build_sync_view(
             controls=[ft.Container(content=action_cards[0], width=340)],
         )
     elif action_cards:
-        action_area = ft.Row(spacing=theme.SPACE_MD, controls=action_cards)
+        if mobile:
+            action_area = ft.Column(spacing=theme.SPACE_MD, controls=action_cards)
+        else:
+            action_area = ft.Row(spacing=theme.SPACE_MD, controls=action_cards)
     else:
         action_area = theme.muted_text("Enable a source in Settings to sync.", page)
 
