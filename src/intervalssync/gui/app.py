@@ -27,6 +27,14 @@ _MOBILE = {ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV, ft.PagePlatform.
 ANDROID_DOWNLOADS = "/storage/emulated/0/Download/intervalssync-fit"
 
 APP_TITLE = "Intervals Sync"
+APP_ICON = "icon.png"
+
+
+def _assets_dir() -> str:
+    dev_assets = Path(__file__).resolve().parents[3] / "assets"
+    if dev_assets.is_dir():
+        return str(dev_assets)
+    return "assets"
 
 _TAB_SYNC = 0
 _TAB_SETTINGS = 1
@@ -169,12 +177,12 @@ async def _app(page: ft.Page) -> None:
                                 width=36,
                                 height=36,
                                 border_radius=theme.RADIUS_SM,
-                                bgcolor=colors["accent_soft"],
-                                alignment=ft.Alignment.CENTER,
-                                content=ft.Icon(
-                                    ft.Icons.DIRECTIONS_BIKE,
-                                    size=20,
-                                    color=colors["accent"],
+                                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                                content=ft.Image(
+                                    src=APP_ICON,
+                                    width=36,
+                                    height=36,
+                                    fit=ft.BoxFit.COVER,
                                 ),
                             ),
                             ft.Column(
@@ -319,7 +327,7 @@ async def _app(page: ft.Page) -> None:
 
 
 def main() -> None:
-    ft.run(_app)
+    ft.run(_app, assets_dir=_assets_dir())
 
 
 if __name__ == "__main__":
