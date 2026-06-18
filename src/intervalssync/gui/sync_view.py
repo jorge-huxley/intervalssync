@@ -39,43 +39,88 @@ def build_sync_view(
     def _action_button(label: str, icon: str, *, outlined: bool = False) -> ft.FilledButton | ft.OutlinedButton:
         content = ft.Row(
             tight=True,
+            spacing=theme.SPACE_XS,
             alignment=ft.MainAxisAlignment.CENTER,
             controls=[
-                ft.Icon(icon, size=20),
-                ft.Text(label, font_family=f"{theme.FONT_BODY}Medium"),
+                ft.Icon(icon, size=18),
+                ft.Text(label, size=14, font_family=f"{theme.FONT_BODY}Medium"),
             ],
         )
         style = ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_SM),
-            padding=ft.Padding(theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD),
+            padding=ft.Padding(theme.SPACE_MD, theme.SPACE_SM, theme.SPACE_MD, theme.SPACE_SM),
         )
         if outlined:
-            return ft.OutlinedButton(content=content, style=style)
-        return ft.FilledButton(content=content, style=style)
+            style = ft.ButtonStyle(
+                shape=style.shape,
+                padding=style.padding,
+                side=ft.BorderSide(1, colors["border"]),
+                color=colors["text"],
+            )
+            button: ft.FilledButton | ft.OutlinedButton = ft.OutlinedButton(content=content, style=style)
+        else:
+            button = ft.FilledButton(content=content, style=style)
+        button.expand = True
+        return button
 
-    sync_igp_button = _action_button("Sync iGPSPORT", ft.Icons.SYNC)
-    sync_igp_button.visible = config.enable_igpsport
-    sync_bryton_button = _action_button("Sync Bryton", ft.Icons.SYNC)
-    sync_bryton_button.visible = config.enable_bryton
-    upload_igp_workouts_button = _action_button(
-        "Upload to iGPSPORT", ft.Icons.FITNESS_CENTER_OUTLINED, outlined=True
-    )
-    upload_igp_workouts_button.visible = config.enable_igpsport
-    upload_bryton_workouts_button = _action_button(
-        "Upload to Bryton", ft.Icons.FITNESS_CENTER_OUTLINED, outlined=True
-    )
-    upload_bryton_workouts_button.visible = config.enable_bryton
-
-    action_buttons = [
-        btn
-        for btn in (
-            sync_igp_button,
-            sync_bryton_button,
-            upload_igp_workouts_button,
-            upload_bryton_workouts_button,
+    def _source_card(title: str, sync_btn: ft.Control, upload_btn: ft.Control) -> ft.Container:
+        return ft.Container(
+            content=ft.Column(
+                spacing=theme.SPACE_MD,
+                controls=[
+                    ft.Text(
+                        title,
+                        size=15,
+                        weight=ft.FontWeight.W_600,
+                        font_family=f"{theme.FONT_BODY}Medium",
+                        color=colors["text"],
+                    ),
+                    ft.Column(
+                        spacing=theme.SPACE_SM,
+                        controls=[
+                            ft.Row(spacing=0, controls=[sync_btn]),
+                            ft.Row(spacing=0, controls=[upload_btn]),
+                        ],
+                    ),
+                ],
+            ),
+            padding=theme.SPACE_LG,
+            bgcolor=colors["surface"],
+            border=ft.Border.all(1, colors["border"]),
+            border_radius=theme.RADIUS_MD,
+            expand=True,
         )
-        if btn.visible
-    ]
+
+    sync_igp_button = _action_button("Sync activities", ft.Icons.SYNC)
+    sync_bryton_button = _action_button("Sync activities", ft.Icons.SYNC)
+    upload_igp_workouts_button = _action_button(
+        "Upload workouts", ft.Icons.FITNESS_CENTER_OUTLINED, outlined=True
+    )
+    upload_bryton_workouts_button = _action_button(
+        "Upload workouts", ft.Icons.FITNESS_CENTER_OUTLINED, outlined=True
+    )
+
+    action_cards: list[ft.Container] = []
+    if config.enable_igpsport:
+        action_cards.append(_source_card("iGPSPORT", sync_igp_button, upload_igp_workouts_button))
+    if config.enable_bryton:
+        action_cards.append(_source_card("Bryton", sync_bryton_button, upload_bryton_workouts_button))
+
+    if len(action_cards) == 1:
+        action_area = ft.Row(
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[ft.Container(content=action_cards[0], width=340)],
+        )
+    elif action_cards:
+        action_area = ft.Row(spacing=theme.SPACE_MD, controls=action_cards)
+    else:
+        action_area = theme.muted_text("Enable a source in Settings to sync.", page)
+
+    action_buttons: list[ft.FilledButton | ft.OutlinedButton] = []
+    if config.enable_igpsport:
+        action_buttons.extend([sync_igp_button, upload_igp_workouts_button])
+    if config.enable_bryton:
+        action_buttons.extend([sync_bryton_button, upload_bryton_workouts_button])
 
     def set_buttons_enabled(enabled: bool) -> None:
         for button in action_buttons:
@@ -372,11 +417,7 @@ def build_sync_view(
                     ),
                 ],
             ),
-            ft.Row(
-                spacing=theme.SPACE_SM,
-                controls=action_buttons,
-                wrap=True,
-            ),
+            action_area,
             progress,
             log_panel,
             ft.Container(height=theme.SPACE_MD),
