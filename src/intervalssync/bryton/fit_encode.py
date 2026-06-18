@@ -16,7 +16,9 @@ from garmin_fit_sdk import Encoder, Profile
 
 # Bryton custom target_type values (see woParser.js in Bryton web bundle).
 TARGET_FTP = 245
+TARGET_LTHR = 248
 
+# Percentage targets (FTP, LTHR, MHR) use custom values + 100_000.
 BRYTON_FTP_OFFSET = 100_000
 
 
@@ -110,40 +112,43 @@ def _power_range(step: dict[str, Any]) -> tuple[int, int, int] | None:
     )
 
 
-def _hr_range(step: dict[str, Any]) -> tuple[int, int, int] | None:
+def _hr_range(step: dict[str, Any], lthr: float | None) -> tuple[int, int, int] | None:
+    """Return (target_type, low, high) as % LTHR with Bryton offsets applied.
+
+    Bryton's web app encodes HR targets as % LTHR (target_type 248,
+    custom values + 100_000), not absolute BPM (target_type 1, + 100).
+    intervals.icu provides resolved BPM in ``_hr`` and athlete LTHR on the
+    workout doc when ``resolve=true``.
+    """
+    if not lthr or lthr <= 0:
+        return None
+
     resolved = step.get("_hr")
-    if isinstance(resolved, dict):
-        start = _num(resolved.get("start"))
-        end = _num(resolved.get("end"))
-        value = _num(resolved.get("value"))
-        min_v = start if start is not None else value
-        max_v = end if end is not None else value
-        if min_v is None and max_v is None:
-            return None
-        min_v = int(min_v if min_v is not None else max_v)
-        max_v = int(max_v if max_v is not None else min_v)
-        if min_v > max_v:
-            min_v, max_v = max_v, min_v
-        return (1, min_v + 100, max_v + 100)
-
-    hr = step.get("hr")
-    if not isinstance(hr, dict):
+    if not isinstance(resolved, dict):
         return None
-    start = _num(hr.get("start"))
-    end = _num(hr.get("end"))
-    value = _num(hr.get("value"))
-    if start is not None and end is not None:
-        lo, hi = int(start), int(end)
-    elif value is not None:
-        lo = hi = int(value)
-    else:
+
+    start = _num(resolved.get("start"))
+    end = _num(resolved.get("end"))
+    value = _num(resolved.get("value"))
+    min_bpm = start if start is not None else value
+    max_bpm = end if end is not None else value
+    if min_bpm is None and max_bpm is None:
         return None
-    if lo > hi:
-        lo, hi = hi, lo
-    return (1, lo + 100, hi + 100)
+    min_bpm = min_bpm if min_bpm is not None else max_bpm
+    max_bpm = max_bpm if max_bpm is not None else min_bpm
+    if min_bpm > max_bpm:
+        min_bpm, max_bpm = max_bpm, min_bpm
+
+    min_pct = int(round(min_bpm / lthr * 100))
+    max_pct = int(round(max_bpm / lthr * 100))
+    return (
+        TARGET_LTHR,
+        min_pct + BRYTON_FTP_OFFSET,
+        max_pct + BRYTON_FTP_OFFSET,
+    )
 
 
-def _target_fields(step: dict[str, Any]) -> dict[str, Any]:
+def _target_fields(step: dict[str, Any], *, lthr: float | None) -> dict[str, Any]:
     power = _power_range(step)
     if power:
         target_type, low, high = power
@@ -154,7 +159,7 @@ def _target_fields(step: dict[str, Any]) -> dict[str, Any]:
             "custom_target_value_high": high,
         }
 
-    hr = _hr_range(step)
+    hr = _hr_range(step, lthr)
     if hr:
         target_type, low, high = hr
         return {
@@ -174,6 +179,7 @@ def _timed_step(
     step: dict[str, Any],
     index: int,
     *,
+    lthr: float | None,
     name: str | None = None,
 ) -> dict[str, Any] | None:
     if step.get("until_lap_press"):
@@ -184,7 +190,7 @@ def _timed_step(
             "duration_value": 0,
             "intensity": _intensity(step),
         }
-        mesg.update(_target_fields(step))
+        mesg.update(_target_fields(step, lthr=lthr))
         return mesg
 
     duration = step.get("duration")
@@ -198,11 +204,15 @@ def _timed_step(
         "duration_value": int(duration) * 1000,
         "intensity": _intensity(step),
     }
-    mesg.update(_target_fields(step))
+    mesg.update(_target_fields(step, lthr=lthr))
     return mesg
 
 
-def _flatten_steps(raw_steps: list[Any]) -> list[dict[str, Any]] | None:
+def _flatten_steps(
+    raw_steps: list[Any],
+    *,
+    lthr: float | None,
+) -> list[dict[str, Any]] | None:
     """Expand intervals.icu steps (including repeats) into Bryton FIT messages."""
     out: list[dict[str, Any]] = []
 
@@ -227,7 +237,7 @@ def _flatten_steps(raw_steps: list[Any]) -> list[dict[str, Any]] | None:
             for child in nested:
                 if not isinstance(child, dict):
                     continue
-                mapped = _timed_step(child, len(out))
+                mapped = _timed_step(child, len(out), lthr=lthr)
                 if mapped is None:
                     return None
                 out.append(mapped)
@@ -236,7 +246,7 @@ def _flatten_steps(raw_steps: list[Any]) -> list[dict[str, Any]] | None:
             append_repeat(start_index, int(reps))
             continue
 
-        mapped = _timed_step(step, len(out))
+        mapped = _timed_step(step, len(out), lthr=lthr)
         if mapped is None:
             return None
         out.append(mapped)
@@ -250,7 +260,8 @@ def icu_workout_doc_to_bryton_fit(name: str, workout_doc: dict[str, Any]) -> byt
     if not isinstance(raw_steps, list) or not raw_steps:
         return None
 
-    steps = _flatten_steps(raw_steps)
+    lthr = _num(workout_doc.get("lthr"))
+    steps = _flatten_steps(raw_steps, lthr=lthr)
     if not steps:
         return None
 

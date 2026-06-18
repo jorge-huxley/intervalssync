@@ -7,6 +7,7 @@ from garmin_fit_sdk import Decoder, Stream
 from intervalssync.bryton.fit_encode import (
     BRYTON_FTP_OFFSET,
     TARGET_FTP,
+    TARGET_LTHR,
     icu_workout_doc_to_bryton_fit,
 )
 
@@ -81,6 +82,54 @@ def test_encode_power_value_with_resolved_watts_range():
     assert step["target_type"] == TARGET_FTP
     assert step["custom_target_value_low"] == 84 + BRYTON_FTP_OFFSET
     assert step["custom_target_value_high"] == 92 + BRYTON_FTP_OFFSET
+
+
+def test_encode_hr_steps_as_pct_lthr():
+    doc = {
+        "lthr": 176,
+        "target": "HR",
+        "steps": [
+            {
+                "duration": 600,
+                "hr": {"value": 1, "units": "hr_zone"},
+                "_hr": {"start": 96.0, "end": 120.0},
+            },
+            {
+                "reps": 10,
+                "steps": [
+                    {
+                        "duration": 120,
+                        "hr": {"value": 4, "units": "hr_zone"},
+                        "_hr": {"start": 167.0, "end": 185.0},
+                    },
+                    {
+                        "duration": 180,
+                        "hr": {"value": 3, "units": "hr_zone"},
+                        "_hr": {"start": 147.0, "end": 166.0},
+                    },
+                ],
+            },
+            {
+                "duration": 600,
+                "hr": {"value": 1, "units": "hr_zone"},
+                "_hr": {"start": 96.0, "end": 120.0},
+            },
+        ],
+    }
+    fit_bytes = icu_workout_doc_to_bryton_fit("HR test", doc)
+    assert fit_bytes is not None
+    steps = _decode(fit_bytes)["workout_step_mesgs"]
+    timed = [s for s in steps if s.get("duration_type") == "time"]
+    assert len(timed) == 4
+    assert timed[0]["target_type"] == TARGET_LTHR
+    assert timed[0]["custom_target_value_low"] == 55 + BRYTON_FTP_OFFSET
+    assert timed[0]["custom_target_value_high"] == 68 + BRYTON_FTP_OFFSET
+    assert timed[1]["custom_target_value_low"] == 95 + BRYTON_FTP_OFFSET
+    assert timed[1]["custom_target_value_high"] == 105 + BRYTON_FTP_OFFSET
+    assert timed[2]["custom_target_value_low"] == 84 + BRYTON_FTP_OFFSET
+    assert timed[2]["custom_target_value_high"] == 94 + BRYTON_FTP_OFFSET
+    assert timed[3]["custom_target_value_low"] == 55 + BRYTON_FTP_OFFSET
+    assert timed[3]["custom_target_value_high"] == 68 + BRYTON_FTP_OFFSET
 
 
 def test_encode_interval_repeat_block():
