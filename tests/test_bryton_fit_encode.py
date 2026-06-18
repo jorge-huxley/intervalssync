@@ -181,6 +181,48 @@ def test_encode_long_workout_name():
     assert messages["workout_mesgs"][0]["wkt_name"] == long_name
 
 
+def test_encode_power_zone_steps_from_resolved_watts():
+    doc = {
+        "ftp": 239,
+        "lthr": 176,
+        "target": "POWER",
+        "steps": [
+            {
+                "duration": 600,
+                "power": {"value": 2, "units": "power_zone", "target": "1s"},
+                "_power": {"start": 132.0, "end": 179.0},
+            },
+            {
+                "reps": 5,
+                "steps": [
+                    {
+                        "duration": 60,
+                        "power": {"value": 4, "units": "power_zone", "target": "1s"},
+                        "_power": {"start": 216.0, "end": 250.0},
+                    },
+                    {
+                        "duration": 120,
+                        "power": {"value": 3, "units": "power_zone", "target": "1s"},
+                        "_power": {"start": 180.0, "end": 215.0},
+                    },
+                ],
+            },
+        ],
+    }
+    fit_bytes = icu_workout_doc_to_bryton_fit("PWR test", doc)
+    assert fit_bytes is not None
+    steps = _decode(fit_bytes)["workout_step_mesgs"]
+    timed = [s for s in steps if s.get("duration_type") == "time"]
+    assert len(timed) == 3
+    assert timed[0]["target_type"] == TARGET_FTP
+    assert timed[0]["custom_target_value_low"] == 55 + BRYTON_FTP_OFFSET
+    assert timed[0]["custom_target_value_high"] == 75 + BRYTON_FTP_OFFSET
+    assert timed[1]["custom_target_value_low"] == 90 + BRYTON_FTP_OFFSET
+    assert timed[1]["custom_target_value_high"] == 105 + BRYTON_FTP_OFFSET
+    assert timed[2]["custom_target_value_low"] == 75 + BRYTON_FTP_OFFSET
+    assert timed[2]["custom_target_value_high"] == 90 + BRYTON_FTP_OFFSET
+
+
 def test_encode_open_duration_step():
     doc = {
         "steps": [
