@@ -165,6 +165,22 @@ def test_encode_returns_none_without_steps():
     assert icu_workout_doc_to_bryton_fit("Empty", {"steps": []}) is None
 
 
+def test_encode_long_workout_name():
+    long_name = "HR test - this is a big title (8x5m) SS with efforts"
+    doc = {
+        "steps": [
+            {
+                "duration": 3600,
+                "power": {"value": 100, "units": "%ftp"},
+            }
+        ],
+    }
+    fit_bytes = icu_workout_doc_to_bryton_fit(long_name, doc)
+    assert fit_bytes is not None
+    messages = _decode(fit_bytes)
+    assert messages["workout_mesgs"][0]["wkt_name"] == long_name
+
+
 def test_encode_open_duration_step():
     doc = {
         "steps": [

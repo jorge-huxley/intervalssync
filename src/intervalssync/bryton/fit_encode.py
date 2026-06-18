@@ -265,7 +265,7 @@ def icu_workout_doc_to_bryton_fit(name: str, workout_doc: dict[str, Any]) -> byt
     if not steps:
         return None
 
-    wkt_name = name.strip()[:16] or "Workout"
+    wkt_name = name.strip() or "Workout"
     encoder = Encoder()
     encoder.on_mesg(
         Profile["mesg_num"]["FILE_ID"],
