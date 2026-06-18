@@ -16,10 +16,8 @@ from garmin_fit_sdk import Encoder, Profile
 
 # Bryton custom target_type values (see woParser.js in Bryton web bundle).
 TARGET_FTP = 245
-TARGET_POWER = 4
 
 BRYTON_FTP_OFFSET = 100_000
-BRYTON_POWER_OFFSET = 1_000
 
 
 def _num(value: Any) -> float | None:
@@ -57,53 +55,58 @@ def _intensity(step: dict[str, Any]) -> str:
 
 
 def _power_range(step: dict[str, Any]) -> tuple[int, int, int] | None:
-    """Return (target_type, low, high) with Bryton value offsets applied."""
-    resolved = step.get("_power")
-    if isinstance(resolved, dict):
-        start = _num(resolved.get("start"))
-        end = _num(resolved.get("end"))
-        value = _num(resolved.get("value"))
-        min_v = start if start is not None else value
-        max_v = end if end is not None else value
-        if min_v is None and max_v is None:
-            return None
-        min_v = int(min_v if min_v is not None else max_v)
-        max_v = int(max_v if max_v is not None else min_v)
-        if min_v > max_v:
-            min_v, max_v = max_v, min_v
-        return (
-            TARGET_POWER,
-            min_v + BRYTON_POWER_OFFSET,
-            max_v + BRYTON_POWER_OFFSET,
-        )
+    """Return (target_type, low, high) with Bryton value offsets applied.
 
+    Bryton's web app encodes cycling targets as % FTP (target_type 245,
+    custom values + 100_000), not absolute watts (target_type 4, + 1_000).
+    """
     power = step.get("power")
+    resolved = step.get("_power")
+
     if not isinstance(power, dict):
         return None
 
     units = str(power.get("units") or "").lower()
-    start = _num(power.get("start"))
-    end = _num(power.get("end"))
-    value = _num(power.get("value"))
-    min_v = start if start is not None else value
-    max_v = end if end is not None else value
-    if min_v is None and max_v is None:
-        return None
-    min_v = int(min_v if min_v is not None else max_v)
-    max_v = int(max_v if max_v is not None else min_v)
-    if min_v > max_v:
-        min_v, max_v = max_v, min_v
+    pct_start = _num(power.get("start"))
+    pct_end = _num(power.get("end"))
+    pct_value = _num(power.get("value"))
 
-    if units == "%ftp":
-        return (
-            TARGET_FTP,
-            min_v + BRYTON_FTP_OFFSET,
-            max_v + BRYTON_FTP_OFFSET,
-        )
+    if units != "%ftp":
+        return None
+
+    min_pct: int | None
+    max_pct: int | None
+
+    if pct_start is not None and pct_end is not None:
+        min_pct = int(pct_start)
+        max_pct = int(pct_end)
+    elif pct_value is not None and isinstance(resolved, dict):
+        w_start = _num(resolved.get("start"))
+        w_end = _num(resolved.get("end"))
+        w_value = _num(resolved.get("value"))
+        if w_start is not None and w_end is not None:
+            ref = w_value
+            if ref is None or ref == 0:
+                ref = (w_start + w_end) / 2
+            if ref and ref != 0:
+                min_pct = int(round(w_start / ref * pct_value))
+                max_pct = int(round(w_end / ref * pct_value))
+            else:
+                min_pct = max_pct = int(pct_value)
+        else:
+            min_pct = max_pct = int(pct_value)
+    elif pct_value is not None:
+        min_pct = max_pct = int(pct_value)
+    else:
+        return None
+
+    if min_pct > max_pct:
+        min_pct, max_pct = max_pct, min_pct
+
     return (
-        TARGET_POWER,
-        min_v + BRYTON_POWER_OFFSET,
-        max_v + BRYTON_POWER_OFFSET,
+        TARGET_FTP,
+        min_pct + BRYTON_FTP_OFFSET,
+        max_pct + BRYTON_FTP_OFFSET,
     )
 
 

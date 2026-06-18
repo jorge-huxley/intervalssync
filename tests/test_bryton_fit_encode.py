@@ -6,9 +6,7 @@ from garmin_fit_sdk import Decoder, Stream
 
 from intervalssync.bryton.fit_encode import (
     BRYTON_FTP_OFFSET,
-    BRYTON_POWER_OFFSET,
     TARGET_FTP,
-    TARGET_POWER,
     icu_workout_doc_to_bryton_fit,
 )
 
@@ -52,6 +50,8 @@ def test_encode_resolved_power_watts():
             {
                 "duration": 480,
                 "warmup": True,
+                "ramp": True,
+                "power": {"start": 35, "end": 55, "units": "%ftp"},
                 "_power": {"start": 127, "end": 135},
             }
         ],
@@ -60,9 +60,27 @@ def test_encode_resolved_power_watts():
     assert fit_bytes is not None
     step = _decode(fit_bytes)["workout_step_mesgs"][0]
     assert step["intensity"] == "warmup"
-    assert step["target_type"] == "power"
-    assert step["custom_target_value_low"] == 127 + BRYTON_POWER_OFFSET
-    assert step["custom_target_value_high"] == 135 + BRYTON_POWER_OFFSET
+    assert step["target_type"] == TARGET_FTP
+    assert step["custom_target_value_low"] == 35 + BRYTON_FTP_OFFSET
+    assert step["custom_target_value_high"] == 55 + BRYTON_FTP_OFFSET
+
+
+def test_encode_power_value_with_resolved_watts_range():
+    doc = {
+        "steps": [
+            {
+                "duration": 300,
+                "power": {"value": 88, "units": "%ftp"},
+                "_power": {"start": 200, "end": 220, "value": 210},
+            }
+        ],
+    }
+    fit_bytes = icu_workout_doc_to_bryton_fit("Interval", doc)
+    assert fit_bytes is not None
+    step = _decode(fit_bytes)["workout_step_mesgs"][0]
+    assert step["target_type"] == TARGET_FTP
+    assert step["custom_target_value_low"] == 84 + BRYTON_FTP_OFFSET
+    assert step["custom_target_value_high"] == 92 + BRYTON_FTP_OFFSET
 
 
 def test_encode_interval_repeat_block():
