@@ -173,13 +173,22 @@ async def build_settings_view(
         prefix_icon=ft.Icons.FOLDER,
         helper="Dropbox path, e.g. /Fit files",
     )
-    dropbox_date_filenames = ft.Switch(
+    dropbox_date_filenames_switch = ft.Switch(
         label="Use date in Dropbox filenames",
         value=config.dropbox_date_filenames,
-        helper_text=(
-            "iGPSPORT: ride-0-YYYY-MM-DD-HH-MM-SS.fit · "
-            "Bryton: YYMMDDHHMMSS.fit"
-        ),
+    )
+    dropbox_date_filenames = ft.Column(
+        spacing=4,
+        tight=True,
+        controls=[
+            dropbox_date_filenames_switch,
+            ft.Text(
+                "iGPSPORT: ride-0-YYYY-MM-DD-HH-MM-SS.fit · "
+                "Bryton: YYMMDDHHMMSS.fit",
+                size=12,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            ),
+        ],
     )
     dropbox_status = ft.Text(
         (
@@ -440,7 +449,7 @@ async def build_settings_view(
         config.force_resync = force_resync.value
         config.activity_type = activity_type.value or ""
         config.dropbox_folder = dropbox_folder.value.strip() or DEFAULT_DROPBOX_FOLDER
-        config.dropbox_date_filenames = bool(dropbox_date_filenames.value)
+        config.dropbox_date_filenames = bool(dropbox_date_filenames_switch.value)
         config.upload_dropbox = bool(upload_dropbox.value)
 
         message = "Saved securely to your system credential store."
