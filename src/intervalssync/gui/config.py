@@ -1,8 +1,8 @@
 """Non-secret settings persisted as JSON in the per-user config directory.
 
 Secrets never live here — they go to the OS vault via `secrets.py`. This file
-holds the iGPSPORT username (an identifier, not a secret), the step toggles, the
-activity cap and the download directory.
+holds source usernames (identifiers, not secrets), step toggles, the activity
+cap and the download directory.
 """
 
 from __future__ import annotations
@@ -13,19 +13,22 @@ from pathlib import Path
 
 from platformdirs import user_config_dir, user_downloads_dir
 
-APP_NAME = "igpsport-intervals"
+APP_NAME = "intervalssync"
 
 CONFIG_DIR = Path(user_config_dir(APP_NAME, appauthor=False))
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 
 def _default_download_dir() -> str:
-    return str(Path(user_downloads_dir()) / "igpsport-fit")
+    return str(Path(user_downloads_dir()) / "intervalssync-fit")
 
 
 @dataclass
 class AppConfig:
+    enable_igpsport: bool = True
+    enable_bryton: bool = False
     igp_user: str = ""
+    bryton_user: str = ""
     max_activities: int = 5
     download_dir: str = field(default_factory=_default_download_dir)
     # Remove each .fit file once it has been uploaded to intervals.icu.
@@ -45,12 +48,18 @@ class AppConfig:
     # Optional secondary upload target. Off by default because most users only
     # want intervals.icu.
     upload_dropbox: bool = False
-    dropbox_folder: str = "/igpsport-fit"
+    dropbox_folder: str = "/intervalssync-fit"
     dropbox_date_filenames: bool = True
     # Planned workouts: intervals.icu event id → iGPSPORT workoutId.
     uploaded_workouts: dict[str, int] = field(default_factory=dict)
+    # Planned workouts: intervals.icu event id → Bryton file id or filename stem.
+    uploaded_bryton_workouts: dict[str, str] = field(default_factory=dict)
     # How many calendar days of planned workouts to upload (1 = today only).
     workout_days_ahead: int = 1
+
+
+def any_source_enabled(config: AppConfig) -> bool:
+    return config.enable_igpsport or config.enable_bryton
 
 
 def load() -> AppConfig:
@@ -59,7 +68,13 @@ def load() -> AppConfig:
     if CONFIG_PATH.exists():
         data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
-    return AppConfig(**{k: v for k, v in data.items() if k in AppConfig.__annotations__})
+    # Migrate legacy single-source picker (ignored on save going forward).
+    activity_source = data.pop("activity_source", None)
+    cfg = AppConfig(**{k: v for k, v in data.items() if k in AppConfig.__annotations__})
+    if activity_source == "bryton":
+        cfg.enable_bryton = True
+        cfg.enable_igpsport = False
+    return cfg
 
 
 def save(config: AppConfig) -> None:

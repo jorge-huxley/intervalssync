@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from igpsync import update_check
+from intervalssync.gui import update_check
 
 
 class FakeResponse:

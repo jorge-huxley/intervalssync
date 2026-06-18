@@ -1,0 +1,112 @@
+{
+  "errors": [],
+  "messages": {
+    "file_id_mesgs": [
+      {
+        "type": "workout",
+        "manufacturer": "development",
+        "time_created": "2026-06-18T00:20:09+00:00"
+      }
+    ],
+    "workout_mesgs": [
+      {
+        "wkt_name": "bsWO0618_011758",
+        "num_valid_steps": 8,
+        "sport": "cycling"
+      }
+    ],
+    "workout_step_mesgs": [
+      {
+        "wkt_step_name": "Warm Up",
+        "duration_value": 3000000,
+        "target_value": 0,
+        "custom_target_value_low": 100020,
+        "custom_target_value_high": 100040,
+        "message_index": 0,
+        "duration_type": "time",
+        "target_type": 245,
+        "intensity": "warmup",
+        "duration_time": 3000.0
+      },
+      {
+        "wkt_step_name": "Work",
+        "duration_value": 500000,
+        "target_value": 0,
+        "custom_target_value_low": 80,
+        "custom_target_value_high": 90,
+        "message_index": 1,
+        "duration_type": "distance",
+        "target_type": "cadence",
+        "intensity": "active",
+        "duration_distance": 5000.0,
+        "target_cadence_zone": 0,
+        "custom_target_cadence_low": 80,
+        "custom_target_cadence_high": 90
+      },
+      {
+        "duration_value": 1,
+        "target_value": 1,
+        "message_index": 2,
+        "duration_type": "repeat_until_steps_cmplt",
+        "duration_step": 1,
+        "repeat_steps": 1
+      },
+      {
+        "wkt_step_name": "Recovery",
+        "duration_value": 3000000,
+        "target_value": 0,
+        "custom_target_value_low": 100020,
+        "custom_target_value_high": 100040,
+        "message_index": 3,
+        "duration_type": "time",
+        "target_type": 249,
+        "intensity": "rest",
+        "duration_time": 3000.0
+      },
+      {
+        "wkt_step_name": "Cool Down",
+        "duration_value": 3000000,
+        "target_value": 0,
+        "custom_target_value_low": 100020,
+        "custom_target_value_high": 100040,
+        "message_index": 4,
+        "duration_type": "time",
+        "target_type": 248,
+        "intensity": "cooldown",
+        "duration_time": 3000.0
+      },
+      {
+        "wkt_step_name": "Work",
+        "duration_value": 500000,
+        "target_value": 0,
+        "custom_target_value_low": 100050,
+        "custom_target_value_high": 100070,
+        "message_index": 5,
+        "duration_type": "distance",
+        "target_type": 245,
+        "intensity": "active",
+        "duration_distance": 5000.0
+      },
+      {
+        "wkt_step_name": "Recovery",
+        "duration_value": 500000,
+        "target_value": 0,
+        "custom_target_value_low": 100050,
+        "custom_target_value_high": 100060,
+        "message_index": 6,
+        "duration_type": "distance",
+        "target_type": 245,
+        "intensity": "rest",
+        "duration_distance": 5000.0
+      },
+      {
+        "duration_value": 5,
+        "target_value": 1,
+        "message_index": 7,
+        "duration_type": "repeat_until_steps_cmplt",
+        "duration_step": 5,
+        "repeat_steps": 1
+      }
+    ]
+  }
+}

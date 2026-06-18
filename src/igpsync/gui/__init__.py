@@ -1,1 +1,0 @@
-"""Flet GUI for igpsync."""

@@ -14,12 +14,12 @@ from typing import Any, Callable
 
 import requests
 
+from .. import intervals_icu
 from .core import SyncError, login
 
 IGPS_API = "https://prod.en.igpsport.com"
 IGPS_WORKOUT_LIST_URL = f"{IGPS_API}/service/mobile/api/WorkOut/CustomWorkout"
 IGPS_WORKOUT_EDIT_URL = f"{IGPS_API}/service/mobile/api/WorkOut/EditCustomWorkOut"
-INTERVALS_EVENTS_URL = "https://intervals.icu/api/v1/athlete/0/events"
 
 # intervals.icu cycling types we accept in v1.
 _CYCLING_TYPES = frozenset(
@@ -42,15 +42,6 @@ Progress = Callable[[str], None]
 
 def _noop(_message: str) -> None:
     pass
-
-
-@dataclass
-class CalendarWorkout:
-    event_id: int
-    name: str
-    description: str
-    activity_type: str
-    workout_doc: dict[str, Any]
 
 
 @dataclass
@@ -156,42 +147,6 @@ def upload_custom_workout(
     payload = data.get("data") or {}
     workout_id = payload.get("workoutId")
     return int(workout_id) if workout_id is not None else None
-
-
-def fetch_calendar_workouts(
-    api_key: str,
-    oldest: date,
-    newest: date,
-) -> list[CalendarWorkout]:
-    """Fetch planned workouts from the intervals.icu calendar."""
-    resp = requests.get(
-        INTERVALS_EVENTS_URL,
-        params={
-            "category": "WORKOUT",
-            "resolve": "true",
-            "oldest": oldest.isoformat(),
-            "newest": newest.isoformat(),
-        },
-        auth=("API_KEY", api_key),
-    )
-    resp.raise_for_status()
-    workouts: list[CalendarWorkout] = []
-    for event in resp.json():
-        if event.get("category") != "WORKOUT":
-            continue
-        workout_doc = event.get("workout_doc")
-        if not isinstance(workout_doc, dict):
-            continue
-        workouts.append(
-            CalendarWorkout(
-                event_id=int(event["id"]),
-                name=str(event.get("name") or "Workout"),
-                description=str(event.get("description") or ""),
-                activity_type=str(event.get("type") or "Ride"),
-                workout_doc=workout_doc,
-            )
-        )
-    return workouts
 
 
 def _step_name(step: dict[str, Any], index: int) -> str:
@@ -475,7 +430,9 @@ def upload_workouts(
 
     report("Fetching planned workouts from intervals.icu…")
     try:
-        calendar = fetch_calendar_workouts(config.intervals_api_key, oldest, newest)
+        calendar = intervals_icu.fetch_calendar_workouts(
+            config.intervals_api_key, oldest, newest
+        )
     except requests.RequestException as exc:
         raise SyncError(f"Could not fetch intervals.icu workouts: {exc}") from exc
 

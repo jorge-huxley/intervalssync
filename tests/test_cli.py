@@ -2,18 +2,34 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 
 import pytest
 
-from igpsync import cli, cli_config, cli_env, core, workout
+cli = importlib.import_module("intervalssync.cli.main")
+from intervalssync.cli import config as cli_config
+from intervalssync.cli import env as cli_env
+from intervalssync.bryton import workout as bryton_workout
+from intervalssync.bryton.exceptions import BrytonSyncError
+from intervalssync.igpsport import core, workout
 
 
 def _write_env(path: Path, **overrides: str) -> None:
     values = {
-        cli_env.IGP_USER_KEY: "user@example.com",
-        cli_env.IGP_PASSWORD_KEY: "secret",
+        cli_env.IGPSPORT_USER_KEY: "user@example.com",
+        cli_env.IGPSPORT_PASSWORD_KEY: "secret",
+        cli_env.INTERVALS_API_KEY_KEY: "api-key-123",
+        **overrides,
+    }
+    lines = [f"{key}={value}" for key, value in values.items()]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+def _write_bryton_env(path: Path, **overrides: str) -> None:
+    values = {
+        cli_env.BRYTON_EMAIL_KEY: "rider@example.com",
+        cli_env.BRYTON_PASSWORD_KEY: "secret",
         cli_env.INTERVALS_API_KEY_KEY: "api-key-123",
         **overrides,
     }
@@ -24,21 +40,21 @@ def _write_env(path: Path, **overrides: str) -> None:
 def test_parse_dotenv_comments_and_quotes():
     text = """
 # comment
-IGPSYNC_IGP_USER="quoted@example.com"
-export IGPSYNC_IGP_PASSWORD=pass
-IGPSYNC_INTERVALS_API_KEY=key
+INTERVALSSYNC_IGPSPORT_USER="quoted@example.com"
+export INTERVALSSYNC_IGPSPORT_PASSWORD=pass
+INTERVALSSYNC_INTERVALS_API_KEY=key
 """
     parsed = cli_env.parse_dotenv(text)
-    assert parsed["IGPSYNC_IGP_USER"] == "quoted@example.com"
-    assert parsed["IGPSYNC_IGP_PASSWORD"] == "pass"
-    assert parsed["IGPSYNC_INTERVALS_API_KEY"] == "key"
+    assert parsed["INTERVALSSYNC_IGPSPORT_USER"] == "quoted@example.com"
+    assert parsed["INTERVALSSYNC_IGPSPORT_PASSWORD"] == "pass"
+    assert parsed["INTERVALSSYNC_INTERVALS_API_KEY"] == "key"
 
 
 def test_load_credentials_missing_keys(tmp_path: Path):
     env_file = tmp_path / ".env"
-    env_file.write_text("IGPSYNC_IGP_USER=only-user\n", encoding="utf-8")
+    env_file.write_text("INTERVALSSYNC_IGPSPORT_USER=only-user\n", encoding="utf-8")
 
-    with pytest.raises(cli_env.CliConfigError, match="IGPSYNC_IGP_PASSWORD"):
+    with pytest.raises(cli_env.CliConfigError, match="INTERVALSSYNC_IGPSPORT_PASSWORD"):
         cli_env.load_credentials(env_file)
 
 
@@ -90,14 +106,14 @@ def test_check_ok(tmp_path: Path, capsys):
 
 def test_check_missing_credentials(tmp_path: Path, capsys):
     env_file = tmp_path / ".env"
-    env_file.write_text("IGPSYNC_IGP_USER=incomplete\n", encoding="utf-8")
+    env_file.write_text("INTERVALSSYNC_IGPSPORT_USER=incomplete\n", encoding="utf-8")
 
     args = cli._build_parser().parse_args(["check", "--env-file", str(env_file), "--json"])
     assert cli.cmd_check(args) == cli.EXIT_CONFIG_ERROR
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
-    assert "IGPSYNC_IGP_PASSWORD" in payload["error"]
+    assert "INTERVALSSYNC_IGPSPORT_PASSWORD" in payload["error"]
 
 
 def test_sync_json_success(tmp_path: Path, monkeypatch, capsys):
@@ -116,7 +132,7 @@ def test_sync_json_success(tmp_path: Path, monkeypatch, capsys):
             activities=activities,
         )
 
-    monkeypatch.setattr(cli, "sync", fake_sync)
+    monkeypatch.setattr(cli, "igpsport_sync", fake_sync)
 
     args = cli._build_parser().parse_args(
         ["sync", "--env-file", str(env_file), "--json", "--download-dir", str(tmp_path / "dl")]
@@ -138,7 +154,7 @@ def test_sync_json_sync_error(tmp_path: Path, monkeypatch, capsys):
     def fake_sync(config, progress=None):
         raise core.SyncError("login failed")
 
-    monkeypatch.setattr(cli, "sync", fake_sync)
+    monkeypatch.setattr(cli, "igpsport_sync", fake_sync)
 
     args = cli._build_parser().parse_args(["sync", "--env-file", str(env_file), "--json"])
     assert cli.cmd_sync(args) == cli.EXIT_SYNC_ERROR
@@ -195,6 +211,7 @@ def test_upload_workouts_json_success(tmp_path: Path, monkeypatch, capsys):
     assert "uploading" in captured.err
     payload = json.loads(captured.out)
     assert payload["ok"] is True
+    assert payload["source"] == "igpsport"
     assert payload["uploaded"] == 1
     assert payload["skipped"] == 1
     assert payload["no_steps"] == 0
@@ -220,4 +237,65 @@ def test_upload_workouts_json_sync_error(tmp_path: Path, monkeypatch, capsys):
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
+    assert payload["source"] == "igpsport"
     assert payload["error"] == "fetch failed"
+
+
+def test_upload_workouts_bryton_json_success(tmp_path: Path, monkeypatch, capsys):
+    env_file = tmp_path / ".env"
+    _write_bryton_env(env_file)
+    monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
+
+    def fake_upload(config, progress=None):
+        if progress:
+            progress("uploading bryton")
+        return bryton_workout.BrytonWorkoutUploadResult(
+            listed=1,
+            uploaded=1,
+            uploaded_map={"99": "Morning_Ride"},
+        )
+
+    monkeypatch.setattr(cli, "bryton_upload_workouts", fake_upload)
+
+    args = cli._build_parser().parse_args(
+        [
+            "upload-workouts",
+            "--source",
+            "bryton",
+            "--env-file",
+            str(env_file),
+            "--json",
+        ]
+    )
+    assert cli.cmd_upload_workouts(args) == cli.EXIT_OK
+
+    captured = capsys.readouterr()
+    assert "uploading bryton" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["ok"] is True
+    assert payload["source"] == "bryton"
+    assert payload["uploaded"] == 1
+
+    loaded = cli_config.load()
+    assert loaded.uploaded_bryton_workouts == {"99": "Morning_Ride"}
+
+
+def test_upload_workouts_bryton_json_sync_error(tmp_path: Path, monkeypatch, capsys):
+    env_file = tmp_path / ".env"
+    _write_bryton_env(env_file)
+
+    def fake_upload(config, progress=None):
+        raise BrytonSyncError("bryton fetch failed")
+
+    monkeypatch.setattr(cli, "bryton_upload_workouts", fake_upload)
+
+    args = cli._build_parser().parse_args(
+        ["upload-workouts", "--source", "bryton", "--env-file", str(env_file), "--json"]
+    )
+    assert cli.cmd_upload_workouts(args) == cli.EXIT_SYNC_ERROR
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["source"] == "bryton"
+    assert payload["error"] == "bryton fetch failed"

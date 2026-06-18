@@ -17,6 +17,7 @@ from flet_secure_storage import SecureStorage
 
 # Logical secret keys.
 IGP_PASSWORD = "igp_password"
+BRYTON_PASSWORD = "bryton_password"
 INTERVALS_API_KEY = "intervals_api_key"
 DROPBOX_REFRESH_TOKEN = "dropbox_refresh_token"
 

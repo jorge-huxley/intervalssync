@@ -14,7 +14,7 @@ from requests.exceptions import HTTPError
 from ._dropbox_app_key import DROPBOX_APP_KEY as BUILD_DROPBOX_APP_KEY
 
 DROPBOX_APP_KEY_ENV = "IGPSYNC_DROPBOX_APP_KEY"
-DEFAULT_DROPBOX_FOLDER = "/igpsport-fit"
+DEFAULT_DROPBOX_FOLDER = "/intervalssync-fit"
 
 def get_dropbox_app_key() -> str | None:
     """Return the Dropbox app key from env or the build-stamped constant."""
@@ -97,7 +97,7 @@ def upload_to_dropbox(
         oauth2_refresh_token=refresh_token,
         app_key=app_key,
         timeout=100,
-        user_agent="igpsport-intervals",
+        user_agent="intervalssync",
     ) as dbx:
         with fit_path.open("rb") as f:
             dbx.files_upload(
@@ -122,7 +122,7 @@ def list_dropbox_fit_names(
         oauth2_refresh_token=refresh_token,
         app_key=app_key,
         timeout=100,
-        user_agent="igpsport-intervals",
+        user_agent="intervalssync",
     ) as dbx:
         try:
             result = dbx.files_list_folder(base)

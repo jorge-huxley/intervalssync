@@ -7,16 +7,27 @@ from typing import Awaitable, Callable
 import flet as ft
 from flet_permission_handler import Permission, PermissionHandler, PermissionStatus
 
-from .. import config as config_module
-from .. import secrets as secrets_module
-from ..core import CYCLING_ACTIVITY_TYPES
+from . import config as config_module
+from . import secrets as secrets_module
+from ..igpsport.core import CYCLING_ACTIVITY_TYPES
 from ..dropbox_client import (
     DEFAULT_DROPBOX_FOLDER,
     finish_dropbox_auth,
     get_dropbox_app_key,
     start_dropbox_auth,
 )
+from . import theme
 from .system import open_folder
+
+
+def _developer_step_controls(config: config_module.AppConfig) -> list[ft.Control]:
+    """Pipeline step toggles — not shown in Settings; kept for local/dev use."""
+    return [
+        ft.Switch(label="List activities", value=config.step_list_activities),
+        ft.Switch(label="Resolve download URLs", value=config.step_get_download_url),
+        ft.Switch(label="Download .fit files", value=config.step_download_fit),
+        ft.Switch(label="Upload to intervals.icu", value=config.step_upload_intervals),
+    ]
 
 
 async def build_settings_view(
@@ -27,57 +38,91 @@ async def build_settings_view(
     perms: PermissionHandler | None = None,
     apply_download_location: Callable[[], Awaitable[None]] | None = None,
 ) -> ft.Control:
-    """Return the settings card. `on_saved` is awaited after a successful save."""
+    colors = theme.palette(page)
 
-    # Prefetch the currently-stored secrets to prefill the fields.
-    existing_password = await store.get(secrets_module.IGP_PASSWORD) or ""
+    existing_igp_password = await store.get(secrets_module.IGP_PASSWORD) or ""
+    existing_bryton_password = await store.get(secrets_module.BRYTON_PASSWORD) or ""
     existing_api_key = await store.get(secrets_module.INTERVALS_API_KEY) or ""
     existing_dropbox_token = await store.get(secrets_module.DROPBOX_REFRESH_TOKEN)
     dropbox_app_key = get_dropbox_app_key()
 
-    igp_user = ft.TextField(
+    is_mobile = theme.is_mobile(page)
+
+    def _input_field(**kwargs: object) -> ft.TextField:
+        kwargs.setdefault("border_radius", theme.RADIUS_SM)
+        if is_mobile:
+            kwargs.setdefault("text_size", 14)
+        return ft.TextField(**kwargs)
+
+    enable_igpsport = ft.Switch(
+        label="Enable iGPSPORT",
+        value=config.enable_igpsport,
+        active_color=colors["accent"],
+    )
+    igp_user = _input_field(
         label="iGPSPORT email",
         value=config.igp_user,
-        prefix_icon=ft.Icons.PERSON,
+        prefix_icon=ft.Icons.PERSON_OUTLINED,
         autofocus=not config.igp_user,
     )
-    igp_password = ft.TextField(
+    igp_password = _input_field(
         label="iGPSPORT password",
-        value=existing_password,
-        prefix_icon=ft.Icons.LOCK,
+        value=existing_igp_password,
+        prefix_icon=ft.Icons.LOCK_OUTLINED,
         password=True,
         can_reveal_password=True,
     )
-    api_key = ft.TextField(
+
+    enable_bryton = ft.Switch(
+        label="Enable Bryton Active",
+        value=config.enable_bryton,
+        active_color=colors["accent"],
+    )
+    bryton_user = _input_field(
+        label="Bryton Active email",
+        value=config.bryton_user,
+        prefix_icon=ft.Icons.PERSON_OUTLINED,
+    )
+    bryton_password = _input_field(
+        label="Bryton Active password",
+        value=existing_bryton_password,
+        prefix_icon=ft.Icons.LOCK_OUTLINED,
+        password=True,
+        can_reveal_password=True,
+    )
+
+    api_key = _input_field(
         label="intervals.icu API key",
         value=existing_api_key,
-        prefix_icon=ft.Icons.KEY,
+        prefix_icon=ft.Icons.KEY_OUTLINED,
         password=True,
         can_reveal_password=True,
         helper="Settings → Developer on intervals.icu",
     )
 
-    max_activities = ft.TextField(
+    max_activities = _input_field(
         label="Activities to sync",
         value=str(config.max_activities),
         prefix_icon=ft.Icons.FORMAT_LIST_NUMBERED,
         keyboard_type=ft.KeyboardType.NUMBER,
-        width=220,
+        helper="Number of recent activities to sync on each run",
     )
 
-    workout_days_ahead = ft.TextField(
+    workout_days_ahead = _input_field(
         label="Workout upload window (days)",
         value=str(config.workout_days_ahead),
-        prefix_icon=ft.Icons.CALENDAR_MONTH,
+        prefix_icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
         keyboard_type=ft.KeyboardType.NUMBER,
-        width=220,
-        helper="Planned workouts from intervals.icu; 1 = today only",
+        helper=(
+            "Planned workouts from intervals.icu to upload to iGPSPORT and/or Bryton; "
+            "1 = today only"
+        ),
     )
 
     activity_type = ft.Dropdown(
         label="Activity type on intervals.icu",
         value=config.activity_type,
-        width=320,
+        border_radius=theme.RADIUS_SM,
         options=[
             ft.dropdown.Option(key="", text="Don't change (leave as uploaded)"),
             *(
@@ -90,11 +135,13 @@ async def build_settings_view(
     delete_after_upload = ft.Switch(
         label="Delete downloaded files after upload",
         value=config.delete_after_upload,
+        active_color=colors["accent"],
     )
 
     force_resync = ft.Switch(
         label="Force re-sync (re-download even if already uploaded)",
         value=config.force_resync,
+        active_color=colors["accent"],
     )
 
     upload_dropbox = ft.Switch(
@@ -105,16 +152,31 @@ async def build_settings_view(
             and bool(dropbox_app_key)
         ),
         disabled=not bool(existing_dropbox_token and dropbox_app_key),
+        active_color=colors["accent"],
     )
-    dropbox_folder = ft.TextField(
+    dropbox_folder = _input_field(
         label="Dropbox folder",
         value=config.dropbox_folder or DEFAULT_DROPBOX_FOLDER,
-        prefix_icon=ft.Icons.FOLDER,
+        prefix_icon=ft.Icons.FOLDER_OUTLINED,
         helper="Dropbox path, e.g. /Fit files",
     )
-    dropbox_date_filenames = ft.Switch(
+    dropbox_date_filenames_switch = ft.Switch(
         label="Use date in Dropbox filenames",
         value=config.dropbox_date_filenames,
+        active_color=colors["accent"],
+    )
+    dropbox_date_filenames = ft.Column(
+        spacing=4,
+        tight=True,
+        controls=[
+            dropbox_date_filenames_switch,
+            ft.Text(
+                "iGPSPORT: ride-0-YYYY-MM-DD-HH-MM-SS.fit · "
+                "Bryton: YYMMDDHHMMSS.fit",
+                size=12,
+                color=colors["text_muted"],
+            ),
+        ],
     )
     dropbox_status = ft.Text(
         (
@@ -125,17 +187,20 @@ async def build_settings_view(
             else "Not connected"
         ),
         size=13,
-        color=ft.Colors.ON_SURFACE_VARIANT,
+        color=colors["text_muted"],
     )
-    dropbox_auth_code = ft.TextField(
+    dropbox_auth_code = _input_field(
         label="Dropbox authorization code",
-        prefix_icon=ft.Icons.KEY,
+        prefix_icon=ft.Icons.KEY_OUTLINED,
         visible=False,
     )
     dropbox_finish_button = ft.OutlinedButton(
         "Finish connection",
         icon=ft.Icons.CHECK,
         visible=False,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_SM),
+        ),
     )
     dropbox_auth_flow = None
 
@@ -199,9 +264,12 @@ async def build_settings_view(
 
     dropbox_connect_button = ft.OutlinedButton(
         "Connect Dropbox",
-        icon=ft.Icons.CLOUD_UPLOAD,
+        icon=ft.Icons.CLOUD_UPLOAD_OUTLINED,
         disabled=not bool(dropbox_app_key),
         on_click=connect_dropbox,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_SM),
+        ),
     )
     dropbox_disconnect_button = ft.TextButton(
         "Disconnect",
@@ -212,19 +280,24 @@ async def build_settings_view(
     dropbox_finish_button.on_click = finish_dropbox
 
     dropbox_options = ft.ExpansionTile(
-        title=ft.Text("Dropbox"),
-        leading=ft.Icon(ft.Icons.CLOUD),
+        title=ft.Text("Dropbox", weight=ft.FontWeight.W_500),
+        subtitle=ft.Text(
+            dropbox_status.value or "Optional cloud backup",
+            size=12,
+            color=colors["text_muted"],
+        ),
+        leading=ft.Icon(ft.Icons.CLOUD_OUTLINED, color=colors["accent"]),
         affinity=ft.TileAffinity.LEADING,
         expanded=config.upload_dropbox,
         controls=[
             ft.Container(
-                padding=ft.Padding(left=16, top=0, right=16, bottom=8),
+                padding=ft.Padding(theme.SPACE_MD, 0, theme.SPACE_MD, theme.SPACE_SM),
                 content=ft.Column(
-                    spacing=8,
+                    spacing=theme.SPACE_SM,
                     controls=[
                         dropbox_status,
                         ft.Row(
-                            spacing=8,
+                            spacing=theme.SPACE_SM,
                             controls=[
                                 dropbox_connect_button,
                                 dropbox_disconnect_button,
@@ -241,100 +314,127 @@ async def build_settings_view(
         ],
     )
 
-    is_mobile = page.platform in {
-        ft.PagePlatform.ANDROID,
-        ft.PagePlatform.ANDROID_TV,
-        ft.PagePlatform.IOS,
-    }
-
-    # Android only: opt in to saving into the public Downloads folder (needs the
-    # "all files access" permission, requested on save). Off = app-private.
     save_to_downloads = ft.Switch(
         label="Save to phone's Downloads folder",
         value=config.save_to_downloads,
+        active_color=colors["accent"],
     )
 
-    # On desktop we show the path and an "open folder" button. On mobile the
-    # text depends on whether files go to the (browsable) Downloads folder or to
-    # app-private storage that no file manager can reach.
     if is_mobile:
         if config.save_to_downloads:
-            note = "Saved to your phone's Downloads folder (Download/igpsport-fit)."
+            note = "Saved to your phone's Downloads folder (Download/intervalssync-fit)."
         else:
             note = (
                 "Kept in the app's private storage and uploaded to intervals.icu "
                 "(removed afterwards unless you turn that off). Turn on “Save to "
                 "phone's Downloads folder” to keep them where you can find them."
             )
-        folder_detail = ft.Text(note, size=13, color=ft.Colors.ON_SURFACE_VARIANT)
+        folder_detail = ft.Text(note, size=13, color=colors["text_muted"])
         folder_trailing: ft.Control | None = None
     else:
         folder_detail = ft.Text(
             config.download_dir, size=13, selectable=True, no_wrap=False
         )
         folder_trailing = ft.IconButton(
-            ft.Icons.FOLDER_OPEN,
+            ft.Icons.FOLDER_OPEN_OUTLINED,
             tooltip="Open folder",
+            icon_color=colors["accent"],
             on_click=lambda _: open_folder(config.download_dir),
         )
 
-    download_folder_row = ft.Row(
-        spacing=8,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        controls=[
-            ft.Icon(ft.Icons.FOLDER, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Column(
-                expand=True,
-                spacing=0,
-                controls=[
-                    ft.Text("Download folder", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-                    folder_detail,
-                ],
-            ),
-            *( [folder_trailing] if folder_trailing else [] ),
-        ],
-    )
-
-    # Developer options — pick which pipeline steps run. Each step builds on
-    # the previous one (upload needs a download, which needs the FIT URL).
-    step_list = ft.Switch(label="List activities", value=config.step_list_activities)
-    step_url = ft.Switch(label="Resolve download URLs", value=config.step_get_download_url)
-    step_download = ft.Switch(label="Download .fit files", value=config.step_download_fit)
-    step_upload = ft.Switch(label="Upload to intervals.icu", value=config.step_upload_intervals)
-
-    developer_options = ft.ExpansionTile(
-        title=ft.Text("Developer options"),
-        leading=ft.Icon(ft.Icons.DEVELOPER_MODE),
-        affinity=ft.TileAffinity.LEADING,
-        expanded=False,
-        controls=[
-            ft.Container(
-                padding=ft.Padding(left=16, top=0, right=16, bottom=8),
-                content=ft.Column(
-                    spacing=4,
+    download_folder_row = ft.Container(
+        padding=theme.SPACE_MD,
+        bgcolor=colors["surface_alt"],
+        border_radius=theme.RADIUS_SM,
+        content=ft.Row(
+            spacing=theme.SPACE_SM,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Icon(ft.Icons.FOLDER_OUTLINED, color=colors["text_muted"], size=20),
+                ft.Column(
+                    expand=True,
+                    spacing=2,
                     controls=[
                         ft.Text(
-                            "Choose which steps run during a sync. Each step depends "
-                            "on the ones above it.",
+                            "Download folder",
                             size=12,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
+                            weight=ft.FontWeight.W_500,
+                            color=colors["text"],
                         ),
-                        step_list,
-                        step_url,
-                        step_download,
-                        step_upload,
+                        folder_detail,
                     ],
                 ),
-            )
-        ],
+                *( [folder_trailing] if folder_trailing else [] ),
+            ],
+        ),
     )
 
+    igp_credentials = ft.Column(
+        spacing=theme.SPACE_SM,
+        controls=[igp_user, igp_password],
+    )
+    bryton_credentials = ft.Column(
+        spacing=theme.SPACE_SM,
+        controls=[bryton_user, bryton_password],
+    )
+    workout_sync_section = ft.Container(
+        visible=config.enable_igpsport or config.enable_bryton,
+        content=workout_days_ahead,
+    )
+    dropbox_section = ft.Container(
+        visible=config.enable_igpsport or config.enable_bryton,
+        content=dropbox_options,
+    )
+
+    def update_source_visibility(_: ft.ControlEvent | None = None) -> None:
+        igp_credentials.visible = bool(enable_igpsport.value)
+        workout_sync_section.visible = bool(enable_igpsport.value or enable_bryton.value)
+        dropbox_section.visible = bool(enable_igpsport.value or enable_bryton.value)
+        bryton_credentials.visible = bool(enable_bryton.value)
+        page.update()
+
+    enable_igpsport.on_change = update_source_visibility
+    enable_bryton.on_change = update_source_visibility
+    update_source_visibility()
+
     async def save(_: ft.ControlEvent) -> None:
-        if not igp_user.value or not igp_password.value:
-            page.show_dialog(ft.SnackBar(ft.Text("iGPSPORT email and password are required.")))
+        if not enable_igpsport.value and not enable_bryton.value:
+            page.show_dialog(
+                ft.SnackBar(ft.Text("Enable at least one activity source."))
+            )
             return
 
+        igp_pw = igp_password.value or existing_igp_password
+        bryton_pw = bryton_password.value or existing_bryton_password
+
+        if enable_igpsport.value:
+            if not igp_user.value.strip():
+                page.show_dialog(
+                    ft.SnackBar(ft.Text("iGPSPORT email is required when enabled."))
+                )
+                return
+            if not igp_pw:
+                page.show_dialog(
+                    ft.SnackBar(ft.Text("iGPSPORT password is required when enabled."))
+                )
+                return
+
+        if enable_bryton.value:
+            if not bryton_user.value.strip():
+                page.show_dialog(
+                    ft.SnackBar(ft.Text("Bryton Active email is required when enabled."))
+                )
+                return
+            if not bryton_pw:
+                page.show_dialog(
+                    ft.SnackBar(ft.Text("Bryton Active password is required when enabled."))
+                )
+                return
+
+        config.enable_igpsport = bool(enable_igpsport.value)
+        config.enable_bryton = bool(enable_bryton.value)
         config.igp_user = igp_user.value.strip()
+        config.bryton_user = bryton_user.value.strip()
         try:
             config.max_activities = max(1, int(max_activities.value))
         except (TypeError, ValueError):
@@ -348,12 +448,8 @@ async def build_settings_view(
         config.delete_after_upload = delete_after_upload.value
         config.force_resync = force_resync.value
         config.activity_type = activity_type.value or ""
-        config.step_list_activities = step_list.value
-        config.step_get_download_url = step_url.value
-        config.step_download_fit = step_download.value
-        config.step_upload_intervals = step_upload.value
         config.dropbox_folder = dropbox_folder.value.strip() or DEFAULT_DROPBOX_FOLDER
-        config.dropbox_date_filenames = bool(dropbox_date_filenames.value)
+        config.dropbox_date_filenames = bool(dropbox_date_filenames_switch.value)
         config.upload_dropbox = bool(upload_dropbox.value)
 
         message = "Saved securely to your system credential store."
@@ -370,7 +466,6 @@ async def build_settings_view(
         if is_mobile:
             want_downloads = bool(save_to_downloads.value)
             if want_downloads and perms is not None:
-                # Requesting an already-granted permission just returns GRANTED.
                 status = await perms.request(Permission.MANAGE_EXTERNAL_STORAGE)
                 if status != PermissionStatus.GRANTED:
                     want_downloads = False
@@ -382,7 +477,10 @@ async def build_settings_view(
             config.save_to_downloads = want_downloads
         config_module.save(config)
 
-        await store.set(secrets_module.IGP_PASSWORD, igp_password.value)
+        if igp_password.value:
+            await store.set(secrets_module.IGP_PASSWORD, igp_password.value)
+        if bryton_password.value:
+            await store.set(secrets_module.BRYTON_PASSWORD, bryton_password.value)
         if api_key.value:
             await store.set(secrets_module.INTERVALS_API_KEY, api_key.value)
         else:
@@ -394,37 +492,63 @@ async def build_settings_view(
         page.show_dialog(ft.SnackBar(ft.Text(message)))
         await on_saved()
 
-    return ft.Card(
-        content=ft.Container(
-            padding=24,
-            content=ft.Column(
-                spacing=16,
+    save_button = ft.FilledButton(
+        content=ft.Row(
+            tight=True,
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[
+                ft.Icon(ft.Icons.SAVE_OUTLINED, size=20),
+                ft.Text("Save settings", font_family=f"{theme.FONT_BODY}Medium"),
+            ],
+        ),
+        on_click=save,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_SM),
+            padding=ft.Padding(theme.SPACE_XL, theme.SPACE_MD, theme.SPACE_XL, theme.SPACE_MD),
+        ),
+    )
+
+    return ft.Column(
+        spacing=theme.SPACE_LG,
+        controls=[
+            ft.Column(
+                spacing=theme.SPACE_SM,
                 controls=[
-                    ft.Text("Account", size=20, weight=ft.FontWeight.BOLD),
-                    ft.Text(
-                        "Your password and API key are stored in your operating "
-                        "system's secure credential vault, never in a file.",
-                        size=12,
-                        color=ft.Colors.ON_SURFACE_VARIANT,
-                    ),
-                    igp_user,
-                    igp_password,
-                    api_key,
-                    max_activities,
-                    workout_days_ahead,
-                    activity_type,
-                    delete_after_upload,
-                    force_resync,
-                    dropbox_options,
-                    *([save_to_downloads] if is_mobile else []),
-                    download_folder_row,
-                    developer_options,
-                    ft.FilledButton(
-                        "Save",
-                        icon=ft.Icons.SAVE,
-                        on_click=save,
+                    theme.display_text("Settings", size=26, color=colors["text"]),
+                    theme.muted_text(
+                        "Credentials are stored in your operating system's secure vault, "
+                        "never in a plain file.",
+                        page,
                     ),
                 ],
             ),
-        ),
+            theme.settings_section(
+                page,
+                "Accounts",
+                api_key,
+                enable_igpsport,
+                igp_credentials,
+                enable_bryton,
+                bryton_credentials,
+                subtitle="Enable sources and sign in to each service.",
+            ),
+            theme.settings_section(
+                page,
+                "Sync behavior",
+                max_activities,
+                activity_type,
+                delete_after_upload,
+                force_resync,
+                workout_sync_section,
+            ),
+            theme.settings_section(
+                page,
+                "Storage",
+                *([save_to_downloads] if is_mobile else []),
+                download_folder_row,
+            ),
+            dropbox_section,
+            save_button,
+            ft.Container(height=theme.SPACE_MD),
+        ],
     )

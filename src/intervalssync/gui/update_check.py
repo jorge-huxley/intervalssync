@@ -9,7 +9,7 @@ from __future__ import annotations
 import requests
 from packaging.version import InvalidVersion, Version
 
-REPO = "jorge-huxley/igpsport-intervals"
+REPO = "jorge-huxley/intervalssync"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
 

@@ -1,9 +1,9 @@
 [project]
-name = "igpsport-intervals"
+name = "intervalssync"
 # Placeholder. The real version comes from the git tag, injected by CI at build
 # time (see .github/workflows/release.yml). Local/dev builds report 0.0.0+dev.
 version = "0.0.0"
-description = "Export cycling activities from iGPSPORT and upload them to intervals.icu"
+description = "Sync cycling activities from iGPSPORT or Bryton Active to intervals.icu"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -13,16 +13,18 @@ dependencies = [
     "flet>=0.85.3",
     "flet-permission-handler>=0.85.3",
     "flet-secure-storage>=0.85.3",
+    "garmin-fit-sdk>=21.208.0",
     "packaging>=26.2",
     "platformdirs>=4.0",
     "requests>=2.33.1",
+    "websocket-client>=1.8.0",
 ]
 
 [project.scripts]
-igpsync = "igpsync.cli:main"
+intervalssync = "intervalssync.cli:main"
 
 [project.gui-scripts]
-igpsync-gui = "igpsync.gui.app:main"
+intervalssync-gui = "intervalssync.gui.app:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
@@ -36,15 +38,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/igpsync"]
+packages = ["src/intervalssync"]
 
 [tool.flet]
 # Used by `flet build`. The product name shown to end users.
-product = "iGPSPORT to intervals.icu"
-company = "igpsport-intervals"
+product = "intervals.icu Sync"
+company = "intervalssync"
 # Reverse-DNS app identifier (Android package / iOS bundle id). No hyphens
 # allowed in the segments. Change if you fork.
-bundle_id = "io.github.jorgehuxley.igpsync"
+bundle_id = "io.github.jorgehuxley.intervalssync"
 
 # Android permissions baked into AndroidManifest.xml by `flet build apk`.
 # MANAGE_EXTERNAL_STORAGE ("all files access") + the legacy storage perms let

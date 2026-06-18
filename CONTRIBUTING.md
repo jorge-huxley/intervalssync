@@ -1,7 +1,7 @@
 # Contributing
 
-Thanks for your interest in improving **iGPSPORT → intervals.icu**! This guide
-covers how to set up the project, make a change, and open a pull request.
+Thanks for your interest in improving **intervalssync**! This guide covers how to
+set up the project, make a change, and open a pull request.
 
 ## Prerequisites
 
@@ -11,8 +11,8 @@ covers how to set up the project, make a change, and open a pull request.
 ## Setup
 
 ```bash
-git clone https://github.com/jorge-huxley/igpsport-intervals.git
-cd igpsport-intervals
+git clone https://github.com/jorge-huxley/intervalssync.git
+cd intervalssync
 uv sync          # installs runtime + dev dependencies into .venv
 ```
 
@@ -37,21 +37,21 @@ change can be merged.
 
 ## Project layout
 
-The code is split into three layers so the app can later target mobile with
-minimal change (see `CLAUDE.md` for the full picture):
+See `CLAUDE.md` for the full picture:
 
-- `src/igpsync/core.py` — pure sync logic (no UI, no side effects)
-- `src/igpsync/config.py` + `secrets.py` — settings (JSON) and secrets (OS vault)
-- `src/igpsync/gui/` — the Flet UI (`main.py` / `igpsync-gui` entry)
-- `src/igpsync/cli.py` — headless CLI (`igpsync` entry; see `docs/AGENT.md`)
+- `src/intervalssync/` — package root (CLI, GUI, config, shared `intervals_icu.py`)
+- `src/intervalssync/igpsport/` — iGPSPORT activity sync + workout upload
+- `src/intervalssync/bryton/` — Bryton Active activity sync
+- `src/intervalssync/gui/` — Flet UI (`intervalssync-gui` entry)
 
-Keep new logic in `core` testable and UI-free; the GUI and CLI should stay thin.
+Keep source logic testable and UI-free; CLI/GUI stay thin orchestration.
 
 ## Working on the Dropbox upload (optional)
 
-Dropbox is an optional, off-by-default upload target, so you only need to set
-this up if you're working on that feature — without a key the Dropbox switch in
-Settings stays disabled and the rest of the app works normally.
+Dropbox is an optional, off-by-default upload target in the **GUI** (iGPSPORT
+and Bryton sync). The headless CLI uploads to intervals.icu only. You only need
+to set this up if you're working on that feature — without a key the Dropbox
+switch in Settings stays disabled and the rest of the app works normally.
 
 The app authenticates with Dropbox using the **PKCE** OAuth flow, which needs a
 Dropbox **app key**. Releases get the key stamped in by CI from a repository
@@ -107,7 +107,7 @@ git push origin v0.1.0
 ```
 
 The workflow builds the Windows app **and the Android APK** on clean runners and
-attaches both (`igpsport-intervals-windows.zip` and an `.apk`) to a new GitHub
+attaches both (`intervalssync-v*-windows.zip` and an `.apk`) to a new GitHub
 Release. Watch it run under the repo's **Actions** tab; the result appears under
 **Releases**.
 

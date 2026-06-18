@@ -6,7 +6,8 @@ from datetime import date
 
 import pytest
 
-from igpsync import workout
+from intervalssync import intervals_icu
+from intervalssync.igpsport import workout
 
 
 class FakeResponse:
@@ -123,34 +124,6 @@ def test_icu_workout_doc_includes_existing_id_for_update():
     assert body["data"]["id"] == "5012"
 
 
-def test_fetch_calendar_workouts(monkeypatch):
-    monkeypatch.setattr(
-        workout.requests,
-        "get",
-        lambda *a, **k: FakeResponse(
-            json_data=[
-                {
-                    "id": 100,
-                    "category": "WORKOUT",
-                    "name": "Big Gear",
-                    "description": "Strength",
-                    "type": "Ride",
-                    "workout_doc": {"steps": [{"duration": 120}]},
-                },
-                {
-                    "id": 101,
-                    "category": "NOTE",
-                    "name": "Rest day",
-                },
-            ]
-        ),
-    )
-    items = workout.fetch_calendar_workouts("key", date(2026, 6, 1), date(2026, 6, 14))
-    assert len(items) == 1
-    assert items[0].event_id == 100
-    assert items[0].name == "Big Gear"
-
-
 def test_upload_custom_workout_returns_id(monkeypatch):
     monkeypatch.setattr(
         workout.requests.Session,
@@ -217,10 +190,10 @@ def test_upload_workouts_skips_already_uploaded(monkeypatch):
     monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
     monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: {100})
     monkeypatch.setattr(
-        workout,
+        intervals_icu,
         "fetch_calendar_workouts",
         lambda *a, **k: [
-            workout.CalendarWorkout(
+            intervals_icu.CalendarWorkout(
                 event_id=42,
                 name="Done",
                 description="",
@@ -252,10 +225,10 @@ def test_upload_workouts_reuploads_when_deleted_on_igpsport(monkeypatch):
     monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
     monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: set())
     monkeypatch.setattr(
-        workout,
+        intervals_icu,
         "fetch_calendar_workouts",
         lambda *a, **k: [
-            workout.CalendarWorkout(
+            intervals_icu.CalendarWorkout(
                 event_id=42,
                 name="Done",
                 description="",
@@ -283,10 +256,10 @@ def test_upload_workouts_force_resync_updates_live_workout(monkeypatch):
     monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
     monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: {100})
     monkeypatch.setattr(
-        workout,
+        intervals_icu,
         "fetch_calendar_workouts",
         lambda *a, **k: [
-            workout.CalendarWorkout(
+            intervals_icu.CalendarWorkout(
                 event_id=42,
                 name="Update me",
                 description="",
@@ -317,7 +290,7 @@ def test_upload_workouts_force_resync_updates_live_workout(monkeypatch):
 def test_upload_workouts_prunes_stale_config_entries(monkeypatch):
     monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
     monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: set())
-    monkeypatch.setattr(workout, "fetch_calendar_workouts", lambda *a, **k: [])
+    monkeypatch.setattr(intervals_icu, "fetch_calendar_workouts", lambda *a, **k: [])
 
     cfg = workout.WorkoutUploadConfig(
         igp_user="u",
@@ -333,10 +306,10 @@ def test_upload_workouts_uploads_new_workout(monkeypatch):
     monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
     monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: set())
     monkeypatch.setattr(
-        workout,
+        intervals_icu,
         "fetch_calendar_workouts",
         lambda *a, **k: [
-            workout.CalendarWorkout(
+            intervals_icu.CalendarWorkout(
                 event_id=7,
                 name="New",
                 description="",
@@ -361,10 +334,10 @@ def test_upload_workouts_skips_non_cycling_type(monkeypatch):
     monkeypatch.setattr(workout, "login", lambda s, u, p: {"Authorization": "Bearer t"})
     monkeypatch.setattr(workout, "fetch_all_custom_workout_ids", lambda *a, **k: set())
     monkeypatch.setattr(
-        workout,
+        intervals_icu,
         "fetch_calendar_workouts",
         lambda *a, **k: [
-            workout.CalendarWorkout(
+            intervals_icu.CalendarWorkout(
                 event_id=1,
                 name="Run",
                 description="",
@@ -398,7 +371,7 @@ def test_upload_workouts_one_day_window_uses_today_only(monkeypatch):
         captured["newest"] = newest
         return []
 
-    monkeypatch.setattr(workout, "fetch_calendar_workouts", fake_fetch)
+    monkeypatch.setattr(intervals_icu, "fetch_calendar_workouts", fake_fetch)
 
     workout.upload_workouts(
         workout.WorkoutUploadConfig(

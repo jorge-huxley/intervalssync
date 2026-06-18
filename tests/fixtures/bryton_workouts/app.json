@@ -1,0 +1,101 @@
+{
+  "errors": [],
+  "messages": {
+    "file_id_mesgs": [
+      {
+        "type": "workout",
+        "manufacturer": "bryton",
+        "time_created": "2046-06-17T00:19:14+00:00"
+      }
+    ],
+    "workout_mesgs": [
+      {
+        "wkt_name": "app",
+        "num_valid_steps": 7,
+        "sport": "cycling"
+      }
+    ],
+    "workout_step_mesgs": [
+      {
+        "wkt_step_name": "Warm Up",
+        "duration_value": 1200000,
+        "target_value": 0,
+        "custom_target_value_low": 100040,
+        "custom_target_value_high": 100050,
+        "message_index": 0,
+        "duration_type": "time",
+        "target_type": 245,
+        "intensity": "warmup",
+        "duration_time": 1200.0
+      },
+      {
+        "wkt_step_name": "Work",
+        "duration_value": 600000,
+        "target_value": 0,
+        "custom_target_value_low": 100070,
+        "custom_target_value_high": 100080,
+        "message_index": 1,
+        "duration_type": "time",
+        "target_type": 245,
+        "intensity": "active",
+        "duration_time": 600.0
+      },
+      {
+        "wkt_step_name": "Recovery",
+        "duration_value": 300000,
+        "target_value": 0,
+        "custom_target_value_low": 100050,
+        "custom_target_value_high": 100060,
+        "message_index": 2,
+        "duration_type": "time",
+        "target_type": 245,
+        "intensity": "rest",
+        "duration_time": 300.0
+      },
+      {
+        "wkt_step_name": "Work",
+        "duration_value": 600000,
+        "target_value": 0,
+        "custom_target_value_low": 100070,
+        "custom_target_value_high": 100080,
+        "message_index": 3,
+        "duration_type": "time",
+        "target_type": 245,
+        "intensity": "active",
+        "duration_time": 600.0
+      },
+      {
+        "wkt_step_name": "Recovery",
+        "duration_value": 300000,
+        "target_value": 0,
+        "custom_target_value_low": 100050,
+        "custom_target_value_high": 100060,
+        "message_index": 4,
+        "duration_type": "time",
+        "target_type": 245,
+        "intensity": "rest",
+        "duration_time": 300.0
+      },
+      {
+        "duration_value": 3,
+        "target_value": 1,
+        "message_index": 5,
+        "duration_type": "repeat_until_steps_cmplt",
+        "duration_step": 3,
+        "repeat_steps": 1
+      },
+      {
+        "wkt_step_name": "Cool Down",
+        "duration_value": 600000,
+        "target_value": 0,
+        "custom_target_value_low": 100040,
+        "custom_target_value_high": 100050,
+        "message_index": 6,
+        "duration_type": "time",
+        "target_type": 245,
+        "intensity": "cooldown",
+        "duration_time": 600.0
+      }
+    ]
+  }
+}

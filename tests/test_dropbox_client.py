@@ -10,8 +10,8 @@ from dropbox.files import FileMetadata, FolderMetadata, ListFolderError
 from dropbox.files import LookupError as DbxLookupError
 from requests.exceptions import HTTPError
 
-from igpsync import dropbox_client
-from igpsync.dropbox_client import (
+from intervalssync import dropbox_client
+from intervalssync.dropbox_client import (
     dropbox_path_for,
     finish_dropbox_auth,
     list_dropbox_fit_names,
@@ -62,7 +62,7 @@ def test_list_dropbox_fit_names_returns_fit_files(monkeypatch):
     monkeypatch.setattr(
         dropbox_client.dropbox, "Dropbox", lambda **kw: _FakeDbx([_page(entries)])
     )
-    assert list_dropbox_fit_names("/igpsport-fit", "token", "key") == {
+    assert list_dropbox_fit_names("/intervalssync-fit", "token", "key") == {
         "igpsport_1.fit",
         "ride-0-2026-06-03-17-23-53.fit",
     }
@@ -76,7 +76,7 @@ def test_list_dropbox_fit_names_follows_pagination(monkeypatch):
     monkeypatch.setattr(
         dropbox_client.dropbox, "Dropbox", lambda **kw: _FakeDbx(pages)
     )
-    assert list_dropbox_fit_names("/igpsport-fit", "token", "key") == {
+    assert list_dropbox_fit_names("/intervalssync-fit", "token", "key") == {
         "igpsport_1.fit",
         "ride-0-2026-06-03-17-23-53.fit",
     }
@@ -94,7 +94,7 @@ def test_list_dropbox_fit_names_returns_empty_when_folder_missing(monkeypatch):
     monkeypatch.setattr(
         dropbox_client.dropbox, "Dropbox", lambda **kw: _MissingDbx([])
     )
-    assert list_dropbox_fit_names("/igpsport-fit", "token", "key") == set()
+    assert list_dropbox_fit_names("/intervalssync-fit", "token", "key") == set()
 
 
 class _FailingFlow:
