@@ -138,22 +138,3 @@ git tag v0.2.5 && git push origin v0.2.5
 The tag points at the hotfix commit, so the build contains just the fix — none
 of master's unreleased work. The merge into master (step 4) is separate and
 happens *after* tagging.
-
-### Rebrand release notes (v0.3.0+)
-
-When publishing the first **intervals.icu Sync** release after merging the Bryton
-branch and renaming the repo to `intervalssync`, paste something like this into
-the GitHub Release description (in addition to auto-generated notes):
-
-```markdown
-## Breaking changes
-
-- **Product:** iGPSPORT-only → multi-source (iGPSPORT + Bryton Active); app title is now **intervals.icu Sync**
-- **CLI:** `igpsync` → `intervalssync`; env vars `IGPSYNC_IGP_*` → `INTERVALSSYNC_IGPSPORT_*` / `INTERVALSSYNC_BRYTON_*`
-- **Android:** new bundle id (`io.github.jorgehuxley.intervalssync`) — requires a fresh install; won't update in-place over the old APK
-- **Windows:** executable is now `intervalssync.exe` (was `igpsync.exe`)
-- **Repository:** moved to [jorge-huxley/intervalssync](https://github.com/jorge-huxley/intervalssync) (old links redirect)
-```
-
-After merging, rename the repo (Settings → General → **intervalssync**), update
-your local `origin` URL, then tag and push.
