@@ -1,5 +1,7 @@
 # Intervals Sync
 
+**Sync iGPSPORT/Bryton activities and planned workouts with Intervals.icu.**
+
 [![License: MIT](https://img.shields.io/github/license/jorge-huxley/intervalssync)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/downloads/)
 [![Tests](https://github.com/jorge-huxley/intervalssync/actions/workflows/test.yml/badge.svg)](https://github.com/jorge-huxley/intervalssync/actions/workflows/test.yml)
@@ -12,6 +14,20 @@
 **iGPSPORT** or **Bryton Active**. Enter your credentials once, press **Sync**, and
 your latest rides land on intervals.icu. You can also push planned workouts from
 intervals.icu to **iGPSPORT** or **Bryton Active**. Free and open source, for **Windows** and **Android**.
+
+<p align="center">
+  <img src="docs/img/demo.gif" alt="Intervals Sync syncing rides to intervals.icu, skipping ones already uploaded" width="300">
+</p>
+
+<details>
+  <summary><b>More screenshots</b></summary>
+  <br>
+  <p align="center">
+    <img src="docs/img/sync.png" alt="Sync screen" width="260">
+    &nbsp;&nbsp;
+    <img src="docs/img/settings.png" alt="Settings screen with secure credential fields" width="260">
+  </p>
+</details>
 
 ## Features
 
