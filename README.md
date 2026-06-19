@@ -1,19 +1,35 @@
-# Intervals Sync
+<p align="center">
+  <img src="assets/icon.png" width="120" alt="Intervals Sync logo">
+</p>
 
-**Sync iGPSPORT/Bryton activities and planned workouts with Intervals.icu.**
+<h1 align="center">Intervals Sync</h1>
 
-[![License: MIT](https://img.shields.io/github/license/jorge-huxley/intervalssync)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/downloads/)
-[![Tests](https://github.com/jorge-huxley/intervalssync/actions/workflows/test.yml/badge.svg)](https://github.com/jorge-huxley/intervalssync/actions/workflows/test.yml)
-[![GitHub release](https://img.shields.io/github/v/release/jorge-huxley/intervalssync)](https://github.com/jorge-huxley/intervalssync/releases)
-[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Android-lightgrey)](#download--run-windows)
-[![Stars](https://img.shields.io/github/stars/jorge-huxley/intervalssync?label=stars)](https://github.com/jorge-huxley/intervalssync/stargazers)
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/jorge_huxley)
+<p align="center">
+  <strong>The missing intervals.icu sync tool for iGPSPORT and Bryton users.</strong>
+</p>
 
-**Intervals Sync** is a small, friendly app that syncs your cycling activities to **intervals.icu** from
-**iGPSPORT** or **Bryton Active**. Enter your credentials once, press **Sync**, and
-your latest rides land on intervals.icu. You can also push planned workouts from
-intervals.icu to **iGPSPORT** or **Bryton Active**. Free and open source, for **Windows** and **Android**.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/jorge-huxley/intervalssync?style=flat" alt="License: MIT" /></a>
+  <a href="https://github.com/jorge-huxley/intervalssync/releases"><img src="https://img.shields.io/github/v/release/jorge-huxley/intervalssync?style=flat&sort=semver" alt="GitHub release" /></a>
+  <a href="https://github.com/jorge-huxley/intervalssync/releases"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20Android-lightgrey?style=flat" alt="Platforms" /></a>
+  <a href="https://github.com/jorge-huxley/intervalssync/stargazers"><img src="https://img.shields.io/github/stars/jorge-huxley/intervalssync?style=flat&label=stars" alt="GitHub stars" /></a>
+
+</p>
+
+<p align="center">
+  <a href="https://ko-fi.com/jorge_huxley"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="ko-fi" /></a>
+</p>
+
+<p align="center">
+  Enter your credentials once, press <strong>Sync</strong>, and your latest rides from
+  <strong>iGPSPORT</strong> or <strong>Bryton Active</strong> land on <strong>intervals.icu</strong>. You can also push
+  planned workouts from intervals.icu back to iGPSPORT or Bryton Active.
+  Free and open source, for <strong>Windows</strong> and <strong>Android</strong>.
+</p>
+
+---
+
+<br>
 
 <p align="center">
   <img src="docs/img/demo.gif" alt="Intervals Sync syncing rides to intervals.icu, skipping ones already uploaded" width="300">
