@@ -444,31 +444,57 @@ async def build_settings_view(
             on_click=lambda _: open_folder(config.download_dir),
         )
 
-    download_folder_row = ft.Container(
-        padding=theme.SPACE_MD,
-        bgcolor=colors["surface_alt"],
-        border_radius=theme.RADIUS_SM,
-        content=ft.Row(
-            spacing=theme.SPACE_SM,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            controls=[
-                ft.Icon(ft.Icons.FOLDER_OUTLINED, color=colors["text_muted"], size=20),
-                ft.Column(
-                    expand=True,
-                    spacing=2,
-                    controls=[
-                        ft.Text(
-                            "Download folder",
-                            size=12,
-                            weight=ft.FontWeight.W_500,
-                            color=colors["text"],
-                        ),
-                        folder_detail,
-                    ],
-                ),
-                *( [folder_trailing] if folder_trailing else [] ),
-            ],
+    storage_inner_controls: list[ft.Control]
+    if is_mobile:
+        storage_inner_controls = [save_to_downloads, folder_detail]
+    else:
+        storage_inner_controls = [
+            ft.Row(
+                spacing=theme.SPACE_SM,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                controls=[
+                    ft.Column(
+                        expand=True,
+                        spacing=2,
+                        controls=[
+                            ft.Text(
+                                "Download folder",
+                                size=12,
+                                weight=ft.FontWeight.W_500,
+                                color=colors["text"],
+                            ),
+                            folder_detail,
+                        ],
+                    ),
+                    *( [folder_trailing] if folder_trailing else [] ),
+                ],
+            )
+        ]
+
+    storage_options = ft.ExpansionTile(
+        title=ft.Text("Storage", weight=ft.FontWeight.W_500),
+        subtitle=ft.Text(
+            (
+                "Save to Downloads or app storage"
+                if is_mobile
+                else config.download_dir
+            ),
+            size=12,
+            color=colors["text_muted"],
+            max_lines=1,
+            overflow=ft.TextOverflow.ELLIPSIS,
         ),
+        leading=ft.Icon(ft.Icons.FOLDER_OUTLINED, color=colors["accent"]),
+        affinity=ft.TileAffinity.LEADING,
+        controls=[
+            ft.Container(
+                padding=ft.Padding(theme.SPACE_MD, 0, theme.SPACE_MD, theme.SPACE_SM),
+                content=ft.Column(
+                    spacing=theme.SPACE_SM,
+                    controls=storage_inner_controls,
+                ),
+            )
+        ],
     )
 
     igp_credentials = ft.Column(
@@ -652,13 +678,8 @@ async def build_settings_view(
                 workout_sync_section,
             ),
             profile_sync_section,
-            theme.settings_section(
-                page,
-                "Storage",
-                *([save_to_downloads] if is_mobile else []),
-                download_folder_row,
-            ),
             dropbox_section,
+            storage_options,
             save_button,
             ft.Container(height=theme.SPACE_MD),
         ],
