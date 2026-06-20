@@ -17,6 +17,7 @@ from . import secrets as secrets_module
 from .update_check import RELEASES_PAGE, check_for_update
 from .settings_view import build_settings_view
 from .sync_view import build_sync_view
+from . import profile_sync_ui
 from . import theme
 
 
@@ -228,6 +229,10 @@ async def _app(page: ft.Page) -> None:
     async def show_settings(_: ft.ControlEvent | None = None) -> None:
         nonlocal current_tab
         current_tab = _TAB_SETTINGS
+
+        async def on_profile_sync_check() -> None:
+            await profile_sync_ui.prompt_if_needed(page, config, store)
+
         body.content = _scrollable(
             await build_settings_view(
                 page,
@@ -236,6 +241,7 @@ async def _app(page: ft.Page) -> None:
                 on_saved=show_sync,
                 perms=perms,
                 apply_download_location=apply_download_location,
+                on_profile_sync_check=on_profile_sync_check,
             )
         )
         header_slot.content = _header()
@@ -299,7 +305,13 @@ async def _app(page: ft.Page) -> None:
         latest = await asyncio.to_thread(check_for_update, __version__)
         notify_update(latest, quiet_when_current=True)
 
+    async def auto_check_profile_sync() -> None:
+        if not config.enable_igpsport or not config.profile_sync_check_on_launch:
+            return
+        await profile_sync_ui.prompt_if_needed(page, config, store)
+
     page.run_task(auto_check_updates)
+    page.run_task(auto_check_profile_sync)
 
 
 def main() -> None:

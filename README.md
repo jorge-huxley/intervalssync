@@ -63,7 +63,8 @@
 - Optionally deletes the local `.fit` files after a successful upload
 - Stores your credentials in the **OS secure vault** (Windows Credential Manager / Android Keystore), never in a file
 - Lets you know when a newer version is available
-- **Headless CLI** — activity sync and workout upload from the terminal, with JSON output and exit codes for automation and AI agents (see [CLI & automation](#cli--automation-ai-agents))
+- **Sync zones to iGPSPORT** — push FTP, LTHR, max HR, and power/HR zones from intervals.icu into your iGPSPORT profile (Settings → iGPSPORT profile, or `intervalssync sync-zones`; the app prompts on launch when thresholds differ)
+- **Headless CLI** — activity sync, workout upload, and iGPSPORT zone/threshold sync from the terminal, with JSON output and exit codes for automation and AI agents (see [CLI & automation](#cli--automation-ai-agents))
 
 > Prefer the terminal, or want to help out? It's open source (Python + [Flet](https://flet.dev), MIT) — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -92,7 +93,7 @@ isn't on the Play Store, so the "unknown source" prompt is expected.
 
 ## CLI & automation (AI agents)
 
-Headless `intervalssync` CLI — sync from iGPSPORT or Bryton, upload workouts to iGPSPORT or Bryton, JSON on stdout. See [Agent / headless sync](docs/AGENT.md).
+Headless `intervalssync` CLI — sync from iGPSPORT or Bryton, upload workouts to iGPSPORT or Bryton, sync thresholds and zones to iGPSPORT, JSON on stdout. See [Agent / headless sync](docs/AGENT.md).
 
 ## Run from source
 

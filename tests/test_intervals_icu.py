@@ -63,3 +63,25 @@ def test_fetch_sport_settings_max_hr(monkeypatch):
     assert intervals_icu.fetch_sport_settings_max_hr("api-key", "Ride") == 193.0
     assert captured["url"].endswith("/sport-settings/Ride")
     assert captured["auth"] == ("API_KEY", "api-key")
+
+
+def test_fetch_sport_settings(monkeypatch):
+    monkeypatch.setattr(
+        intervals_icu.requests.Session,
+        "get",
+        lambda self, *a, **k: FakeResponse(
+            json_data={
+                "ftp": 242,
+                "lthr": 176,
+                "max_hr": 193,
+                "power_zones": [55, 75, 90, 105, 120, 999],
+                "hr_zones": [120, 146, 166, 185, 193],
+            }
+        ),
+    )
+    settings = intervals_icu.fetch_sport_settings("api-key", "Ride")
+    assert settings.ftp == 242.0
+    assert settings.lthr == 176.0
+    assert settings.max_hr == 193.0
+    assert settings.power_zones == [55.0, 75.0, 90.0, 105.0, 120.0, 999.0]
+    assert settings.hr_zones == [120.0, 146.0, 166.0, 185.0, 193.0]

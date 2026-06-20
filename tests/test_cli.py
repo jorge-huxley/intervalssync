@@ -299,3 +299,63 @@ def test_upload_workouts_bryton_json_sync_error(tmp_path: Path, monkeypatch, cap
     assert payload["ok"] is False
     assert payload["source"] == "bryton"
     assert payload["error"] == "bryton fetch failed"
+
+
+def test_sync_zones_parser_accepts_flags():
+    args = cli._build_parser().parse_args(["sync-zones", "--sport", "Ride", "--json"])
+    assert args.command == "sync-zones"
+    assert args.sport == "Ride"
+    assert args.json is True
+
+
+def test_sync_zones_json_success(tmp_path: Path, monkeypatch, capsys):
+    from intervalssync.igpsport import profile_sync as igp_profile_sync
+
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+
+    def fake_sync(config, progress=None):
+        if progress:
+            progress("syncing zones")
+        return igp_profile_sync.ProfileSyncResult(
+            before={"member": {"ftp": 240, "mhr": 190, "lthr": 150}},
+            after={
+                "member": {"ftp": 242, "mhr": 193, "lthr": 176},
+                "power": [{"start": 0, "end": 133}],
+                "heartRate": [{"start": 0, "end": 120}],
+            },
+        )
+
+    monkeypatch.setattr(cli, "sync_profile_zones", fake_sync)
+
+    args = cli._build_parser().parse_args(
+        ["sync-zones", "--env-file", str(env_file), "--json"]
+    )
+    assert cli.cmd_sync_zones(args) == cli.EXIT_OK
+
+    captured = capsys.readouterr()
+    assert "syncing zones" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["ok"] is True
+    assert payload["source"] == "igpsport"
+    assert payload["ftp"] == 242
+    assert payload["mhr"] == 193
+
+
+def test_sync_zones_json_sync_error(tmp_path: Path, monkeypatch, capsys):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+
+    def fake_sync(config, progress=None):
+        raise core.SyncError("profile update failed")
+
+    monkeypatch.setattr(cli, "sync_profile_zones", fake_sync)
+
+    args = cli._build_parser().parse_args(
+        ["sync-zones", "--env-file", str(env_file), "--json"]
+    )
+    assert cli.cmd_sync_zones(args) == cli.EXIT_SYNC_ERROR
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["error"] == "profile update failed"

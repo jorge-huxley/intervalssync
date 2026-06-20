@@ -46,7 +46,8 @@ uv run intervalssync check                    # iGPSPORT keys
 uv run intervalssync check --source bryton      # Bryton keys
 ```
 
-Optional: `--env-file /path/to/.env`.
+Optional: `--env-file /path/to/.env` on the **intervalssync** command (e.g.
+`uv run intervalssync sync-zones --env-file .env`), not as a `uv run` flag.
 
 ## Agent invocation
 
@@ -86,6 +87,45 @@ uv run intervalssync upload-workouts --source bryton --json        # Bryton Acti
 
 Requires credentials for the chosen target. Same exit-code rules.
 
+### Zone sync (intervals.icu → iGPSPORT profile)
+
+```bash
+uv run intervalssync sync-zones --env-file .env --json
+```
+
+- **iGPSPORT-only** (no `--source` flag)
+- Reads FTP, LTHR, max HR, power zones, and HR zones from intervals.icu `sport-settings/Ride` (override with `--sport`)
+- Writes them to iGPSPORT via the mobile `UserIntervalInfo` API
+- Progress on **stderr**; result JSON on **stdout**; same exit codes as other commands
+
+Success example:
+
+```json
+{
+  "ok": true,
+  "source": "igpsport",
+  "before": {
+    "ftp": 240,
+    "lthr": 153,
+    "mhr": 193,
+    "power_zones": "0-132 | 132-180 | …",
+    "hr_zones": "0-120 | …"
+  },
+  "ftp": 242,
+  "lthr": 176,
+  "mhr": 193,
+  "power_zones": "0-133 | 133-182 | …",
+  "hr_zones": "0-120 | 120-146 | …",
+  "after": {
+    "ftp": 242,
+    "lthr": 176,
+    "mhr": 193,
+    "power_zones": "0-133 | 133-182 | …",
+    "hr_zones": "0-120 | 120-146 | …"
+  }
+}
+```
+
 ## Optional flags
 
 | Flag | Purpose |
@@ -93,6 +133,7 @@ Requires credentials for the chosen target. Same exit-code rules.
 | `--source {igpsport,bryton}` | Activity source or workout upload target (default: igpsport) |
 | `--env-file PATH` | Override secrets file |
 | `--json` | JSON on stdout |
+| `--sport TYPE` | intervals.icu sport-settings key for `sync-zones` (default: Ride) |
 
 `sync` flags: `--max-activities`, `--force-resync`, `--activity-type`, `--download-dir`, `--keep-files`.
 
@@ -102,6 +143,7 @@ Requires credentials for the chosen target. Same exit-code rules.
 |---------|-------------|
 | `intervalssync sync` | Download recent rides → upload to intervals.icu |
 | `intervalssync upload-workouts` | Planned workouts → iGPSPORT or Bryton (`--source`) |
+| `intervalssync sync-zones` | Push thresholds + zones from intervals.icu → iGPSPORT profile |
 | `intervalssync check` | Validate `.env` keys (no network) |
 
 ## CLI config
@@ -122,3 +164,7 @@ Non-secret defaults in `intervalssync-cli` `config.json` (`platformdirs`). Secre
 ### Workout upload
 
 Same as GUI **Upload to iGPSPORT** / **Upload to Bryton** — intervals.icu calendar → custom workouts on the chosen device platform.
+
+### Zone sync
+
+Reads FTP, LTHR, max HR, and power/HR zones from intervals.icu sport settings and writes them to the iGPSPORT profile (CLI only for now).

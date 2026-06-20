@@ -20,6 +20,12 @@ from ..igpsport.core import SyncConfig as IgpSyncConfig
 from ..igpsport.core import SyncError as IgpSyncError
 from ..igpsport.core import SyncResult as IgpSyncResult
 from ..igpsport.core import sync as igpsport_sync
+from ..igpsport.profile_sync import (
+    ProfileSyncConfig,
+    ProfileSyncResult,
+    result_payload as profile_sync_result_payload,
+    sync_profile_zones,
+)
 from ..bryton.workout import (
     BrytonWorkoutUploadConfig,
     BrytonWorkoutUploadResult,
@@ -452,6 +458,59 @@ def cmd_upload_workouts(args: argparse.Namespace) -> int:
     return EXIT_OK if ok else EXIT_SYNC_ERROR
 
 
+def cmd_sync_zones(args: argparse.Namespace) -> int:
+    config = cli_config_module.load()
+    use_json = args.json
+
+    try:
+        env_path = resolve_env_path(
+            env_file=Path(args.env_file) if args.env_file else None,
+            config_env_file=config.env_file or None,
+        )
+        credentials = load_credentials(env_path, source="igpsport")
+    except CliConfigError as exc:
+        if use_json:
+            _emit_json({"ok": False, "source": "igpsport", "error": str(exc)})
+        else:
+            print(exc, file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    sync_config = ProfileSyncConfig(
+        igp_user=credentials.igp_user,
+        igp_password=credentials.igp_password,
+        intervals_api_key=credentials.intervals_api_key,
+        sport=args.sport,
+    )
+
+    def progress(message: str) -> None:
+        print(message, file=sys.stderr)
+
+    try:
+        result = sync_profile_zones(sync_config, progress=progress)
+    except IgpSyncError as exc:
+        if use_json:
+            _emit_json(profile_sync_result_payload(ProfileSyncResult(None, None), ok=False, error=str(exc)))
+        else:
+            print(f"✗ {exc}", file=sys.stderr)
+        return EXIT_SYNC_ERROR
+    except Exception as exc:  # noqa: BLE001
+        if use_json:
+            _emit_json(profile_sync_result_payload(ProfileSyncResult(None, None), ok=False, error=str(exc)))
+        else:
+            print(f"✗ Unexpected error: {exc}", file=sys.stderr)
+        return EXIT_SYNC_ERROR
+
+    if use_json:
+        _emit_json(profile_sync_result_payload(result, ok=True))
+    else:
+        summary = profile_sync_result_payload(result, ok=True)
+        print(
+            f"Done — FTP {summary.get('ftp')}, LTHR {summary.get('lthr')}, "
+            f"MHR {summary.get('mhr')} synced to iGPSPORT."
+        )
+    return EXIT_OK
+
+
 def _add_source_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--source",
@@ -542,6 +601,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Re-upload workouts even if already on the target device platform.",
     )
     upload_workouts_parser.set_defaults(func=cmd_upload_workouts)
+
+    sync_zones_parser = subparsers.add_parser(
+        "sync-zones",
+        parents=[common],
+        help="Push FTP, LTHR, max HR, and zones from intervals.icu to iGPSPORT.",
+    )
+    sync_zones_parser.add_argument(
+        "--sport",
+        default="Ride",
+        metavar="TYPE",
+        help='intervals.icu sport-settings key (default: "Ride").',
+    )
+    sync_zones_parser.set_defaults(func=cmd_sync_zones)
 
     return parser
 

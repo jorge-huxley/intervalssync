@@ -28,6 +28,15 @@ class CalendarWorkout:
     workout_doc: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SportSettings:
+    ftp: float | None
+    lthr: float | None
+    max_hr: float | None
+    power_zones: list[float]
+    hr_zones: list[float]
+
+
 def _num(value: Any) -> float | None:
     if value is None:
         return None
@@ -35,6 +44,17 @@ def _num(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _num_list(value: Any) -> list[float]:
+    if not isinstance(value, list):
+        return []
+    out: list[float] = []
+    for item in value:
+        num = _num(item)
+        if num is not None:
+            out.append(num)
+    return out
 
 
 def upload_fit_file(
@@ -121,13 +141,13 @@ def fetch_calendar_workouts(
     return workouts
 
 
-def fetch_sport_settings_max_hr(
+def fetch_sport_settings(
     api_key: str,
-    sport: str,
+    sport: str = "Ride",
     *,
     http: requests.Session | None = None,
-) -> float | None:
-    """Return athlete max HR (bpm) from intervals.icu sport settings."""
+) -> SportSettings:
+    """Return athlete thresholds and zone definitions from intervals.icu sport settings."""
     client = http or requests.Session()
     resp = client.get(
         f"{INTERVALS_SPORT_SETTINGS_URL}/{sport}",
@@ -137,5 +157,21 @@ def fetch_sport_settings_max_hr(
     resp.raise_for_status()
     data = resp.json()
     if not isinstance(data, dict):
-        return None
-    return _num(data.get("max_hr"))
+        return SportSettings(None, None, None, [], [])
+    return SportSettings(
+        ftp=_num(data.get("ftp")),
+        lthr=_num(data.get("lthr")),
+        max_hr=_num(data.get("max_hr")),
+        power_zones=_num_list(data.get("power_zones")),
+        hr_zones=_num_list(data.get("hr_zones")),
+    )
+
+
+def fetch_sport_settings_max_hr(
+    api_key: str,
+    sport: str,
+    *,
+    http: requests.Session | None = None,
+) -> float | None:
+    """Return athlete max HR (bpm) from intervals.icu sport settings."""
+    return fetch_sport_settings(api_key, sport, http=http).max_hr

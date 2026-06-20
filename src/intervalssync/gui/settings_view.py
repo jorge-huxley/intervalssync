@@ -17,6 +17,7 @@ from ..dropbox_client import (
     start_dropbox_auth,
 )
 from . import theme
+from . import profile_sync_ui
 from .system import open_folder
 
 
@@ -37,6 +38,7 @@ async def build_settings_view(
     on_saved: Callable[[], Awaitable[None]],
     perms: PermissionHandler | None = None,
     apply_download_location: Callable[[], Awaitable[None]] | None = None,
+    on_profile_sync_check: Callable[[], Awaitable[None]] | None = None,
 ) -> ft.Control:
     colors = theme.palette(page)
 
@@ -314,6 +316,106 @@ async def build_settings_view(
         ],
     )
 
+    profile_sync_status = ft.Text(
+        "Checking…",
+        size=12,
+        color=colors["text_muted"],
+        max_lines=2,
+        no_wrap=False,
+        overflow=ft.TextOverflow.ELLIPSIS,
+    )
+    profile_sync_hint = ft.Text(
+        "Add iGPSPORT credentials and intervals.icu API key first.",
+        size=12,
+        color=colors["text_muted"],
+        visible=False,
+    )
+    profile_sync_message_area = ft.Container(
+        height=34,
+        content=ft.Column(
+            tight=True,
+            spacing=0,
+            controls=[profile_sync_status, profile_sync_hint],
+        ),
+        alignment=ft.Alignment.TOP_LEFT,
+    )
+    profile_sync_button = ft.OutlinedButton(
+        "Sync profile now",
+        icon=ft.Icons.SYNC,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_SM),
+        ),
+    )
+    profile_sync_check_on_launch = ft.Switch(
+        label="Check on app launch",
+        value=config.profile_sync_check_on_launch,
+        active_color=colors["accent"],
+    )
+    profile_sync_actions = ft.Row(
+        spacing=theme.SPACE_MD,
+        alignment=ft.MainAxisAlignment.CENTER,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            profile_sync_button,
+            profile_sync_check_on_launch,
+        ],
+    )
+
+    async def refresh_profile_sync_status() -> None:
+        creds = await profile_sync_ui.credentials_ready(config, store)
+        if creds is None:
+            profile_sync_status.visible = False
+            profile_sync_hint.visible = True
+            profile_sync_button.disabled = True
+            page.update()
+            return
+
+        profile_sync_hint.visible = False
+        profile_sync_status.visible = True
+        profile_sync_button.disabled = False
+        profile_sync_status.value = "Checking…"
+        page.update()
+        status = await profile_sync_ui.check_profile_thresholds(config, store)
+        profile_sync_status.value = profile_sync_ui.format_threshold_status(status)
+        page.update()
+
+    async def on_profile_sync_click(_: ft.ControlEvent) -> None:
+        profile_sync_button.disabled = True
+        page.update()
+        await profile_sync_ui.sync_with_feedback(page, config, store)
+        await refresh_profile_sync_status()
+
+    profile_sync_button.on_click = on_profile_sync_click
+
+    async def on_profile_tile_change(e: ft.ControlEvent) -> None:
+        if e.control.expanded:
+            await refresh_profile_sync_status()
+
+    profile_sync_options = ft.ExpansionTile(
+        title=ft.Text("iGPSPORT profile", weight=ft.FontWeight.W_500),
+        subtitle=ft.Text(
+            "FTP, LTHR, max HR, and zones from intervals.icu",
+            size=12,
+            color=colors["text_muted"],
+        ),
+        leading=ft.Icon(ft.Icons.MONITOR_HEART_OUTLINED, color=colors["accent"]),
+        affinity=ft.TileAffinity.LEADING,
+        on_change=on_profile_tile_change,
+        controls=[
+            ft.Container(
+                padding=ft.Padding(theme.SPACE_MD, 0, theme.SPACE_MD, theme.SPACE_SM),
+                content=ft.Column(
+                    tight=True,
+                    spacing=theme.SPACE_XS,
+                    controls=[
+                        profile_sync_message_area,
+                        profile_sync_actions,
+                    ],
+                ),
+            )
+        ],
+    )
+
     save_to_downloads = ft.Switch(
         label="Save to phone's Downloads folder",
         value=config.save_to_downloads,
@@ -385,11 +487,16 @@ async def build_settings_view(
         visible=config.enable_igpsport or config.enable_bryton,
         content=dropbox_options,
     )
+    profile_sync_section = ft.Container(
+        visible=config.enable_igpsport,
+        content=profile_sync_options,
+    )
 
     def update_source_visibility(_: ft.ControlEvent | None = None) -> None:
         igp_credentials.visible = bool(enable_igpsport.value)
         workout_sync_section.visible = bool(enable_igpsport.value or enable_bryton.value)
         dropbox_section.visible = bool(enable_igpsport.value or enable_bryton.value)
+        profile_sync_section.visible = bool(enable_igpsport.value)
         bryton_credentials.visible = bool(enable_bryton.value)
         page.update()
 
@@ -447,6 +554,7 @@ async def build_settings_view(
             workout_days_ahead.value = "1"
         config.delete_after_upload = delete_after_upload.value
         config.force_resync = force_resync.value
+        config.profile_sync_check_on_launch = bool(profile_sync_check_on_launch.value)
         config.activity_type = activity_type.value or ""
         config.dropbox_folder = dropbox_folder.value.strip() or DEFAULT_DROPBOX_FOLDER
         config.dropbox_date_filenames = bool(dropbox_date_filenames_switch.value)
@@ -491,6 +599,8 @@ async def build_settings_view(
 
         page.show_dialog(ft.SnackBar(ft.Text(message)))
         await on_saved()
+        if on_profile_sync_check is not None and config.enable_igpsport:
+            await on_profile_sync_check()
 
     save_button = ft.FilledButton(
         content=ft.Row(
@@ -541,6 +651,7 @@ async def build_settings_view(
                 force_resync,
                 workout_sync_section,
             ),
+            profile_sync_section,
             theme.settings_section(
                 page,
                 "Storage",
