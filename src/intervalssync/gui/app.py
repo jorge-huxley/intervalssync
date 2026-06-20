@@ -182,7 +182,6 @@ async def _app(page: ft.Page) -> None:
                         "GitHub",
                         url="https://github.com/jorge-huxley/intervalssync",
                     ),
-                    ft.TextButton("Ko-fi", url=support_gamification.KOFI_URL),
                     ft.TextButton("Close", on_click=lambda _: page.pop_dialog()),
                 ],
             )
