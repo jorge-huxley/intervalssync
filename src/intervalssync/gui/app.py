@@ -18,6 +18,7 @@ from .update_check import RELEASES_PAGE, check_for_update
 from .settings_view import build_settings_view
 from .sync_view import build_sync_view
 from . import profile_sync_ui
+from . import support_gamification
 from . import theme
 
 
@@ -181,6 +182,7 @@ async def _app(page: ft.Page) -> None:
                         "GitHub",
                         url="https://github.com/jorge-huxley/intervalssync",
                     ),
+                    ft.TextButton("Ko-fi", url=support_gamification.KOFI_URL),
                     ft.TextButton("Close", on_click=lambda _: page.pop_dialog()),
                 ],
             )
@@ -222,11 +224,17 @@ async def _app(page: ft.Page) -> None:
                             ),
                         ],
                     ),
-                    ft.IconButton(
-                        icon=ft.Icons.INFO_OUTLINE,
-                        tooltip="About",
-                        icon_color=colors["text_muted"],
-                        on_click=show_about,
+                    ft.Row(
+                        spacing=0,
+                        controls=[
+                            support_gamification.kofi_header_button(page),
+                            ft.IconButton(
+                                icon=ft.Icons.INFO_OUTLINE,
+                                tooltip="About",
+                                icon_color=colors["text_muted"],
+                                on_click=show_about,
+                            ),
+                        ],
                     ),
                 ],
             ),

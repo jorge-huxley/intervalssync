@@ -22,6 +22,11 @@ def test_defaults():
     assert cfg.uploaded_workouts == {}
     assert cfg.uploaded_bryton_workouts == {}
     assert cfg.workout_days_ahead == 1
+    assert cfg.lifetime_activities_uploaded == 0
+    assert cfg.lifetime_workouts_uploaded == 0
+    assert cfg.celebrated_milestones == []
+    assert cfg.stats_seeded is False
+    assert config_module.total_uploads(cfg) == 0
     assert config_module.any_source_enabled(cfg) is True
 
 
@@ -108,6 +113,50 @@ def test_load_migrates_activity_source_igpsport(tmp_path, monkeypatch):
     assert loaded.enable_igpsport is True
     assert loaded.enable_bryton is False
     assert loaded.igp_user == "u@x.com"
+
+
+def test_load_seeds_workout_stats_from_maps(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps(
+            {
+                "uploaded_workouts": {"evt1": 101, "evt2": 102},
+                "uploaded_bryton_workouts": {"evt3": "file-a"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_module, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config_module, "CONFIG_PATH", path)
+
+    loaded = config_module.load()
+    assert loaded.lifetime_workouts_uploaded == 3
+    assert loaded.lifetime_activities_uploaded == 0
+    assert loaded.stats_seeded is True
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["lifetime_workouts_uploaded"] == 3
+    assert saved["stats_seeded"] is True
+
+
+def test_save_and_load_lifetime_stats(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    monkeypatch.setattr(config_module, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config_module, "CONFIG_PATH", path)
+
+    cfg = config_module.AppConfig(
+        lifetime_activities_uploaded=42,
+        lifetime_workouts_uploaded=8,
+        celebrated_milestones=[1, 5, 10],
+        stats_seeded=True,
+    )
+    config_module.save(cfg)
+
+    loaded = config_module.load()
+    assert loaded.lifetime_activities_uploaded == 42
+    assert loaded.lifetime_workouts_uploaded == 8
+    assert loaded.celebrated_milestones == [1, 5, 10]
+    assert loaded.stats_seeded is True
+    assert config_module.total_uploads(loaded) == 50
 
 
 def test_save_and_load_igp_region(tmp_path, monkeypatch):

@@ -61,6 +61,15 @@ class AppConfig:
     profile_sync_declined_fingerprint: str = ""
     # Prompt on launch when FTP, LTHR, or max HR differ from intervals.icu.
     profile_sync_check_on_launch: bool = True
+    # Lifetime sync stats (GUI gamification).
+    lifetime_activities_uploaded: int = 0
+    lifetime_workouts_uploaded: int = 0
+    celebrated_milestones: list[int] = field(default_factory=list)
+    stats_seeded: bool = False
+
+
+def total_uploads(config: AppConfig) -> int:
+    return config.lifetime_activities_uploaded + config.lifetime_workouts_uploaded
 
 
 def any_source_enabled(config: AppConfig) -> bool:
@@ -79,6 +88,12 @@ def load() -> AppConfig:
     if activity_source == "bryton":
         cfg.enable_bryton = True
         cfg.enable_igpsport = False
+    if not cfg.stats_seeded:
+        cfg.lifetime_workouts_uploaded = len(cfg.uploaded_workouts) + len(
+            cfg.uploaded_bryton_workouts
+        )
+        cfg.stats_seeded = True
+        save(cfg)
     return cfg
 
 
