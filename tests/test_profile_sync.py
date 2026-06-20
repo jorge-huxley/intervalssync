@@ -5,6 +5,7 @@ from __future__ import annotations
 from intervalssync.igpsport.profile_sync import (
     ProfileSyncConfig,
     apply_intervals_settings,
+    compare_profile_thresholds,
 )
 from intervalssync.intervals_icu import SportSettings
 
@@ -49,6 +50,87 @@ def test_apply_intervals_settings_keeps_other_member_fields():
     settings = SportSettings(242, 176, 193, [55, 75, 90, 105, 120, 999], [120, 146, 166, 185, 193])
     updated = apply_intervals_settings(body, settings)
     assert updated["member"]["quietHeartRate"] == 60
+
+
+def _ride_settings(**overrides: object) -> SportSettings:
+    defaults = {
+        "ftp": 242,
+        "lthr": 176,
+        "max_hr": 193,
+        "power_zones": [55, 75, 90, 105, 120, 999],
+        "hr_zones": [120, 146, 166, 185, 193],
+    }
+    defaults.update(overrides)
+    return SportSettings(**defaults)
+
+
+def test_compare_profile_thresholds_in_sync():
+    body = apply_intervals_settings(_igpsport_payload(), _ride_settings())
+    status = compare_profile_thresholds(body, _ride_settings())
+    assert status.needs_sync is False
+    assert status.differences == []
+    assert status.intervals_fingerprint == "242|176|193"
+
+
+def test_compare_profile_thresholds_ftp_mismatch():
+    status = compare_profile_thresholds(_igpsport_payload(), _ride_settings())
+    assert status.needs_sync is True
+    assert len(status.differences) == 3
+    assert status.differences[0].startswith("FTP:")
+
+
+def test_compare_profile_thresholds_lthr_mismatch_only():
+    body = _igpsport_payload()
+    body["member"]["ftp"] = 242
+    body["member"]["mhr"] = 193
+    status = compare_profile_thresholds(body, _ride_settings())
+    assert status.needs_sync is True
+    assert status.differences == ["LTHR: iGPSPORT 150 → intervals.icu 176"]
+
+
+def test_compare_profile_thresholds_mhr_mismatch_only():
+    body = _igpsport_payload()
+    body["member"]["ftp"] = 242
+    body["member"]["lthr"] = 176
+    status = compare_profile_thresholds(body, _ride_settings())
+    assert status.needs_sync is True
+    assert status.differences == ["max HR: iGPSPORT 190 → intervals.icu 193"]
+
+
+def test_compare_profile_thresholds_skips_lthr_when_intervals_missing():
+    body = _igpsport_payload()
+    body["member"]["ftp"] = 242
+    body["member"]["mhr"] = 193
+    settings = _ride_settings(lthr=None)
+    status = compare_profile_thresholds(body, settings)
+    assert status.needs_sync is False
+    assert status.intervals_fingerprint == "242||193"
+
+
+def test_fetch_profile_threshold_status(monkeypatch):
+    from intervalssync.igpsport import profile_sync
+
+    settings = _ride_settings()
+    current = _igpsport_payload()
+
+    monkeypatch.setattr(profile_sync, "login", lambda *a, **k: {"Authorization": "Bearer x"})
+    monkeypatch.setattr(profile_sync, "member_id_from_token", lambda *a, **k: 1171353)
+    monkeypatch.setattr(
+        profile_sync.intervals_icu,
+        "fetch_sport_settings",
+        lambda *a, **k: settings,
+    )
+    monkeypatch.setattr(
+        profile_sync,
+        "fetch_personal_interval_info",
+        lambda *a, **k: current,
+    )
+
+    status = profile_sync.fetch_profile_threshold_status(
+        ProfileSyncConfig("user", "pass", "api-key"),
+    )
+    assert status.needs_sync is True
+    assert any(diff.startswith("FTP:") for diff in status.differences)
 
 
 def test_sync_profile_zones_end_to_end(monkeypatch):

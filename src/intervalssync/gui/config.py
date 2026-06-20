@@ -56,6 +56,8 @@ class AppConfig:
     uploaded_bryton_workouts: dict[str, str] = field(default_factory=dict)
     # How many calendar days of planned workouts to upload (1 = today only).
     workout_days_ahead: int = 1
+    # intervals.icu threshold fingerprint the user declined to sync; cleared after sync.
+    profile_sync_declined_fingerprint: str = ""
 
 
 def any_source_enabled(config: AppConfig) -> bool:

@@ -63,7 +63,7 @@
 - Optionally deletes the local `.fit` files after a successful upload
 - Stores your credentials in the **OS secure vault** (Windows Credential Manager / Android Keystore), never in a file
 - Lets you know when a newer version is available
-- **Sync zones to iGPSPORT** — push FTP, LTHR, max HR, and power/HR zones from intervals.icu into your iGPSPORT profile (CLI for now)
+- **Sync zones to iGPSPORT** — push FTP, LTHR, max HR, and power/HR zones from intervals.icu into your iGPSPORT profile (Settings → iGPSPORT profile, or `intervalssync sync-zones`; the app prompts on launch when thresholds differ)
 - **Headless CLI** — activity sync, workout upload, and iGPSPORT zone/threshold sync from the terminal, with JSON output and exit codes for automation and AI agents (see [CLI & automation](#cli--automation-ai-agents))
 
 > Prefer the terminal, or want to help out? It's open source (Python + [Flet](https://flet.dev), MIT) — see [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -43,6 +43,83 @@ class ProfileSyncResult:
     after: dict[str, Any] | None
 
 
+@dataclass
+class ProfileThresholdStatus:
+    needs_sync: bool
+    differences: list[str]
+    intervals_fingerprint: str
+    intervals: dict[str, int | None]
+    igpsport: dict[str, int | None]
+
+
+_THRESHOLD_LABELS = {"ftp": "FTP", "lthr": "LTHR", "mhr": "max HR"}
+
+
+def _threshold_values(member: dict[str, Any]) -> dict[str, int | None]:
+    def _int_val(key: str) -> int | None:
+        value = member.get(key)
+        if value is None:
+            return None
+        try:
+            return int(round(float(value)))
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "ftp": _int_val("ftp"),
+        "lthr": _int_val("lthr"),
+        "mhr": _int_val("mhr"),
+    }
+
+
+def _threshold_fingerprint(settings: SportSettings) -> str:
+    ftp = int(round(settings.ftp or 0))
+    mhr = int(round(settings.max_hr or 0))
+    lthr = int(round(settings.lthr)) if settings.lthr is not None else ""
+    return f"{ftp}|{lthr}|{mhr}"
+
+
+def _intervals_threshold_values(settings: SportSettings) -> dict[str, int | None]:
+    return {
+        "ftp": int(round(settings.ftp or 0)),
+        "lthr": int(round(settings.lthr)) if settings.lthr is not None else None,
+        "mhr": int(round(settings.max_hr or 0)),
+    }
+
+
+def compare_profile_thresholds(
+    current: dict[str, Any],
+    settings: SportSettings,
+) -> ProfileThresholdStatus:
+    """Return whether FTP, LTHR, or max HR would change on sync."""
+    desired = apply_intervals_settings(current, settings)
+    member = current.get("member")
+    desired_member = desired.get("member")
+    current_vals = _threshold_values(member if isinstance(member, dict) else {})
+    desired_vals = _threshold_values(desired_member if isinstance(desired_member, dict) else {})
+
+    keys_to_compare = ["ftp", "mhr"]
+    if settings.lthr is not None:
+        keys_to_compare.append("lthr")
+
+    differences: list[str] = []
+    for key in keys_to_compare:
+        if current_vals.get(key) != desired_vals.get(key):
+            label = _THRESHOLD_LABELS[key]
+            differences.append(
+                f"{label}: iGPSPORT {current_vals.get(key)} "
+                f"→ intervals.icu {desired_vals.get(key)}"
+            )
+
+    return ProfileThresholdStatus(
+        needs_sync=bool(differences),
+        differences=differences,
+        intervals_fingerprint=_threshold_fingerprint(settings),
+        intervals=_intervals_threshold_values(settings),
+        igpsport=current_vals,
+    )
+
+
 def _validate_sport_settings(settings: SportSettings) -> None:
     if settings.ftp is None or settings.ftp <= 0:
         raise SyncError("intervals.icu sport settings missing FTP")
@@ -155,6 +232,36 @@ def sync_profile_zones(
 
     _report_summary(report, "Read-back", after)
     return ProfileSyncResult(before=current, after=after)
+
+
+def fetch_profile_threshold_status(config: ProfileSyncConfig) -> ProfileThresholdStatus:
+    """Compare iGPSPORT profile thresholds with intervals.icu sport settings."""
+    session = requests.Session()
+    try:
+        auth_headers = login(session, config.igp_user, config.igp_password)
+    except Exception as exc:
+        raise SyncError(str(exc)) from exc
+
+    member_id = member_id_from_token(auth_headers)
+    headers = mobile_headers(auth_headers, member_id)
+
+    try:
+        settings = intervals_icu.fetch_sport_settings(
+            config.intervals_api_key,
+            config.sport,
+            http=session,
+        )
+    except requests.RequestException as exc:
+        raise SyncError(f"Could not fetch intervals.icu sport settings: {exc}") from exc
+
+    _validate_sport_settings(settings)
+
+    try:
+        current = fetch_personal_interval_info(session, headers)
+    except RuntimeError as exc:
+        raise SyncError(str(exc)) from exc
+
+    return compare_profile_thresholds(current, settings)
 
 
 def result_payload(result: ProfileSyncResult, *, ok: bool, error: str | None = None) -> dict[str, Any]:
