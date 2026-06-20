@@ -320,6 +320,24 @@ async def build_settings_view(
         "Checking…",
         size=12,
         color=colors["text_muted"],
+        max_lines=2,
+        no_wrap=False,
+        overflow=ft.TextOverflow.ELLIPSIS,
+    )
+    profile_sync_hint = ft.Text(
+        "Add iGPSPORT credentials and intervals.icu API key first.",
+        size=12,
+        color=colors["text_muted"],
+        visible=False,
+    )
+    profile_sync_message_area = ft.Container(
+        height=34,
+        content=ft.Column(
+            tight=True,
+            spacing=0,
+            controls=[profile_sync_status, profile_sync_hint],
+        ),
+        alignment=ft.Alignment.TOP_LEFT,
     )
     profile_sync_button = ft.OutlinedButton(
         "Sync profile now",
@@ -328,23 +346,32 @@ async def build_settings_view(
             shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_SM),
         ),
     )
-    profile_sync_hint = ft.Text(
-        "Add iGPSPORT credentials and intervals.icu API key first.",
-        size=12,
-        color=colors["text_muted"],
-        visible=False,
+    profile_sync_check_on_launch = ft.Switch(
+        label="Check on app launch",
+        value=config.profile_sync_check_on_launch,
+        active_color=colors["accent"],
+    )
+    profile_sync_actions = ft.Row(
+        spacing=theme.SPACE_MD,
+        alignment=ft.MainAxisAlignment.CENTER,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            profile_sync_button,
+            profile_sync_check_on_launch,
+        ],
     )
 
     async def refresh_profile_sync_status() -> None:
         creds = await profile_sync_ui.credentials_ready(config, store)
         if creds is None:
-            profile_sync_status.value = "Sign in to check profile status."
-            profile_sync_button.disabled = True
+            profile_sync_status.visible = False
             profile_sync_hint.visible = True
+            profile_sync_button.disabled = True
             page.update()
             return
 
         profile_sync_hint.visible = False
+        profile_sync_status.visible = True
         profile_sync_button.disabled = False
         profile_sync_status.value = "Checking…"
         page.update()
@@ -378,11 +405,11 @@ async def build_settings_view(
             ft.Container(
                 padding=ft.Padding(theme.SPACE_MD, 0, theme.SPACE_MD, theme.SPACE_SM),
                 content=ft.Column(
-                    spacing=theme.SPACE_SM,
+                    tight=True,
+                    spacing=theme.SPACE_XS,
                     controls=[
-                        profile_sync_status,
-                        profile_sync_button,
-                        profile_sync_hint,
+                        profile_sync_message_area,
+                        profile_sync_actions,
                     ],
                 ),
             )
@@ -527,6 +554,7 @@ async def build_settings_view(
             workout_days_ahead.value = "1"
         config.delete_after_upload = delete_after_upload.value
         config.force_resync = force_resync.value
+        config.profile_sync_check_on_launch = bool(profile_sync_check_on_launch.value)
         config.activity_type = activity_type.value or ""
         config.dropbox_folder = dropbox_folder.value.strip() or DEFAULT_DROPBOX_FOLDER
         config.dropbox_date_filenames = bool(dropbox_date_filenames_switch.value)

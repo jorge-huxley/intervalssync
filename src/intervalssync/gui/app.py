@@ -306,7 +306,7 @@ async def _app(page: ft.Page) -> None:
         notify_update(latest, quiet_when_current=True)
 
     async def auto_check_profile_sync() -> None:
-        if not config.enable_igpsport:
+        if not config.enable_igpsport or not config.profile_sync_check_on_launch:
             return
         await profile_sync_ui.prompt_if_needed(page, config, store)
 
