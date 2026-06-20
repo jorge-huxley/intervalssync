@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from intervalssync.igpsport.zone_map import (
-    POWER_ZONE_CAP,
+    POWER_INTERIOR_CAP,
+    POWER_LAST_ZONE_END,
     hr_upper_bounds_bpm,
     map_hr_zones,
     map_power_zones,
@@ -23,7 +24,7 @@ MAX_HR = 193
 
 
 def test_power_upper_bounds_from_settings_ride():
-    assert power_upper_bounds_watts(POWER_PCT, FTP) == [133, 182, 218, 254, 290, 1999]
+    assert power_upper_bounds_watts(POWER_PCT, FTP) == [133, 182, 218, 254, 290, 2418]
 
 
 def test_hr_upper_bounds_from_settings_ride():
@@ -34,14 +35,16 @@ def test_map_power_same_count_seven_slots():
     zones = map_power_zones(POWER_PCT, FTP, _template_zones(6))
     assert len(zones) == 6
     assert zones[0]["start"] == 0 and zones[0]["end"] == 133
-    assert zones[-1]["end"] == 1999
+    assert zones[-1]["end"] == POWER_LAST_ZONE_END
+    assert zones[-2]["end"] <= POWER_INTERIOR_CAP
 
 
 def test_map_power_fewer_intervals_than_igpsport():
     zones = map_power_zones(POWER_PCT, FTP, _template_zones(7))
     assert len(zones) == 7
     assert zones[4]["end"] == 290
-    assert zones[-1]["end"] == POWER_ZONE_CAP
+    assert zones[-1]["end"] == POWER_LAST_ZONE_END
+    assert zones[-2]["end"] <= POWER_INTERIOR_CAP
     assert zones[-1]["start"] == zones[-2]["end"]
 
 
@@ -49,9 +52,10 @@ def test_map_power_more_intervals_than_igpsport():
     intervals_pct = [55, 65, 75, 85, 90, 105, 120]
     zones = map_power_zones(intervals_pct, FTP, _template_zones(5))
     assert len(zones) == 5
-    assert zones[3]["end"] == int(round(FTP * 0.85))
+    assert zones[3]["end"] == int(round(FTP * 1.20))
+    assert zones[3]["end"] <= POWER_INTERIOR_CAP
     assert zones[4]["start"] == zones[3]["end"]
-    assert zones[4]["end"] == int(round(FTP * 1.20))
+    assert zones[4]["end"] == POWER_LAST_ZONE_END
 
 
 def test_map_hr_same_count():

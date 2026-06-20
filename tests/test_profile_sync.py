@@ -39,7 +39,8 @@ def test_apply_intervals_settings_updates_thresholds_and_zones():
     assert updated["member"]["heartRateComputeMode"] == 0
     assert len(updated["power"]) == 7
     assert updated["power"][0]["end"] == 133
-    assert updated["power"][-1]["end"] == 1999
+    assert updated["power"][-1]["end"] == 2500
+    assert updated["power"][-2]["end"] <= 1999
     assert [zone["end"] for zone in updated["heartRate"]] == [120, 146, 166, 185, 193]
 
 

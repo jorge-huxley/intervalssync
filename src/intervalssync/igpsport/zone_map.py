@@ -4,16 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-POWER_ZONE_CAP = 1999
+POWER_INTERIOR_CAP = 1999
+POWER_LAST_ZONE_END = 2500
 
 
 def power_upper_bounds_watts(power_zones_pct: list[float], ftp: float) -> list[int]:
     """Convert intervals % FTP upper bounds to absolute watt boundaries."""
     if ftp <= 0 or not power_zones_pct:
         return []
-    bounds = [int(round(ftp * pct / 100)) for pct in power_zones_pct]
-    bounds[-1] = min(bounds[-1], POWER_ZONE_CAP)
-    return bounds
+    return [int(round(ftp * pct / 100)) for pct in power_zones_pct]
 
 
 def hr_upper_bounds_bpm(hr_zones_bpm: list[float], max_hr: float) -> list[int]:
@@ -108,7 +107,14 @@ def map_power_zones(
     if not igpsport_zones:
         return []
     intervals_ends = power_upper_bounds_watts(intervals_pct, ftp)
-    slot_ends = _slot_end_values(intervals_ends, len(igpsport_zones), POWER_ZONE_CAP)
+    slot_count = len(igpsport_zones)
+    if slot_count == 1:
+        slot_ends = [POWER_LAST_ZONE_END]
+    else:
+        interior = _slot_end_values(intervals_ends, slot_count - 1, POWER_INTERIOR_CAP)
+        interior[-1] = min(interior[-1], POWER_INTERIOR_CAP)
+        interior = _enforce_strictly_increasing(interior, POWER_INTERIOR_CAP)
+        slot_ends = interior + [POWER_LAST_ZONE_END]
     return _apply_end_values(slot_ends, igpsport_zones)
 
 
