@@ -47,7 +47,7 @@ jobs:
           python -c "from pathlib import Path; import os; Path('src/intervalssync/_dropbox_app_key.py').write_text('DROPBOX_APP_KEY = ' + repr(os.getenv('IGPSYNC_DROPBOX_APP_KEY', '')) + '\n', encoding='utf-8')"
 
       - name: Build Windows app
-        run: uv run flet build windows --yes --verbose --module-name intervalssync.gui.app --build-version "${{ env.APP_VERSION }}"
+        run: uv run flet build windows --yes --verbose --build-version "${{ env.APP_VERSION }}"
 
       # Name the zip after the tag, e.g. intervalssync-v0.2.0-windows.zip
       - name: Package into a versioned zip
@@ -102,7 +102,7 @@ jobs:
       # flet build apk auto-installs the Flutter/Android SDK + JDK on first run.
       # It picks up the FLET_ANDROID_SIGNING_* env vars set above when present.
       - name: Build Android APK
-        run: uv run flet build apk --yes --verbose --module-name intervalssync.gui.app --build-version "${{ env.APP_VERSION }}"
+        run: uv run flet build apk --yes --verbose --build-version "${{ env.APP_VERSION }}"
 
       - name: Rename APK with the version
         run: mv build/apk/*.apk "intervalssync-${{ github.ref_name }}-android.apk"
