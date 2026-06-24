@@ -11,6 +11,7 @@ import requests
 from .. import intervals_icu
 from ..intervals_icu import SportSettings
 from .core import SyncError, login
+from .region import resolve_region
 from .interval_info import (
     HEART_RATE_COMPUTE_MODE_MAX_HR,
     fetch_personal_interval_info,
@@ -34,6 +35,7 @@ class ProfileSyncConfig:
     igp_user: str
     igp_password: str
     intervals_api_key: str
+    igp_region: str = "international"
     sport: str = "Ride"
 
 
@@ -187,14 +189,15 @@ def sync_profile_zones(
     report = progress or _noop
 
     session = requests.Session()
+    region = resolve_region(config.igp_region)
     report("Logging in to iGPSPORT…")
     try:
-        auth_headers = login(session, config.igp_user, config.igp_password)
+        auth_headers = login(session, config.igp_user, config.igp_password, region)
     except Exception as exc:
         raise SyncError(str(exc)) from exc
 
     member_id = member_id_from_token(auth_headers)
-    headers = mobile_headers(auth_headers, member_id)
+    headers = mobile_headers(auth_headers, member_id, region)
 
     report("Fetching sport settings from intervals.icu…")
     try:
@@ -210,7 +213,7 @@ def sync_profile_zones(
 
     report("Fetching iGPSPORT profile…")
     try:
-        current = fetch_personal_interval_info(session, headers)
+        current = fetch_personal_interval_info(session, headers, region)
     except RuntimeError as exc:
         raise SyncError(str(exc)) from exc
 
@@ -220,7 +223,7 @@ def sync_profile_zones(
 
     report("Updating iGPSPORT profile…")
     try:
-        update_personal_interval_info(session, headers, updated)
+        update_personal_interval_info(session, headers, updated, region)
     except RuntimeError as exc:
         raise SyncError(str(exc)) from exc
 
@@ -237,13 +240,14 @@ def sync_profile_zones(
 def fetch_profile_threshold_status(config: ProfileSyncConfig) -> ProfileThresholdStatus:
     """Compare iGPSPORT profile thresholds with intervals.icu sport settings."""
     session = requests.Session()
+    region = resolve_region(config.igp_region)
     try:
-        auth_headers = login(session, config.igp_user, config.igp_password)
+        auth_headers = login(session, config.igp_user, config.igp_password, region)
     except Exception as exc:
         raise SyncError(str(exc)) from exc
 
     member_id = member_id_from_token(auth_headers)
-    headers = mobile_headers(auth_headers, member_id)
+    headers = mobile_headers(auth_headers, member_id, region)
 
     try:
         settings = intervals_icu.fetch_sport_settings(
@@ -257,7 +261,7 @@ def fetch_profile_threshold_status(config: ProfileSyncConfig) -> ProfileThreshol
     _validate_sport_settings(settings)
 
     try:
-        current = fetch_personal_interval_info(session, headers)
+        current = fetch_personal_interval_info(session, headers, region)
     except RuntimeError as exc:
         raise SyncError(str(exc)) from exc
 

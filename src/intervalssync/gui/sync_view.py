@@ -165,6 +165,7 @@ def build_sync_view(
         sync_config = IgpSyncConfig(
             igp_user=config.igp_user,
             igp_password=igp_password,
+            igp_region=config.igp_region,
             intervals_api_key=api_key,
             dropbox_refresh_token=dropbox_refresh_token,
             dropbox_app_key=dropbox_app_key,
@@ -247,6 +248,7 @@ def build_sync_view(
         upload_config = WorkoutUploadConfig(
             igp_user=config.igp_user,
             igp_password=igp_password,
+            igp_region=config.igp_region,
             intervals_api_key=api_key,
             workout_days_ahead=config.workout_days_ahead,
             uploaded_workouts=dict(config.uploaded_workouts),

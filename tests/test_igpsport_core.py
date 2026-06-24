@@ -140,10 +140,89 @@ def test_login_raises_without_cookie(monkeypatch):
         cookies = type("C", (), {"get": lambda self, n: None})()
 
         def post(self, *a, **k):
-            return FakeResponse(status=200)
+            return FakeResponse(status=200, json_data={"Code": 403})
 
-    with pytest.raises(core.AuthError):
+    with pytest.raises(core.AuthError, match="loginToken cookie"):
         core.login(FakeSession(), "user", "pass")
+
+
+def test_login_hints_china_region_when_intl_auth_fails():
+    class FakeSession:
+        cookies = type("C", (), {"get": lambda self, n: None})()
+
+        def post(self, *a, **k):
+            return FakeResponse(status=200, json_data={"Code": 403})
+
+    with pytest.raises(core.AuthError, match="app.igpsport.cn"):
+        core.login(FakeSession(), "user", "pass")
+
+
+def test_login_china_parses_access_token():
+    class FakeSession:
+        headers: dict[str, str] = {}
+
+        def post(self, url, json=None):
+            assert json == {
+                "appId": "igpsport-web",
+                "username": "13800000000",
+                "password": "secret",
+            }
+            return FakeResponse(
+                status=200,
+                json_data={"data": {"access_token": "cn.jwt.token"}},
+            )
+
+        def update(self, headers):
+            self.headers.update(headers)
+
+    session = FakeSession()
+    headers = core.login(session, "13800000000", "secret", region="china")
+    assert headers == {"Authorization": "Bearer cn.jwt.token"}
+    assert session.headers["Authorization"] == "Bearer cn.jwt.token"
+
+
+def test_login_china_raises_when_token_missing():
+    class FakeSession:
+        def post(self, *a, **k):
+            return FakeResponse(status=403, json_data={"code": 1002, "message": "Password error"})
+
+    with pytest.raises(core.AuthError, match="Password error"):
+        core.login(FakeSession(), "13800000000", "bad", region="china")
+
+
+def test_list_activities_china_parses_camel_case_rows():
+    captured = {}
+
+    class FakeSession:
+        def get(self, url, params=None):
+            captured["url"] = url
+            captured["params"] = params
+            return FakeResponse(
+                json_data={
+                    "data": {
+                        "rows": [
+                            {
+                                "rideId": 42,
+                                "title": "Morning ride",
+                                "startTime": "2026-06-01 08:00:00",
+                            }
+                        ]
+                    }
+                }
+            )
+
+    acts = core.list_activities(FakeSession(), 10, region="china")
+    assert "queryMyActivity" in captured["url"]
+    assert captured["params"] == {
+        "pageNo": "1",
+        "pageSize": "10",
+        "sort": "1",
+        "reqType": "0",
+    }
+    assert len(acts) == 1
+    assert acts[0].ride_id == 42
+    assert acts[0].title == "Morning ride"
+    assert acts[0].start_time == "2026-06-01 08:00:00"
 
 
 def test_list_activities_requests_full_page_and_caps():
@@ -192,17 +271,17 @@ def stub_sync(monkeypatch, tmp_path):
         "dropbox_ok": True,
     }
 
-    monkeypatch.setattr(core, "login", lambda s, u, p: {"Authorization": "x"})
+    monkeypatch.setattr(core, "login", lambda s, u, p, *a, **k: {"Authorization": "x"})
     monkeypatch.setattr(
         core,
         "list_activities",
-        lambda s, m: [
+        lambda s, m, *a, **k: [
             core.Activity(1, "Ride 1", "2026-05-28 19:20:42"),
             core.Activity(2, "Ride 2", "2026-05-26 18:47:06"),
             core.Activity(3, "Ride 3", "2026-05-24 08:27:17"),
         ],
     )
-    monkeypatch.setattr(core, "resolve_fit_url", lambda s, h, r: f"http://x/{r}.fit")
+    monkeypatch.setattr(core, "resolve_fit_url", lambda s, h, r, *a, **k: f"http://x/{r}.fit")
 
     def fake_download(url, dest):
         dest.parent.mkdir(parents=True, exist_ok=True)

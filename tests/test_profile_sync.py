@@ -157,11 +157,11 @@ def test_sync_profile_zones_end_to_end(monkeypatch):
 
     calls = {"get": 0}
 
-    def fake_fetch(session, headers):
+    def fake_fetch(session, headers, *args, **kwargs):
         calls["get"] += 1
         return current if calls["get"] == 1 else apply_intervals_settings(current, settings)
 
-    def fake_update(session, headers, body):
+    def fake_update(session, headers, body, *args, **kwargs):
         posted["body"] = body
         return {"code": 0}
 

@@ -61,8 +61,24 @@ async def build_settings_view(
         value=config.enable_igpsport,
         active_color=colors["accent"],
     )
+    igp_region_value = (
+        config.igp_region if config.igp_region in ("international", "china") else "international"
+    )
+    igp_region = ft.Dropdown(
+        label="iGPSPORT region",
+        value=igp_region_value,
+        options=[
+            ft.dropdown.Option("international", "International (i.igpsport.com)"),
+            ft.dropdown.Option("china", "China (app.igpsport.cn)"),
+        ],
+        helper_text="Use China if your account logs in at app.igpsport.cn",
+    )
     igp_user = _input_field(
-        label="iGPSPORT email",
+        label=(
+            "iGPSPORT phone number"
+            if igp_region_value == "china"
+            else "iGPSPORT email"
+        ),
         value=config.igp_user,
         prefix_icon=ft.Icons.PERSON_OUTLINED,
         autofocus=not config.igp_user,
@@ -499,7 +515,7 @@ async def build_settings_view(
 
     igp_credentials = ft.Column(
         spacing=theme.SPACE_SM,
-        controls=[igp_user, igp_password],
+        controls=[igp_region, igp_user, igp_password],
     )
     bryton_credentials = ft.Column(
         spacing=theme.SPACE_SM,
@@ -518,6 +534,13 @@ async def build_settings_view(
         content=profile_sync_options,
     )
 
+    def update_igp_user_label(_: ft.ControlEvent | None = None) -> None:
+        igp_user.label = (
+            "iGPSPORT phone number"
+            if igp_region.value == "china"
+            else "iGPSPORT email"
+        )
+
     def update_source_visibility(_: ft.ControlEvent | None = None) -> None:
         igp_credentials.visible = bool(enable_igpsport.value)
         workout_sync_section.visible = bool(enable_igpsport.value or enable_bryton.value)
@@ -528,7 +551,9 @@ async def build_settings_view(
 
     enable_igpsport.on_change = update_source_visibility
     enable_bryton.on_change = update_source_visibility
+    igp_region.on_change = update_igp_user_label
     update_source_visibility()
+    update_igp_user_label()
 
     async def save(_: ft.ControlEvent) -> None:
         if not enable_igpsport.value and not enable_bryton.value:
@@ -543,7 +568,11 @@ async def build_settings_view(
         if enable_igpsport.value:
             if not igp_user.value.strip():
                 page.show_dialog(
-                    ft.SnackBar(ft.Text("iGPSPORT email is required when enabled."))
+                    ft.SnackBar(
+                        ft.Text(
+                            "iGPSPORT account (email or phone) is required when enabled."
+                        )
+                    )
                 )
                 return
             if not igp_pw:
@@ -567,6 +596,7 @@ async def build_settings_view(
         config.enable_igpsport = bool(enable_igpsport.value)
         config.enable_bryton = bool(enable_bryton.value)
         config.igp_user = igp_user.value.strip()
+        config.igp_region = igp_region.value or "international"
         config.bryton_user = bryton_user.value.strip()
         try:
             config.max_activities = max(1, int(max_activities.value))

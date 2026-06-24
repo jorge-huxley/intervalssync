@@ -60,6 +60,7 @@ def _build_igpsport_sync_config(
         igp_user=credentials.igp_user,
         igp_password=credentials.igp_password,
         intervals_api_key=credentials.intervals_api_key,
+        igp_region=credentials.igp_region,
         max_activities=max_activities if max_activities is not None else config.max_activities,
         download_dir=Path(download_dir or config.download_dir),
         delete_after_upload=(
@@ -181,6 +182,7 @@ def _build_workout_upload_config(
         igp_user=credentials.igp_user,
         igp_password=credentials.igp_password,
         intervals_api_key=credentials.intervals_api_key,
+        igp_region=credentials.igp_region,
         workout_days_ahead=(
             workout_days_ahead if workout_days_ahead is not None else config.workout_days_ahead
         ),
@@ -479,6 +481,7 @@ def cmd_sync_zones(args: argparse.Namespace) -> int:
         igp_user=credentials.igp_user,
         igp_password=credentials.igp_password,
         intervals_api_key=credentials.intervals_api_key,
+        igp_region=credentials.igp_region,
         sport=args.sport,
     )
 

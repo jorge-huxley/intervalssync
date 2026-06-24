@@ -28,6 +28,7 @@ class AppConfig:
     enable_igpsport: bool = True
     enable_bryton: bool = False
     igp_user: str = ""
+    igp_region: str = "international"
     bryton_user: str = ""
     max_activities: int = 5
     download_dir: str = field(default_factory=_default_download_dir)

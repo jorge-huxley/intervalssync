@@ -65,6 +65,7 @@
 - Lets you know when a newer version is available
 - **Sync zones to iGPSPORT** — push FTP, LTHR, max HR, and power/HR zones from intervals.icu into your iGPSPORT profile (Settings → iGPSPORT profile, or `intervalssync sync-zones`; the app prompts on launch when thresholds differ)
 - **Headless CLI** — activity sync, workout upload, and iGPSPORT zone/threshold sync from the terminal, with JSON output and exit codes for automation and AI agents (see [CLI & automation](#cli--automation-ai-agents))
+- **China iGPSPORT region** — accounts on [app.igpsport.cn](https://app.igpsport.cn/login) use a separate API; choose **China** in Settings (or `INTERVALSSYNC_IGPSPORT_REGION=china` in the CLI)
 
 > Prefer the terminal, or want to help out? It's open source (Python + [Flet](https://flet.dev), MIT) — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -73,7 +74,7 @@
 1. Go to the [Releases](../../releases) page and download the latest `.zip`.
 2. Unzip it anywhere and double-click the app (e.g. `intervalssync.exe`).
 3. On first launch, open **Settings** and enter:
-   - your iGPSPORT **email** and **password**
+   - your iGPSPORT **email** and **password** (or **phone number** for China — set region to China if you use [app.igpsport.cn](https://app.igpsport.cn/login))
    - your intervals.icu **API key** (intervals.icu → Settings → Developer)
 4. Click **Save**, then go back and press **Sync** (or **Upload to iGPSPORT** / **Upload to Bryton** for planned sessions on your intervals.icu calendar).
 
@@ -132,7 +133,7 @@ syncing:
 - [kamikadzem22/igpsport-unoffical-api](https://github.com/kamikadzem22/igpsport-unoffical-api)
   for documenting and exploring the unofficial iGPSPORT API.
 - [simple4wan/ride-sync](https://github.com/simple4wan/ride-sync) for prior
-  work on syncing ride activities between services.
+  work on syncing ride activities between services (including China-region iGPSPORT).
 
 This app is an independent project and is not affiliated with iGPSPORT,
 intervals.icu, or the projects listed above.
