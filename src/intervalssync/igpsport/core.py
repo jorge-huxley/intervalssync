@@ -35,9 +35,11 @@ from ..intervals_icu import (
     upload_fit_file,
 )
 
-LOGIN_URL = "https://i.igpsport.com/Auth/Login"
-ACTIVITY_LIST_URL = "https://i.igpsport.com/Activity/ActivityList"
-GATEWAY = "https://prod.en.igpsport.com/service/web-gateway/web-analyze/activity"
+from .region import INTERNATIONAL, IgpRegionConfig, resolve_region
+
+LOGIN_URL = INTERNATIONAL.login_url
+ACTIVITY_LIST_URL = INTERNATIONAL.activity_list_url or ""
+GATEWAY = INTERNATIONAL.gateway_base
 # iGPSPORT reports activity start times as "YYYY-MM-DD HH:MM:SS".
 IGP_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -117,32 +119,103 @@ def _noop(_message: str) -> None:
     pass
 
 
-def login(session: requests.Session, user: str, password: str) -> dict[str, str]:
-    """Authenticate and return auth headers carrying the Bearer token.
+def login(
+    session: requests.Session,
+    user: str,
+    password: str,
+    region: IgpRegionConfig | str | None = None,
+) -> dict[str, str]:
+    """Authenticate and return auth headers carrying the Bearer token."""
+    cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
 
-    The token is taken from the `loginToken` session cookie and URL-decoded —
-    this cookie-to-Bearer step is required for the gateway endpoints.
-    """
-    resp = session.post(LOGIN_URL, json={"username": user, "password": password})
+    if cfg.name == "china":
+        return _login_china(session, user, password, cfg)
+    return _login_international(session, user, password, cfg)
+
+
+_CHINA_REGION_HINT = (
+    " If your account is registered on app.igpsport.cn, set region to China in Settings."
+)
+
+
+def _login_international(
+    session: requests.Session,
+    user: str,
+    password: str,
+    region: IgpRegionConfig,
+) -> dict[str, str]:
+    """International: loginToken cookie URL-decoded as Bearer."""
+    resp = session.post(region.login_url, json={"username": user, "password": password})
     if not resp.ok:
         raise AuthError(f"iGPSPORT login failed: HTTP {resp.status_code}")
 
     token = session.cookies.get("loginToken")
     if not token:
-        raise AuthError("iGPSPORT login did not return a loginToken cookie")
+        hint = ""
+        try:
+            body = resp.json()
+            if isinstance(body, dict) and body.get("Code") == 403:
+                hint = _CHINA_REGION_HINT
+        except ValueError:
+            pass
+        raise AuthError(f"iGPSPORT login did not return a loginToken cookie.{hint}")
 
     return {"Authorization": f"Bearer {unquote(token)}"}
 
 
-def list_activities(session: requests.Session, max_activities: int) -> list[Activity]:
-    """Return the most recent activities, newest first, capped at max_activities.
+def _login_china(
+    session: requests.Session,
+    user: str,
+    password: str,
+    region: IgpRegionConfig,
+) -> dict[str, str]:
+    """China: access_token from JSON response body."""
+    resp = session.post(
+        region.login_url,
+        json={"appId": "igpsport-web", "username": user, "password": password},
+    )
+    try:
+        body = resp.json()
+    except ValueError as exc:
+        raise AuthError(f"iGPSPORT login failed: HTTP {resp.status_code}, non-JSON body") from exc
 
-    ActivityList paginates: with no params it returns only the first page (10).
-    The endpoint honours pageSize, so we ask for the full page in one request
-    (pageNo navigation is unreliable). The slice is a safety belt in case the
-    server ever returns more than we asked for.
-    """
-    resp = session.get(ACTIVITY_LIST_URL, params={"pageNo": 1, "pageSize": max_activities})
+    if not isinstance(body, dict):
+        raise AuthError("iGPSPORT login returned an unexpected response")
+
+    data = body.get("data") or {}
+    token = data.get("access_token") if isinstance(data, dict) else None
+    if not token:
+        message = body.get("message") or f"HTTP {resp.status_code}"
+        raise AuthError(f"iGPSPORT login failed: {message}")
+
+    auth_headers = {"Authorization": f"Bearer {token}"}
+    session.headers.update(auth_headers)
+    return auth_headers
+
+
+def list_activities(
+    session: requests.Session,
+    max_activities: int,
+    region: IgpRegionConfig | str | None = None,
+) -> list[Activity]:
+    """Return the most recent activities, newest first, capped at max_activities."""
+    cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
+
+    if cfg.name == "china":
+        return _list_activities_china(session, max_activities, cfg)
+    return _list_activities_international(session, max_activities, cfg)
+
+
+def _list_activities_international(
+    session: requests.Session,
+    max_activities: int,
+    region: IgpRegionConfig,
+) -> list[Activity]:
+    """International ActivityList — PascalCase RideId / Title / StartTime."""
+    resp = session.get(
+        region.activity_list_url,
+        params={"pageNo": 1, "pageSize": max_activities},
+    )
     resp.raise_for_status()
 
     items = resp.json().get("item", [])[:max_activities]
@@ -159,12 +232,60 @@ def list_activities(session: requests.Session, max_activities: int) -> list[Acti
     return activities
 
 
+def _list_activities_china(
+    session: requests.Session,
+    max_activities: int,
+    region: IgpRegionConfig,
+) -> list[Activity]:
+    """China queryMyActivity — camelCase rideId in data.rows."""
+    resp = session.get(
+        region.activity_query_url,
+        params={
+            "pageNo": "1",
+            "pageSize": str(max_activities),
+            "sort": "1",
+            "reqType": "0",
+        },
+    )
+    resp.raise_for_status()
+
+    data = resp.json().get("data") or {}
+    rows = (data.get("rows") if isinstance(data, dict) else None) or []
+    activities: list[Activity] = []
+    for item in rows[:max_activities]:
+        if not isinstance(item, dict):
+            continue
+        ride_id = item.get("rideId") or item.get("RideId")
+        if ride_id is None:
+            continue
+        activities.append(
+            Activity(
+                ride_id=int(ride_id),
+                title=item.get("title") or item.get("Title") or f"iGPSPORT {ride_id}",
+                start_time=(
+                    item.get("startTime")
+                    or item.get("StartTime")
+                    or item.get("startTimeString")
+                    or item.get("StartTimeString")
+                    or "unknown date"
+                ),
+            )
+        )
+    return activities
+
+
 def resolve_fit_url(
-    session: requests.Session, auth_headers: dict[str, str], ride_id: int
+    session: requests.Session,
+    auth_headers: dict[str, str],
+    ride_id: int,
+    region: IgpRegionConfig | str | None = None,
 ) -> str | None:
     """Resolve a FIT download URL: try queryActivityDetail, then getDownloadUrl."""
+    cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
+    gateway = cfg.gateway_base
+
     detail = session.get(
-        f"{GATEWAY}/queryActivityDetail/{ride_id}", headers=auth_headers
+        f"{gateway}/queryActivityDetail/{ride_id}", headers=auth_headers
     )
     if detail.ok:
         fit_url = detail.json().get("data", {}).get("fitUrl")
@@ -172,7 +293,7 @@ def resolve_fit_url(
             return fit_url
 
     fallback = session.get(
-        f"{GATEWAY}/getDownloadUrl/{ride_id}", headers=auth_headers
+        f"{gateway}/getDownloadUrl/{ride_id}", headers=auth_headers
     )
     if fallback.ok:
         return fallback.json().get("data")
@@ -229,6 +350,7 @@ class SyncConfig:
     igp_user: str
     igp_password: str
     intervals_api_key: str | None
+    igp_region: str = "international"
     dropbox_refresh_token: str | None = None
     dropbox_app_key: str | None = None
     max_activities: int = 5
@@ -255,11 +377,12 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
     result = SyncResult()
 
     session = requests.Session()
+    region = resolve_region(config.igp_region)
     report("Logging in to iGPSPORT…")
-    auth_headers = login(session, config.igp_user, config.igp_password)
+    auth_headers = login(session, config.igp_user, config.igp_password, region)
     report("Logged in.")
 
-    activities = list_activities(session, config.max_activities)
+    activities = list_activities(session, config.max_activities, region)
     result.activities = activities
     result.listed = len(activities)
 
@@ -342,7 +465,7 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
         if any_upload_enabled and not intervals_needs_it and not dropbox_needs_it:
             continue
 
-        fit_url = resolve_fit_url(session, auth_headers, act.ride_id)
+        fit_url = resolve_fit_url(session, auth_headers, act.ride_id, region)
         if not fit_url:
             report(f"⚠ Could not resolve FIT URL for {act.ride_id}; skipping.")
             result.failed += 1

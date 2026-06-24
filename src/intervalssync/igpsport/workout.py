@@ -16,6 +16,7 @@ import requests
 
 from .. import intervals_icu
 from .core import SyncError, login
+from .region import IgpRegionConfig, resolve_region
 
 IGPS_API = "https://prod.en.igpsport.com"
 IGPS_WORKOUT_LIST_URL = f"{IGPS_API}/service/mobile/api/WorkOut/CustomWorkout"
@@ -60,6 +61,7 @@ class WorkoutUploadConfig:
     igp_user: str
     igp_password: str
     intervals_api_key: str
+    igp_region: str = "international"
     oldest: date | None = None
     newest: date | None = None
     workout_days_ahead: int = 1
@@ -72,10 +74,12 @@ def list_custom_workouts(
     auth_headers: dict[str, str],
     page_index: int = 1,
     page_size: int = 20,
+    region: IgpRegionConfig | str | None = None,
 ) -> dict[str, Any]:
     """Return the iGPSPORT custom-workout list response JSON."""
+    cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
     resp = session.get(
-        IGPS_WORKOUT_LIST_URL,
+        cfg.workout_list_url,
         params={"PageIndex": page_index, "PageSize": page_size},
         headers=auth_headers,
     )
@@ -99,12 +103,15 @@ def fetch_all_custom_workout_ids(
     auth_headers: dict[str, str],
     *,
     page_size: int = 50,
+    region: IgpRegionConfig | str | None = None,
 ) -> set[int]:
     """Return every custom-workout ID currently on iGPSPORT."""
     ids: set[int] = set()
     page_index = 1
     while True:
-        data = list_custom_workouts(session, auth_headers, page_index, page_size)
+        data = list_custom_workouts(
+            session, auth_headers, page_index, page_size, region=region
+        )
         if data.get("code") != 0:
             break
         items = (data.get("data") or {}).get("items") or []
@@ -136,9 +143,11 @@ def upload_custom_workout(
     session: requests.Session,
     auth_headers: dict[str, str],
     body: dict[str, Any],
+    region: IgpRegionConfig | str | None = None,
 ) -> int | None:
     """Create or update a custom workout; return workoutId on success."""
-    resp = session.post(IGPS_WORKOUT_EDIT_URL, json=body, headers=auth_headers)
+    cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
+    resp = session.post(cfg.workout_edit_url, json=body, headers=auth_headers)
     if not resp.ok:
         return None
     data = resp.json()
@@ -422,10 +431,11 @@ def upload_workouts(
 
     report("Logging in to iGPSPORT…")
     session = requests.Session()
-    auth_headers = login(session, config.igp_user, config.igp_password)
+    region = resolve_region(config.igp_region)
+    auth_headers = login(session, config.igp_user, config.igp_password, region)
     report("Logged in.")
 
-    live_ids = fetch_all_custom_workout_ids(session, auth_headers)
+    live_ids = fetch_all_custom_workout_ids(session, auth_headers, region=region)
     report(f"Found {len(live_ids)} custom workouts on iGPSPORT.")
 
     report("Fetching planned workouts from intervals.icu…")
@@ -474,7 +484,7 @@ def upload_workouts(
             continue
 
         report(f"Uploading {workout.name}…")
-        workout_id = upload_custom_workout(session, auth_headers, body)
+        workout_id = upload_custom_workout(session, auth_headers, body, region=region)
         if workout_id:
             report(f"✓ Uploaded {workout.name} (workoutId {workout_id})")
             result.uploaded += 1

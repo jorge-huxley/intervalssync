@@ -26,6 +26,12 @@ echo 'INTERVALSSYNC_INTERVALS_API_KEY=your-intervals-api-key' >> ~/.hermes/.env
 chmod 600 ~/.hermes/.env
 ```
 
+For **China-region** accounts ([app.igpsport.cn](https://app.igpsport.cn/login)), use your phone number as the username and add:
+
+```bash
+echo 'INTERVALSSYNC_IGPSPORT_REGION=china' >> ~/.hermes/.env
+```
+
 ### Bryton sync
 
 ```bash

@@ -8,9 +8,11 @@ from typing import Any
 
 import requests
 
-IGPS_MOBILE_API = "https://prod.en.igpsport.com/service/mobile/api"
-GET_INTERVAL_URL = f"{IGPS_MOBILE_API}/v2/User/UserIntervalInfo"
-UPDATE_INTERVAL_URL = f"{IGPS_MOBILE_API}/User/UpdatePersonalIntervalInfo"
+from .region import INTERNATIONAL, IgpRegionConfig, resolve_region
+
+IGPS_MOBILE_API = INTERNATIONAL.mobile_api_base
+GET_INTERVAL_URL = INTERNATIONAL.get_interval_url
+UPDATE_INTERVAL_URL = INTERNATIONAL.update_interval_url
 
 # iGPSPORT heartRateComputeMode: 0 = max HR, 1 = HRR, 2 = LTHR.
 HEART_RATE_COMPUTE_MODE_MAX_HR = 0
@@ -37,12 +39,17 @@ def member_id_from_token(auth_headers: dict[str, str]) -> int | None:
     return None
 
 
-def mobile_headers(auth_headers: dict[str, str], member_id: int | None) -> dict[str, str]:
+def mobile_headers(
+    auth_headers: dict[str, str],
+    member_id: int | None,
+    region: IgpRegionConfig | str | None = None,
+) -> dict[str, str]:
+    cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
     headers = {
         **auth_headers,
         "Accept": "application/json",
         "Accept-Encoding": "gzip",
-        "Accept-Language": "en",
+        "Accept-Language": cfg.accept_language,
         "Content-Type": "application/json; charset=UTF-8",
         "User-Agent": "intervalssync/1.0",
         "qiwu-app-version": "8.06.36",
@@ -77,11 +84,13 @@ def _unwrap_api_data(response_json: Any) -> dict[str, Any] | None:
 def fetch_personal_interval_info(
     session: requests.Session,
     headers: dict[str, str],
+    region: IgpRegionConfig | str | None = None,
 ) -> dict[str, Any]:
     """GET v2/User/UserIntervalInfo."""
+    cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
     get_headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
     try:
-        resp = session.get(GET_INTERVAL_URL, headers=get_headers, timeout=30)
+        resp = session.get(cfg.get_interval_url, headers=get_headers, timeout=30)
     except requests.RequestException as exc:
         raise RuntimeError(f"GET UserIntervalInfo failed: {exc}") from exc
 
@@ -106,10 +115,14 @@ def update_personal_interval_info(
     session: requests.Session,
     headers: dict[str, str],
     body: dict[str, Any],
+    region: IgpRegionConfig | str | None = None,
 ) -> dict[str, Any]:
     """POST UpdatePersonalIntervalInfo."""
+    cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
     try:
-        resp = session.post(UPDATE_INTERVAL_URL, headers=headers, json=body, timeout=30)
+        resp = session.post(
+            cfg.update_interval_url, headers=headers, json=body, timeout=30
+        )
     except requests.RequestException as exc:
         raise RuntimeError(f"POST UpdatePersonalIntervalInfo failed: {exc}") from exc
 

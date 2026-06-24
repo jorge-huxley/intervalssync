@@ -37,6 +37,27 @@ def _write_bryton_env(path: Path, **overrides: str) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def test_load_igpsport_credentials_defaults_region(tmp_path):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+    creds = cli_env.load_igpsport_credentials(env_file)
+    assert creds.igp_region == "international"
+
+
+def test_load_igpsport_credentials_china_region(tmp_path):
+    env_file = tmp_path / ".env"
+    _write_env(env_file, **{cli_env.IGPSPORT_REGION_KEY: "china"})
+    creds = cli_env.load_igpsport_credentials(env_file)
+    assert creds.igp_region == "china"
+
+
+def test_load_igpsport_credentials_rejects_invalid_region(tmp_path):
+    env_file = tmp_path / ".env"
+    _write_env(env_file, **{cli_env.IGPSPORT_REGION_KEY: "eu"})
+    with pytest.raises(cli_env.CliConfigError, match="INTERVALSSYNC_IGPSPORT_REGION"):
+        cli_env.load_igpsport_credentials(env_file)
+
+
 def test_parse_dotenv_comments_and_quotes():
     text = """
 # comment

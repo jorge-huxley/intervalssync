@@ -51,9 +51,10 @@ src/intervalssync/
 
 ## iGPSPORT API notes
 
-1. POST `i.igpsport.com/Auth/Login` → `loginToken` cookie URL-decoded as Bearer token.
-2. `Activity/ActivityList` — PascalCase `RideId`, `Title`, `StartTime`.
-3. FIT URL: `prod.en.igpsport.com/.../queryActivityDetail/{id}` or `getDownloadUrl/{id}`.
+1. **International:** POST `i.igpsport.com/Auth/Login` → `loginToken` cookie URL-decoded as Bearer token.
+2. **China:** POST `prod.zh.igpsport.com/service/auth/account/login` with `{appId, username, password}` → JSON `data.access_token` as Bearer.
+3. `Activity/ActivityList` (intl) or `queryMyActivity` (China) — PascalCase / camelCase field names respectively.
+4. FIT URL: `{prod.en|zh}.igpsport.com/.../queryActivityDetail/{id}` or `getDownloadUrl/{id}`.
 
 ## Bryton API notes
 

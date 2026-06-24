@@ -11,6 +11,7 @@ ActivitySource = Literal["igpsport", "bryton"]
 
 IGPSPORT_USER_KEY = "INTERVALSSYNC_IGPSPORT_USER"
 IGPSPORT_PASSWORD_KEY = "INTERVALSSYNC_IGPSPORT_PASSWORD"
+IGPSPORT_REGION_KEY = "INTERVALSSYNC_IGPSPORT_REGION"
 BRYTON_EMAIL_KEY = "INTERVALSSYNC_BRYTON_EMAIL"
 BRYTON_PASSWORD_KEY = "INTERVALSSYNC_BRYTON_PASSWORD"
 INTERVALS_API_KEY_KEY = "INTERVALSSYNC_INTERVALS_API_KEY"
@@ -29,7 +30,8 @@ BRYTON_REQUIRED_KEYS = (
 _IGPSPORT_BODY = (
     f"  {IGPSPORT_USER_KEY}=<email>\n"
     f"  {IGPSPORT_PASSWORD_KEY}=<password>\n"
-    f"  {INTERVALS_API_KEY_KEY}=<api-key>"
+    f"  {INTERVALS_API_KEY_KEY}=<api-key>\n"
+    f"  {IGPSPORT_REGION_KEY}=international  # or china for app.igpsport.cn"
 )
 _BRYTON_BODY = (
     f"  {BRYTON_EMAIL_KEY}=<email>\n"
@@ -67,6 +69,7 @@ class IgpsportCredentials:
     igp_user: str
     igp_password: str
     intervals_api_key: str
+    igp_region: str = "international"
 
 
 @dataclass(frozen=True)
@@ -148,10 +151,18 @@ def load_igpsport_credentials(env_path: Path) -> IgpsportCredentials:
     if missing:
         raise CliConfigError(_missing_keys_message(env_path, missing, source="igpsport"))
 
+    region = values.get(IGPSPORT_REGION_KEY, "international") or "international"
+    if region not in ("international", "china"):
+        raise CliConfigError(
+            f"Invalid {IGPSPORT_REGION_KEY}={region!r} in {env_path} "
+            "(expected 'international' or 'china')."
+        )
+
     return IgpsportCredentials(
         igp_user=values[IGPSPORT_USER_KEY],
         igp_password=values[IGPSPORT_PASSWORD_KEY],
         intervals_api_key=values[INTERVALS_API_KEY_KEY],
+        igp_region=region,
     )
 
 

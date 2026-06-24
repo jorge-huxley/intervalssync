@@ -10,6 +10,7 @@ from intervalssync.gui import config as config_module
 def test_defaults():
     cfg = config_module.AppConfig()
     assert cfg.enable_igpsport is True
+    assert cfg.igp_region == "international"
     assert cfg.enable_bryton is False
     assert cfg.delete_after_upload is True
     assert cfg.force_resync is False
@@ -107,3 +108,16 @@ def test_load_migrates_activity_source_igpsport(tmp_path, monkeypatch):
     assert loaded.enable_igpsport is True
     assert loaded.enable_bryton is False
     assert loaded.igp_user == "u@x.com"
+
+
+def test_save_and_load_igp_region(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    monkeypatch.setattr(config_module, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config_module, "CONFIG_PATH", path)
+
+    cfg = config_module.AppConfig(igp_user="13800000000", igp_region="china")
+    config_module.save(cfg)
+
+    loaded = config_module.load()
+    assert loaded.igp_region == "china"
+    assert loaded.igp_user == "13800000000"
