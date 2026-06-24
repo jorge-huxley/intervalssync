@@ -68,8 +68,8 @@ async def build_settings_view(
         label="iGPSPORT region",
         value=igp_region_value,
         options=[
-            ft.dropdown.Option("international", "International (i.igpsport.com)"),
-            ft.dropdown.Option("china", "China (app.igpsport.cn)"),
+            ft.dropdown.Option("international", "International"),
+            ft.dropdown.Option("china", "China"),
         ],
         helper_text="Use China if your account logs in at app.igpsport.cn",
     )
