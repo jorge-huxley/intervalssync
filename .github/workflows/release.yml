@@ -158,7 +158,7 @@ jobs:
         with:
           path: dist
 
-      # Create (or update) the Release for this tag, attach both files, and
+      # Create (or update) the Release for this tag, attach all files, and
       # generate the notes a single time (avoids the duplicate notes you get
       # when each build job generates them).
       #
