@@ -56,3 +56,8 @@ bundle_id = "io.github.jorgehuxley.intervalssync"
 "android.permission.MANAGE_EXTERNAL_STORAGE" = true
 "android.permission.READ_EXTERNAL_STORAGE" = true
 "android.permission.WRITE_EXTERNAL_STORAGE" = true
+
+# macOS secure storage needs the login keychain path for unsigned/non-App-Store
+# builds. This Flutter plugin version honors `usesDataProtectionKeychain=false`.
+[tool.flet.flutter.pubspec.dependency_overrides]
+flutter_secure_storage = "10.3.1"

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import flet as ft
 from flet_permission_handler import Permission, PermissionHandler, PermissionStatus
-from flet_secure_storage import SecureStorage
+from flet_secure_storage import MacOsOptions, SecureStorage
 
 from .. import __version__
 from . import config as config_module
@@ -63,6 +63,14 @@ def _supports_permission_handler(platform: ft.PagePlatform) -> bool:
     return platform in _PERMISSION_HANDLER_PLATFORMS
 
 
+def _secure_storage_for_platform(platform: ft.PagePlatform) -> SecureStorage:
+    if platform == ft.PagePlatform.MACOS:
+        return SecureStorage(
+            macos_options=MacOsOptions(uses_data_protection_keychain=False)
+        )
+    return SecureStorage()
+
+
 async def _app(page: ft.Page) -> None:
     page.title = APP_TITLE
     page.theme_mode = ft.ThemeMode.SYSTEM
@@ -78,7 +86,7 @@ async def _app(page: ft.Page) -> None:
 
     config = config_module.load()
 
-    storage = SecureStorage()
+    storage = _secure_storage_for_platform(page.platform)
     perms = PermissionHandler() if _supports_permission_handler(page.platform) else None
     page.services.append(storage)
     if perms is not None:

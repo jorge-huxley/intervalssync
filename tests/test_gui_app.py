@@ -18,3 +18,15 @@ def test_permission_handler_allows_supported_platforms():
     web = getattr(ft.PagePlatform, "WEB", None)
     if web is not None:
         assert app._supports_permission_handler(web)
+
+
+def test_secure_storage_uses_login_keychain_on_macos():
+    storage = app._secure_storage_for_platform(ft.PagePlatform.MACOS)
+
+    assert storage.macos_options.uses_data_protection_keychain is False
+
+
+def test_secure_storage_keeps_default_keychain_options_elsewhere():
+    storage = app._secure_storage_for_platform(ft.PagePlatform.WINDOWS)
+
+    assert storage.macos_options.uses_data_protection_keychain is True

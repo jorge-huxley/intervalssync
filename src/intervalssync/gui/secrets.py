@@ -2,8 +2,8 @@
 
 Secrets are kept in the operating system's native vault (Windows Credential
 Manager, macOS/iOS Keychain, Android Keystore, Linux libsecret) via
-`flet-secure-storage` — never in a plaintext file. The same backend works on
-every platform Flet targets, so there is no per-OS branching.
+`flet-secure-storage` — never in a plaintext file. Platform-specific options
+are handled at app startup before this wrapper is created.
 
 `SecretStore` is the async seam between the GUI and storage. It's async because
 `flet-secure-storage` talks to the Flutter side asynchronously.
