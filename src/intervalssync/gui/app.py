@@ -23,6 +23,13 @@ from . import theme
 
 _DESKTOP = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX}
 _MOBILE = {ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV, ft.PagePlatform.IOS}
+_PERMISSION_HANDLER_PLATFORMS = {
+    ft.PagePlatform.ANDROID,
+    ft.PagePlatform.ANDROID_TV,
+    ft.PagePlatform.IOS,
+    ft.PagePlatform.WINDOWS,
+    *([ft.PagePlatform.WEB] if hasattr(ft.PagePlatform, "WEB") else []),
+}
 # Standard public Downloads directory on Android (the filesystem name is the
 # singular "Download"). Used when the user opts in and grants storage access.
 ANDROID_DOWNLOADS = "/storage/emulated/0/Download/intervalssync-fit"
@@ -52,6 +59,10 @@ async def _has_credentials(
     return False
 
 
+def _supports_permission_handler(platform: ft.PagePlatform) -> bool:
+    return platform in _PERMISSION_HANDLER_PLATFORMS
+
+
 async def _app(page: ft.Page) -> None:
     page.title = APP_TITLE
     page.theme_mode = ft.ThemeMode.SYSTEM
@@ -68,8 +79,10 @@ async def _app(page: ft.Page) -> None:
     config = config_module.load()
 
     storage = SecureStorage()
-    perms = PermissionHandler()
-    page.services.extend([storage, perms])
+    perms = PermissionHandler() if _supports_permission_handler(page.platform) else None
+    page.services.append(storage)
+    if perms is not None:
+        page.services.append(perms)
     store = secrets_module.FletSecureStorage(storage)
 
     def _private_download_dir() -> str:
