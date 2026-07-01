@@ -1,8 +1,8 @@
-# Builds the Windows app and the Android APK, then publishes them as a single
-# GitHub Release.
+# Builds the Windows app, macOS app, and Android APK, then publishes them as a
+# single GitHub Release.
 #
 # It runs only when you push a version tag like "v0.1.0" — see how to do that
-# in the README's "Cutting a release" section. The two build jobs upload their
+# in the README's "Cutting a release" section. The build jobs upload their
 # artifacts; a final release job attaches them to one release and generates the
 # notes once (so they aren't duplicated).
 
@@ -112,8 +112,45 @@ jobs:
           name: android
           path: "intervalssync-${{ github.ref_name }}-android.apk"
 
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Compute version from tag
+        run: echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Stamp version into the app
+        run: echo "__version__ = \"$APP_VERSION\"" > src/intervalssync/_version.py
+
+      - name: Stamp Dropbox app key into the app
+        env:
+          IGPSYNC_DROPBOX_APP_KEY: ${{ secrets.IGPSYNC_DROPBOX_APP_KEY }}
+        run: |
+          python -c "from pathlib import Path; import os; Path('src/intervalssync/_dropbox_app_key.py').write_text('DROPBOX_APP_KEY = ' + repr(os.getenv('IGPSYNC_DROPBOX_APP_KEY', '')) + '\n', encoding='utf-8')"
+
+      - name: Build macOS app
+        run: uv run flet build macos --yes --verbose --build-version "${{ env.APP_VERSION }}"
+
+      - name: Package into a versioned zip
+        run: |
+          for app in build/macos/*.app; do
+            if [ -d "$app" ]; then
+              ditto -c -k --sequesterRsrc --keepParent "$app" "intervalssync-${{ github.ref_name }}-macos.zip"
+              exit 0
+            fi
+          done
+          echo "No macOS .app bundle found in build/macos" >&2
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: "intervalssync-${{ github.ref_name }}-macos.zip"
+
   release:
-    needs: [windows, android]
+    needs: [windows, android, macos]
     runs-on: ubuntu-latest
     steps:
       - name: Download build artifacts

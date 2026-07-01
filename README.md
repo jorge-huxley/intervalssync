@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/jorge-huxley/intervalssync?style=flat" alt="License: MIT" /></a>
   <a href="https://github.com/jorge-huxley/intervalssync/releases"><img src="https://img.shields.io/github/v/release/jorge-huxley/intervalssync?style=flat&sort=semver" alt="GitHub release" /></a>
-  <a href="https://github.com/jorge-huxley/intervalssync/releases"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20Android-lightgrey?style=flat" alt="Platforms" /></a>
+  <a href="https://github.com/jorge-huxley/intervalssync/releases"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android-lightgrey?style=flat" alt="Platforms" /></a>
   <a href="https://github.com/jorge-huxley/intervalssync/stargazers"><img src="https://img.shields.io/github/stars/jorge-huxley/intervalssync?style=flat&label=stars" alt="GitHub stars" /></a>
 
 </p>
@@ -24,7 +24,7 @@
   Enter your credentials once, press <strong>Sync</strong>, and your latest rides from
   <strong>iGPSPORT</strong> or <strong>Bryton Active</strong> land on <strong>intervals.icu</strong>. You can also push
   planned workouts from intervals.icu back to iGPSPORT or Bryton Active.
-  Free and open source, for <strong>Windows</strong> and <strong>Android</strong>.
+  Free and open source, for <strong>Windows</strong>, <strong>macOS</strong>, and <strong>Android</strong>.
 </p>
 
 <p align="center">
@@ -81,6 +81,16 @@ Your password and API key are stored in your operating system's **secure
 credential store** — Windows Credential Manager on Windows (the same vault
 Windows uses for its own logins) — never in a plain text file.
 
+## Download & run (macOS)
+
+1. Go to the [Releases](../../releases) page and download the latest `macos.zip`.
+2. Unzip it and move the app to **Applications** if you want.
+3. Open the app, fill in **Settings** (same fields as above), then **Sync** or **Upload to iGPSPORT** / **Upload to Bryton**.
+
+On macOS your credentials are stored in Keychain. Release builds are not
+notarized yet, so macOS may require right-clicking the app and choosing
+**Open** the first time.
+
 ## Download & run (Android)
 
 1. On the [Releases](../../releases) page, download the latest `.apk`.
@@ -105,14 +115,15 @@ cp .env.example .env    # optional: credentials for CLI; IGPSYNC_DROPBOX_APP_KEY
 uv run --env-file .env intervalssync-gui
 ```
 
-## Build the Windows executable
+## Build the desktop apps
 
 ```bash
 uv run flet build windows
+uv run flet build macos
 ```
 
-The distributable lands in `build/windows/`. (Flet downloads the Flutter
-toolchain on the first build.)
+The distributables land in `build/windows/` and `build/macos/`. (Flet downloads
+the Flutter toolchain on the first build; macOS builds require a macOS host.)
 
 ## Roadmap
 
