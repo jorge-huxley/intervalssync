@@ -359,3 +359,55 @@ def test_sync_zones_json_sync_error(tmp_path: Path, monkeypatch, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
     assert payload["error"] == "profile update failed"
+
+
+def test_upload_segments_parser_accepts_flags():
+    args = cli._build_parser().parse_args(
+        ["upload-segments", "--route-id", "42", "--igp-ride-id", "85775035", "--force-resync"]
+    )
+    assert args.command == "upload-segments"
+    assert args.route_id == 42
+    assert args.igp_ride_id == 85775035
+    assert args.force_resync is True
+
+
+def test_upload_segments_requires_route_or_list(capsys):
+    args = cli._build_parser().parse_args(["upload-segments", "--json"])
+    assert cli.cmd_upload_segments(args) == cli.EXIT_CONFIG_ERROR
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert "route-id" in payload["error"].lower()
+
+
+def test_upload_segments_json_success(tmp_path: Path, monkeypatch, capsys):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+    monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
+
+    from intervalssync.igpsport import segment as segment_module
+
+    def fake_upload(config, progress=None):
+        if progress:
+            progress("uploading segment")
+        return segment_module.SegmentUploadResult(
+            listed=1,
+            uploaded=1,
+            uploaded_map={"42": "seg-uuid"},
+        )
+
+    monkeypatch.setattr(cli, "upload_segment", fake_upload)
+
+    args = cli._build_parser().parse_args(
+        ["upload-segments", "--route-id", "42", "--env-file", str(env_file), "--json"]
+    )
+    assert cli.cmd_upload_segments(args) == cli.EXIT_OK
+
+    captured = capsys.readouterr()
+    assert "uploading segment" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["ok"] is True
+    assert payload["uploaded"] == 1
+
+    loaded = cli_config.load()
+    assert loaded.uploaded_segments == {"42": "seg-uuid"}

@@ -33,6 +33,8 @@ class CliConfig:
     activity_type: str = ""
     # Planned workouts: intervals.icu event id → iGPSPORT workoutId.
     uploaded_workouts: dict[str, int] = field(default_factory=dict)
+    # Routes: intervals.icu route_id → iGPSPORT segment uuid.
+    uploaded_segments: dict[str, str] = field(default_factory=dict)
     # Planned workouts: intervals.icu event id → Bryton FIT filename stem.
     uploaded_bryton_workouts: dict[str, str] = field(default_factory=dict)
     # How many calendar days of planned workouts to upload (1 = today only).

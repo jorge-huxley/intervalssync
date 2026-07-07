@@ -17,6 +17,7 @@ INTERVALS_ACTIVITIES_URL = "https://intervals.icu/api/v1/athlete/0/activities"
 INTERVALS_ACTIVITY_URL = "https://intervals.icu/api/v1/activity"
 INTERVALS_EVENTS_URL = "https://intervals.icu/api/v1/athlete/0/events"
 INTERVALS_SPORT_SETTINGS_URL = "https://intervals.icu/api/v1/athlete/0/sport-settings"
+INTERVALS_ROUTES_URL = "https://intervals.icu/api/v1/athlete/0/routes"
 
 
 @dataclass
@@ -26,6 +27,17 @@ class CalendarWorkout:
     description: str
     activity_type: str
     workout_doc: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class IntervalsRoute:
+    route_id: int
+    name: str
+    distance: float | None
+    activity_count: int
+    latlngs: list[list[float]]
+    most_recent_id: str | None
+    description: str = ""
 
 
 @dataclass(frozen=True)
@@ -165,6 +177,98 @@ def fetch_sport_settings(
         power_zones=_num_list(data.get("power_zones")),
         hr_zones=_num_list(data.get("hr_zones")),
     )
+
+
+def _parse_route(data: dict[str, Any]) -> IntervalsRoute | None:
+    route_id = data.get("route_id")
+    if route_id is None:
+        return None
+    latlngs_raw = data.get("latlngs")
+    latlngs: list[list[float]] = []
+    if isinstance(latlngs_raw, list):
+        for point in latlngs_raw:
+            if isinstance(point, list) and len(point) >= 2:
+                latlngs.append([float(point[0]), float(point[1])])
+    return IntervalsRoute(
+        route_id=int(route_id),
+        name=str(data.get("name") or f"Route {route_id}"),
+        distance=_num(data.get("distance")),
+        activity_count=int(data.get("activity_count") or 0),
+        latlngs=latlngs,
+        most_recent_id=(
+            str(data["most_recent_id"]) if data.get("most_recent_id") else None
+        ),
+        description=str(data.get("description") or ""),
+    )
+
+
+def fetch_routes(
+    api_key: str,
+    *,
+    http: requests.Session | None = None,
+) -> list[IntervalsRoute]:
+    """List clustered routes for the authenticated athlete."""
+    client = http or requests.Session()
+    resp = client.get(
+        INTERVALS_ROUTES_URL,
+        auth=("API_KEY", api_key),
+        timeout=30,
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+    if not isinstance(payload, list):
+        return []
+    routes: list[IntervalsRoute] = []
+    for item in payload:
+        if isinstance(item, dict):
+            route = _parse_route(item)
+            if route is not None:
+                routes.append(route)
+    return routes
+
+
+def fetch_route(
+    api_key: str,
+    route_id: int,
+    *,
+    http: requests.Session | None = None,
+) -> IntervalsRoute:
+    """Fetch one route by id (includes latlngs polyline)."""
+    client = http or requests.Session()
+    resp = client.get(
+        f"{INTERVALS_ROUTES_URL}/{route_id}",
+        auth=("API_KEY", api_key),
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise ValueError(f"Unexpected route response for route_id={route_id}")
+    route = _parse_route(data)
+    if route is None:
+        raise ValueError(f"Route {route_id} missing route_id in response")
+    return route
+
+
+def fetch_activity_external_id(
+    api_key: str,
+    activity_id: str,
+    *,
+    http: requests.Session | None = None,
+) -> str | None:
+    """Return external_id for an intervals.icu activity, if set."""
+    client = http or requests.Session()
+    resp = client.get(
+        f"{INTERVALS_ACTIVITY_URL}/{activity_id}",
+        auth=("API_KEY", api_key),
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        return None
+    external_id = data.get("external_id")
+    return str(external_id) if external_id else None
 
 
 def fetch_sport_settings_max_hr(

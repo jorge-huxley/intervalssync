@@ -38,6 +38,12 @@ from ..igpsport.workout import (
     apply_uploaded_workout_map,
     upload_workouts,
 )
+from ..igpsport.segment import (
+    SegmentUploadConfig,
+    SegmentUploadResult,
+    apply_uploaded_segment_map,
+    upload_segment,
+)
 from . import config as cli_config_module
 from .env import ActivitySource, CliConfigError, load_credentials, resolve_env_path
 
@@ -227,6 +233,48 @@ def _workout_result_payload(
     if error is not None:
         payload["error"] = error
     return payload
+
+
+def _segment_result_payload(
+    result: SegmentUploadResult,
+    *,
+    ok: bool,
+    error: str | None = None,
+) -> dict:
+    payload = {
+        "ok": ok,
+        "source": "igpsport",
+        "listed": result.listed,
+        "uploaded": result.uploaded,
+        "skipped": result.skipped,
+        "failed": result.failed,
+    }
+    if error is not None:
+        payload["error"] = error
+    return payload
+
+
+def _build_segment_upload_config(
+    credentials,
+    config: cli_config_module.CliConfig,
+    *,
+    route_id: int | None,
+    igp_ride_id: int | None,
+    title: str | None,
+    force_resync: bool | None,
+    list_only: bool,
+) -> SegmentUploadConfig:
+    return SegmentUploadConfig(
+        igp_user=credentials.igp_user,
+        igp_password=credentials.igp_password,
+        intervals_api_key=credentials.intervals_api_key,
+        route_id=route_id or 0,
+        igp_ride_id=igp_ride_id,
+        title=title,
+        uploaded_segments=dict(config.uploaded_segments),
+        force_resync=force_resync if force_resync is not None else config.force_resync,
+        list_only=list_only,
+    )
 
 
 def _emit_workout_text_summary(result: WorkoutUploadResult | BrytonWorkoutUploadResult) -> None:
@@ -458,6 +506,74 @@ def cmd_upload_workouts(args: argparse.Namespace) -> int:
     return EXIT_OK if ok else EXIT_SYNC_ERROR
 
 
+def cmd_upload_segments(args: argparse.Namespace) -> int:
+    config = cli_config_module.load()
+    use_json = args.json
+
+    if not args.list_routes and args.route_id is None:
+        message = "Pass --route-id or use --list-routes."
+        if use_json:
+            _emit_json({"ok": False, "source": "igpsport", "error": message})
+        else:
+            print(message, file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    try:
+        env_path = resolve_env_path(
+            env_file=Path(args.env_file) if args.env_file else None,
+            config_env_file=config.env_file or None,
+        )
+        credentials = load_credentials(env_path, source="igpsport")
+    except CliConfigError as exc:
+        if use_json:
+            _emit_json({"ok": False, "source": "igpsport", "error": str(exc)})
+        else:
+            print(exc, file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    upload_config = _build_segment_upload_config(
+        credentials,
+        config,
+        route_id=args.route_id,
+        igp_ride_id=args.igp_ride_id,
+        title=args.title,
+        force_resync=True if args.force_resync else None,
+        list_only=args.list_routes,
+    )
+
+    def progress(message: str) -> None:
+        print(message, file=sys.stderr)
+
+    try:
+        result = upload_segment(upload_config, progress=progress)
+    except IgpSyncError as exc:
+        if use_json:
+            _emit_json(_segment_result_payload(SegmentUploadResult(), ok=False, error=str(exc)))
+        else:
+            print(f"✗ {exc}", file=sys.stderr)
+        return EXIT_SYNC_ERROR
+    except Exception as exc:  # noqa: BLE001
+        if use_json:
+            _emit_json(_segment_result_payload(SegmentUploadResult(), ok=False, error=str(exc)))
+        else:
+            print(f"✗ Unexpected error: {exc}", file=sys.stderr)
+        return EXIT_SYNC_ERROR
+
+    if result.uploaded_map or result.pruned_keys:
+        apply_uploaded_segment_map(config.uploaded_segments, result)
+        cli_config_module.save(config)
+
+    ok = result.failed == 0
+    if use_json:
+        _emit_json(_segment_result_payload(result, ok=ok))
+    elif not args.list_routes:
+        print(
+            f"Done — uploaded {result.uploaded}, "
+            f"skipped {result.skipped}, failed {result.failed}."
+        )
+    return EXIT_OK if ok else EXIT_SYNC_ERROR
+
+
 def cmd_sync_zones(args: argparse.Namespace) -> int:
     config = cli_config_module.load()
     use_json = args.json
@@ -601,6 +717,40 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Re-upload workouts even if already on the target device platform.",
     )
     upload_workouts_parser.set_defaults(func=cmd_upload_workouts)
+
+    upload_segments_parser = subparsers.add_parser(
+        "upload-segments",
+        parents=[common],
+        help="Upload an intervals.icu route to iGPSPORT segments.",
+    )
+    upload_segments_parser.add_argument(
+        "--route-id",
+        type=int,
+        metavar="N",
+        help="intervals.icu route id to upload.",
+    )
+    upload_segments_parser.add_argument(
+        "--igp-ride-id",
+        type=int,
+        metavar="ID",
+        help="iGPSPORT activity id to attach the segment to (auto from route if synced).",
+    )
+    upload_segments_parser.add_argument(
+        "--title",
+        metavar="TEXT",
+        help="Override segment title on iGPSPORT.",
+    )
+    upload_segments_parser.add_argument(
+        "--list-routes",
+        action="store_true",
+        help="List intervals.icu routes and exit (no upload).",
+    )
+    upload_segments_parser.add_argument(
+        "--force-resync",
+        action="store_true",
+        help="Re-upload even if this route was already uploaded.",
+    )
+    upload_segments_parser.set_defaults(func=cmd_upload_segments)
 
     sync_zones_parser = subparsers.add_parser(
         "sync-zones",

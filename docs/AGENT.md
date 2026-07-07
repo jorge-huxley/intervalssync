@@ -87,6 +87,19 @@ uv run intervalssync upload-workouts --source bryton --json        # Bryton Acti
 
 Requires credentials for the chosen target. Same exit-code rules.
 
+### Segment upload (intervals.icu route → iGPSPORT)
+
+```bash
+uv run intervalssync upload-segments --list-routes --json
+uv run intervalssync upload-segments --route-id 42 --json
+uv run intervalssync upload-segments --route-id 42 --igp-ride-id 85775035 --json
+```
+
+- **iGPSPORT-only** (no `--source` flag)
+- Lists clustered routes with `--list-routes`, or uploads one route as a timed segment
+- Resolves `rideId` from the route's linked activity when it was synced from iGPSPORT (`external_id` `igpsport_{id}`); otherwise pass `--igp-ride-id`
+- Tracks uploaded routes in CLI `config.json` (`uploaded_segments` map)
+
 ### Zone sync (intervals.icu → iGPSPORT profile)
 
 ```bash
@@ -143,6 +156,7 @@ Success example:
 |---------|-------------|
 | `intervalssync sync` | Download recent rides → upload to intervals.icu |
 | `intervalssync upload-workouts` | Planned workouts → iGPSPORT or Bryton (`--source`) |
+| `intervalssync upload-segments` | intervals.icu route → iGPSPORT segment |
 | `intervalssync sync-zones` | Push thresholds + zones from intervals.icu → iGPSPORT profile |
 | `intervalssync check` | Validate `.env` keys (no network) |
 

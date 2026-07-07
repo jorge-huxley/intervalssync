@@ -85,3 +85,53 @@ def test_fetch_sport_settings(monkeypatch):
     assert settings.max_hr == 193.0
     assert settings.power_zones == [55.0, 75.0, 90.0, 105.0, 120.0, 999.0]
     assert settings.hr_zones == [120.0, 146.0, 166.0, 185.0, 193.0]
+
+
+def test_fetch_routes(monkeypatch):
+    monkeypatch.setattr(
+        intervals_icu.requests.Session,
+        "get",
+        lambda self, *a, **k: FakeResponse(
+            json_data=[
+                {
+                    "route_id": 7,
+                    "name": "Loop",
+                    "distance": 25000,
+                    "activity_count": 5,
+                    "most_recent_id": "i999",
+                    "latlngs": [[40.0, -3.0], [40.1, -3.1]],
+                }
+            ]
+        ),
+    )
+    routes = intervals_icu.fetch_routes("api-key")
+    assert len(routes) == 1
+    assert routes[0].route_id == 7
+    assert routes[0].name == "Loop"
+    assert routes[0].latlngs == [[40.0, -3.0], [40.1, -3.1]]
+
+
+def test_fetch_route(monkeypatch):
+    monkeypatch.setattr(
+        intervals_icu.requests.Session,
+        "get",
+        lambda self, url, *a, **k: FakeResponse(
+            json_data={
+                "route_id": 9,
+                "name": "Hill",
+                "latlngs": [[41.0, -4.0], [41.01, -4.01]],
+            }
+        ),
+    )
+    route = intervals_icu.fetch_route("api-key", 9)
+    assert route.route_id == 9
+    assert route.name == "Hill"
+
+
+def test_fetch_activity_external_id(monkeypatch):
+    monkeypatch.setattr(
+        intervals_icu.requests.Session,
+        "get",
+        lambda self, *a, **k: FakeResponse(json_data={"external_id": "igpsport_12345"}),
+    )
+    assert intervals_icu.fetch_activity_external_id("key", "i1") == "igpsport_12345"

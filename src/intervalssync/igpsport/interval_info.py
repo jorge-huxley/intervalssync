@@ -11,6 +11,7 @@ import requests
 IGPS_MOBILE_API = "https://prod.en.igpsport.com/service/mobile/api"
 GET_INTERVAL_URL = f"{IGPS_MOBILE_API}/v2/User/UserIntervalInfo"
 UPDATE_INTERVAL_URL = f"{IGPS_MOBILE_API}/User/UpdatePersonalIntervalInfo"
+USERINFO_URL = f"{IGPS_MOBILE_API}/user/userinfo"
 
 # iGPSPORT heartRateComputeMode: 0 = max HR, 1 = HRR, 2 = LTHR.
 HEART_RATE_COMPUTE_MODE_MAX_HR = 0
@@ -35,6 +36,37 @@ def member_id_from_token(auth_headers: dict[str, str]) -> int | None:
             except (TypeError, ValueError):
                 continue
     return None
+
+
+def fetch_member_id(
+    session: requests.Session,
+    auth_headers: dict[str, str],
+) -> int | None:
+    """Return member id from JWT claims or the mobile userinfo endpoint."""
+    member_id = member_id_from_token(auth_headers)
+    if member_id is not None:
+        return member_id
+    get_headers = {k: v for k, v in auth_headers.items() if k.lower() != "content-type"}
+    try:
+        resp = session.get(USERINFO_URL, headers=get_headers, timeout=30)
+    except requests.RequestException:
+        return None
+    if not resp.ok:
+        return None
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    data = body.get("data") if isinstance(body, dict) else None
+    if not isinstance(data, dict):
+        return None
+    value = data.get("memberId")
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def mobile_headers(auth_headers: dict[str, str], member_id: int | None) -> dict[str, str]:

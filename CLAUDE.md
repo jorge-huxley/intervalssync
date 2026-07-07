@@ -14,6 +14,7 @@ uv run intervalssync-gui
 uv run intervalssync sync                          # iGPSPORT (default)
 uv run intervalssync sync --source bryton          # Bryton Active
 uv run intervalssync upload-workouts --json        # intervals.icu → iGPSPORT
+uv run intervalssync upload-segments --route-id N --json   # intervals.icu route → iGPSPORT segment
 uv run intervalssync sync-zones --env-file .env --json   # intervals.icu → iGPSPORT profile
 uv run intervalssync check --source bryton
 uv run flet build windows
@@ -32,7 +33,7 @@ Package root: `src/intervalssync/`. **CLI** and **GUI** are separate subpackages
 src/intervalssync/
   cli/main.py, env.py, config.py                 # headless CLI
   gui/app.py, views, config.py, secrets.py       # Flet UI (dual-source: iGPSPORT + Bryton)
-  igpsport/core.py, workout.py                   # iGPSPORT source
+  igpsport/core.py, workout.py, segment.py       # iGPSPORT source
   bryton/ddp.py, api.py, core.py                 # Bryton source
   intervals_icu.py, dropbox_client.py            # shared by sources
 ```
@@ -41,6 +42,7 @@ src/intervalssync/
 - **`igpsport/core.py`** — `sync(SyncConfig, progress)`: login → list → FIT URL → download → upload. `external_id`: `igpsport_{ride_id}`.
 - **`igpsport/profile_sync.py`** — `sync_profile_zones`: intervals.icu sport settings → iGPSPORT profile thresholds/zones.
 - **`igpsport/workout.py`** — planned workouts intervals.icu → iGPSPORT.
+- **`igpsport/segment.py`** — intervals.icu routes → iGPSPORT segments (mobile Segment API).
 - **`bryton/ddp.py`** — Meteor DDP login + `activityList` subscription.
 - **`bryton/api.py`** — `GET https://m3.brytonactive.com/api/activity?id=…` (FIT download; Android app API).
 - **`bryton/core.py`** — `sync(SyncConfig, progress)`. `external_id`: `bryton_{activity_id}`.
