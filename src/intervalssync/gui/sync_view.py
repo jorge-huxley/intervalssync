@@ -38,9 +38,11 @@ def build_sync_view(
     )
     log = ft.ListView(spacing=4, auto_scroll=True, height=280, expand=False)
     stats_refs = support_gamification.StatsCardRefs(
-        headline=ft.Ref[ft.Text](),
+        number=ft.Ref[ft.Text](),
+        rank=ft.Ref[ft.Text](),
         breakdown=ft.Ref[ft.Text](),
-        progress_label=ft.Ref[ft.Text](),
+        target=ft.Ref[ft.Text](),
+        remaining=ft.Ref[ft.Text](),
         progress_bar=ft.Ref[ft.ProgressBar](),
     )
     stats_card = support_gamification.build_stats_card(page, config, stats_refs)

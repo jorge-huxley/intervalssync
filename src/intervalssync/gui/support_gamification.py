@@ -57,9 +57,11 @@ _CELEBRATION_HEIGHT = 340
 
 @dataclass
 class StatsCardRefs:
-    headline: ft.Ref[ft.Text]
+    number: ft.Ref[ft.Text]
+    rank: ft.Ref[ft.Text]
     breakdown: ft.Ref[ft.Text]
-    progress_label: ft.Ref[ft.Text]
+    target: ft.Ref[ft.Text]
+    remaining: ft.Ref[ft.Text]
     progress_bar: ft.Ref[ft.ProgressBar]
 
 
@@ -157,13 +159,6 @@ def record_uploads(
     return None
 
 
-def _headline_text(config: config_module.AppConfig) -> str:
-    total = total_uploads(config)
-    rank = rank_for(total)
-    transfer_word = "transfer" if total == 1 else "transfers"
-    return f"{rank} · {total} {transfer_word}"
-
-
 def _breakdown_text(config: config_module.AppConfig) -> str:
     activities = config.lifetime_activities_uploaded
     workouts = config.lifetime_workouts_uploaded
@@ -172,13 +167,20 @@ def _breakdown_text(config: config_module.AppConfig) -> str:
     return f"{activities} {activity_word} · {workouts} {workout_word}"
 
 
-def _progress_label_text(total: int) -> str:
+def _target_text(total: int) -> str:
     nxt = next_milestone(total)
     if nxt is None:
-        return "All milestones reached — you're a legend"
+        return "Every milestone cleared"
+    return f"Next milestone · {nxt}"
+
+
+def _remaining_text(total: int) -> str:
+    nxt = next_milestone(total)
+    if nxt is None:
+        return "Legend"
     remaining = nxt - total
-    transfer_word = "transfer" if remaining == 1 else "transfers"
-    return f"{remaining} {transfer_word} to next milestone"
+    word = "sync" if remaining == 1 else "syncs"
+    return f"{remaining} {word} to go"
 
 
 def update_stats_display(
@@ -187,12 +189,16 @@ def update_stats_display(
     refs: StatsCardRefs,
 ) -> None:
     total = total_uploads(config)
-    if refs.headline.current:
-        refs.headline.current.value = _headline_text(config)
+    if refs.number.current:
+        refs.number.current.value = str(total)
+    if refs.rank.current:
+        refs.rank.current.value = rank_for(total).upper()
     if refs.breakdown.current:
         refs.breakdown.current.value = _breakdown_text(config)
-    if refs.progress_label.current:
-        refs.progress_label.current.value = _progress_label_text(total)
+    if refs.target.current:
+        refs.target.current.value = _target_text(total)
+    if refs.remaining.current:
+        refs.remaining.current.value = _remaining_text(total)
     if refs.progress_bar.current:
         refs.progress_bar.current.value = progress_fraction(total)
     page.update()
@@ -206,43 +212,93 @@ def build_stats_card(
     colors = theme.palette(page)
     total = total_uploads(config)
 
-    headline = ft.Text(
-        _headline_text(config),
-        ref=refs.headline,
-        size=15,
-        weight=ft.FontWeight.W_600,
-        font_family=f"{theme.FONT_BODY}Medium",
-        color=colors["text"],
+    # Hero: a bike-computer-style metric readout — big number, tiny eyebrow.
+    number = ft.Text(
+        str(total),
+        ref=refs.number,
+        size=46,
+        color=colors["accent"],
+        weight=ft.FontWeight.BOLD,
+        font_family=theme.FONT_DISPLAY,
+    )
+    eyebrow = ft.Text(
+        "LIFETIME SYNCS",
+        size=10,
+        weight=ft.FontWeight.W_700,
+        color=colors["text_muted"],
+        style=ft.TextStyle(letter_spacing=1.6),
+    )
+    hero = ft.Column(spacing=0, tight=True, controls=[number, eyebrow])
+
+    rank_chip = ft.Container(
+        content=ft.Text(
+            rank_for(total).upper(),
+            ref=refs.rank,
+            size=11,
+            weight=ft.FontWeight.W_700,
+            color=colors["accent"],
+            style=ft.TextStyle(letter_spacing=0.8),
+        ),
+        padding=ft.Padding(theme.SPACE_SM, 5, theme.SPACE_SM, 5),
+        bgcolor=colors["accent_soft"],
+        border_radius=999,
     )
     breakdown = ft.Text(
         _breakdown_text(config),
         ref=refs.breakdown,
-        size=12,
-        color=colors["text_muted"],
-    )
-    progress_label = ft.Text(
-        _progress_label_text(total),
-        ref=refs.progress_label,
         size=11,
         color=colors["text_muted"],
+        text_align=ft.TextAlign.RIGHT,
+    )
+    meta = ft.Column(
+        spacing=theme.SPACE_XS,
+        horizontal_alignment=ft.CrossAxisAlignment.END,
+        controls=[rank_chip, breakdown],
+    )
+
+    top_row = ft.Row(
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        vertical_alignment=ft.CrossAxisAlignment.START,
+        controls=[hero, meta],
+    )
+
+    target = ft.Text(
+        _target_text(total),
+        ref=refs.target,
+        size=11,
+        weight=ft.FontWeight.W_600,
+        color=colors["text_muted"],
+        font_family=f"{theme.FONT_BODY}Medium",
+    )
+    remaining = ft.Text(
+        _remaining_text(total),
+        ref=refs.remaining,
+        size=11,
+        color=colors["text_muted"],
+    )
+    progress_header = ft.Row(
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        controls=[target, remaining],
     )
     progress_bar = ft.ProgressBar(
         ref=refs.progress_bar,
         value=progress_fraction(total),
         color=colors["accent"],
         bgcolor=colors["surface_alt"],
-        bar_height=4,
-        border_radius=2,
+        bar_height=6,
+        border_radius=3,
+    )
+    progress = ft.Column(
+        spacing=theme.SPACE_XS,
+        controls=[progress_header, progress_bar],
     )
 
     return ft.Container(
         content=ft.Column(
-            spacing=theme.SPACE_SM,
+            spacing=theme.SPACE_MD,
             controls=[
-                headline,
-                breakdown,
-                progress_label,
-                progress_bar,
+                top_row,
+                progress,
                 ft.TextButton(
                     "Saved you time? Buy me a coffee",
                     url=KOFI_URL,
