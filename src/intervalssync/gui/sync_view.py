@@ -18,6 +18,7 @@ from ..bryton.workout import (
 from ..igpsport.core import SyncConfig as IgpSyncConfig, SyncError, sync as igpsport_sync
 from ..dropbox_client import get_dropbox_app_key
 from ..igpsport.workout import WorkoutUploadConfig, apply_uploaded_workout_map, upload_workouts
+from . import support_gamification
 from . import theme
 
 
@@ -36,6 +37,15 @@ def build_sync_view(
         border_radius=2,
     )
     log = ft.ListView(spacing=4, auto_scroll=True, height=280, expand=False)
+    stats_refs = support_gamification.StatsCardRefs(
+        number=ft.Ref[ft.Text](),
+        rank=ft.Ref[ft.Text](),
+        breakdown=ft.Ref[ft.Text](),
+        target=ft.Ref[ft.Text](),
+        remaining=ft.Ref[ft.Text](),
+        progress_bar=ft.Ref[ft.ProgressBar](),
+    )
+    stats_card = support_gamification.build_stats_card(page, config, stats_refs)
 
     def _action_button(label: str, icon: str, *, outlined: bool = False) -> ft.FilledButton | ft.OutlinedButton:
         label_size = 13 if mobile else 14
@@ -156,6 +166,20 @@ def build_sync_view(
         )
         page.update()
 
+    def _on_sync_complete(*, activities: int = 0, workouts: int = 0) -> None:
+        milestone = support_gamification.record_uploads(
+            config,
+            activities=activities,
+            workouts=workouts,
+        )
+        support_gamification.update_stats_display(page, config, stats_refs)
+        if milestone is not None:
+
+            async def _celebrate() -> None:
+                await support_gamification.show_milestone_dialog(page, milestone)
+
+            page.run_task(_celebrate)
+
     def run_igpsport_sync(
         igp_password: str,
         api_key: str | None,
@@ -183,8 +207,10 @@ def build_sync_view(
             dropbox_date_filenames=config.dropbox_date_filenames,
         )
 
+        uploaded_count = 0
         try:
             result = igpsport_sync(sync_config, progress=append_log)
+            uploaded_count = result.uploaded
             append_log(
                 f"\nDone — intervals uploaded {result.uploaded}, "
                 f"Dropbox uploaded {result.uploaded_dropbox}, "
@@ -197,6 +223,8 @@ def build_sync_view(
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
             append_log(f"✗ Unexpected error: {exc}")
         finally:
+            if uploaded_count > 0:
+                _on_sync_complete(activities=uploaded_count)
             progress.visible = False
             set_buttons_enabled(True)
             page.update()
@@ -226,8 +254,10 @@ def build_sync_view(
             dropbox_date_filenames=config.dropbox_date_filenames,
         )
 
+        uploaded_count = 0
         try:
             result = bryton_sync(sync_config, progress=append_log)
+            uploaded_count = result.uploaded
             append_log(
                 f"\nDone — intervals uploaded {result.uploaded}, "
                 f"Dropbox uploaded {result.uploaded_dropbox}, "
@@ -240,6 +270,8 @@ def build_sync_view(
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
             append_log(f"✗ Unexpected error: {exc}")
         finally:
+            if uploaded_count > 0:
+                _on_sync_complete(activities=uploaded_count)
             progress.visible = False
             set_buttons_enabled(True)
             page.update()
@@ -255,11 +287,13 @@ def build_sync_view(
             force_resync=config.force_resync,
         )
 
+        uploaded_count = 0
         try:
             result = upload_workouts(upload_config, progress=append_log)
             if result.uploaded_map or result.pruned_keys:
                 apply_uploaded_workout_map(config.uploaded_workouts, result)
                 config_module.save(config)
+            uploaded_count = result.uploaded
             append_log(
                 f"\nDone — uploaded {result.uploaded}, "
                 f"skipped {result.skipped}, no steps {result.no_steps}, "
@@ -270,6 +304,8 @@ def build_sync_view(
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
             append_log(f"✗ Unexpected error: {exc}")
         finally:
+            if uploaded_count > 0:
+                _on_sync_complete(workouts=uploaded_count)
             progress.visible = False
             set_buttons_enabled(True)
             page.update()
@@ -284,11 +320,13 @@ def build_sync_view(
             force_resync=config.force_resync,
         )
 
+        uploaded_count = 0
         try:
             result = bryton_upload_workouts(upload_config, progress=append_log)
             if result.uploaded_map or result.pruned_keys:
                 apply_uploaded_bryton_workout_map(config.uploaded_bryton_workouts, result)
                 config_module.save(config)
+            uploaded_count = result.uploaded
             append_log(
                 f"\nDone — uploaded {result.uploaded}, "
                 f"skipped {result.skipped}, no steps {result.no_steps}, "
@@ -299,6 +337,8 @@ def build_sync_view(
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
             append_log(f"✗ Unexpected error: {exc}")
         finally:
+            if uploaded_count > 0:
+                _on_sync_complete(workouts=uploaded_count)
             progress.visible = False
             set_buttons_enabled(True)
             page.update()
@@ -435,6 +475,12 @@ def build_sync_view(
             action_area,
             progress,
             log_panel,
+            stats_card,
+            *(
+                [support_gamification.build_dev_milestone_panel(page, config, stats_refs)]
+                if support_gamification.dev_mode_enabled()
+                else []
+            ),
             ft.Container(height=theme.SPACE_MD),
         ],
     )
