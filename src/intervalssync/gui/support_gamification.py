@@ -273,13 +273,14 @@ async def show_milestone_dialog(page: ft.Page, milestone: int) -> None:
                 spacing=theme.SPACE_SM,
                 controls=[
                     ft.Text(
-                        f"You've synced {milestone} activities and workouts with Intervals Sync. "
+                        f"You've completed {milestone} transfers with Intervals Sync. "
                         "Nice work keeping your training data flowing.",
                         size=13,
                         color=colors["text_muted"],
                     ),
                     ft.Text(
-                        "If this app saves you time, consider supporting development on Ko-fi.",
+                        "If Intervals Sync saves you time, a small Ko-fi helps keep "
+                        "bug fixes and new features coming.",
                         size=13,
                         color=colors["text_muted"],
                     ),
