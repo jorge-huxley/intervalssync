@@ -223,13 +223,40 @@ def build_stats_card(
     )
 
 
+async def show_kofi_dialog(page: ft.Page) -> None:
+    colors = theme.palette(page)
+
+    page.show_dialog(
+        ft.AlertDialog(
+            modal=True,
+            shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_MD),
+            title=theme.display_text("Support development", size=22),
+            content=ft.Text(
+                "If Intervals Sync saves you time, consider supporting development on Ko-fi. "
+                "Tips help fund bug fixes, releases, and new features.",
+                size=13,
+                color=colors["text_muted"],
+            ),
+            actions=[
+                ft.TextButton("Not now", on_click=lambda _: page.pop_dialog()),
+                ft.TextButton("Support on Ko-fi", url=KOFI_URL),
+            ],
+        )
+    )
+    page.update()
+
+
 def kofi_header_button(page: ft.Page) -> ft.IconButton:
     colors = theme.palette(page)
+
+    async def on_click(_: ft.ControlEvent) -> None:
+        await show_kofi_dialog(page)
+
     return ft.IconButton(
         icon=ft.Icons.LOCAL_CAFE_OUTLINED,
         tooltip="Support on Ko-fi",
         icon_color=colors["text_muted"],
-        url=KOFI_URL,
+        on_click=on_click,
     )
 
 
