@@ -44,6 +44,7 @@ def run_sync_profile_zones(
         igp_user=config.igp_user,
         igp_password=igp_password,
         intervals_api_key=api_key,
+        igp_region=config.igp_region,
     )
     return sync_profile_zones(sync_config, progress=progress)
 
@@ -63,6 +64,7 @@ async def check_profile_thresholds(
                 igp_user=config.igp_user,
                 igp_password=igp_password,
                 intervals_api_key=api_key,
+                igp_region=config.igp_region,
             ),
         )
     except (SyncError, Exception):  # noqa: BLE001 — fail silent for background checks
