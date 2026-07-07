@@ -12,8 +12,7 @@ IgpRegionName = Literal["international", "china"]
 class IgpRegionConfig:
     name: IgpRegionName
     login_url: str
-    activity_list_url: str | None
-    activity_query_url: str | None
+    activity_query_url: str
     gateway_base: str
     mobile_api_base: str
     accept_language: str
@@ -37,9 +36,10 @@ class IgpRegionConfig:
 
 INTERNATIONAL = IgpRegionConfig(
     name="international",
-    login_url="https://i.igpsport.com/Auth/Login",
-    activity_list_url="https://i.igpsport.com/Activity/ActivityList",
-    activity_query_url=None,
+    login_url="https://prod.en.igpsport.com/service/auth/account/login",
+    activity_query_url=(
+        "https://prod.en.igpsport.com/service/web-gateway/web-analyze/activity/queryMyActivity"
+    ),
     gateway_base="https://prod.en.igpsport.com/service/web-gateway/web-analyze/activity",
     mobile_api_base="https://prod.en.igpsport.com/service/mobile/api",
     accept_language="en",
@@ -48,7 +48,6 @@ INTERNATIONAL = IgpRegionConfig(
 CHINA = IgpRegionConfig(
     name="china",
     login_url="https://prod.zh.igpsport.com/service/auth/account/login",
-    activity_list_url=None,
     activity_query_url=(
         "https://prod.zh.igpsport.com/service/web-gateway/web-analyze/activity/queryMyActivity"
     ),

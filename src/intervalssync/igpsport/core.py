@@ -5,9 +5,8 @@ the CLI and the GUI alike. Progress is surfaced through a callback so each
 front-end can render it however it likes.
 
 Flow (see CLAUDE.md for the full API notes):
-  1. Log in to iGPSPORT; the `loginToken` cookie is URL-decoded and reused as a
-     Bearer token for the gateway API.
-  2. List activities (PascalCase keys: RideId / Title / StartTime).
+  1. Log in to iGPSPORT via the mobile auth API; reuse access_token as Bearer.
+  2. List activities via queryMyActivity (camelCase rideId / title / startTime).
   3. Resolve the FIT download URL: try queryActivityDetail, fall back to
      getDownloadUrl.
   4. Download the .fit file and upload it to intervals.icu (basic auth with the
@@ -20,7 +19,6 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
-from urllib.parse import unquote
 
 import requests
 
@@ -38,7 +36,6 @@ from ..intervals_icu import (
 from .region import INTERNATIONAL, IgpRegionConfig, resolve_region
 
 LOGIN_URL = INTERNATIONAL.login_url
-ACTIVITY_LIST_URL = INTERNATIONAL.activity_list_url or ""
 GATEWAY = INTERNATIONAL.gateway_base
 # iGPSPORT reports activity start times as "YYYY-MM-DD HH:MM:SS".
 IGP_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -127,51 +124,33 @@ def login(
 ) -> dict[str, str]:
     """Authenticate and return auth headers carrying the Bearer token."""
     cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
-
-    if cfg.name == "china":
-        return _login_china(session, user, password, cfg)
-    return _login_international(session, user, password, cfg)
+    try:
+        return _login_bearer_token(session, cfg.login_url, user, password)
+    except AuthError as exc:
+        if cfg.name == "international":
+            raise AuthError(f"{exc}{_INTL_LOGIN_RETRY_HINT}") from exc
+        raise
 
 
 _CHINA_REGION_HINT = (
     " If your account is registered on app.igpsport.cn, set region to China in Settings."
 )
 
+_INTL_LOGIN_RETRY_HINT = (
+    " Check your email and password (international accounts use your email)."
+    + _CHINA_REGION_HINT
+)
 
-def _login_international(
+
+def _login_bearer_token(
     session: requests.Session,
+    login_url: str,
     user: str,
     password: str,
-    region: IgpRegionConfig,
 ) -> dict[str, str]:
-    """International: loginToken cookie URL-decoded as Bearer."""
-    resp = session.post(region.login_url, json={"username": user, "password": password})
-    if not resp.ok:
-        raise AuthError(f"iGPSPORT login failed: HTTP {resp.status_code}")
-
-    token = session.cookies.get("loginToken")
-    if not token:
-        hint = ""
-        try:
-            body = resp.json()
-            if isinstance(body, dict) and body.get("Code") == 403:
-                hint = _CHINA_REGION_HINT
-        except ValueError:
-            pass
-        raise AuthError(f"iGPSPORT login did not return a loginToken cookie.{hint}")
-
-    return {"Authorization": f"Bearer {unquote(token)}"}
-
-
-def _login_china(
-    session: requests.Session,
-    user: str,
-    password: str,
-    region: IgpRegionConfig,
-) -> dict[str, str]:
-    """China: access_token from JSON response body."""
+    """Mobile API login; returns Bearer headers from access_token JSON field."""
     resp = session.post(
-        region.login_url,
+        login_url,
         json={"appId": "igpsport-web", "username": user, "password": password},
     )
     try:
@@ -200,44 +179,15 @@ def list_activities(
 ) -> list[Activity]:
     """Return the most recent activities, newest first, capped at max_activities."""
     cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
-
-    if cfg.name == "china":
-        return _list_activities_china(session, max_activities, cfg)
-    return _list_activities_international(session, max_activities, cfg)
+    return _list_activities_query(session, max_activities, cfg)
 
 
-def _list_activities_international(
+def _list_activities_query(
     session: requests.Session,
     max_activities: int,
     region: IgpRegionConfig,
 ) -> list[Activity]:
-    """International ActivityList — PascalCase RideId / Title / StartTime."""
-    resp = session.get(
-        region.activity_list_url,
-        params={"pageNo": 1, "pageSize": max_activities},
-    )
-    resp.raise_for_status()
-
-    items = resp.json().get("item", [])[:max_activities]
-    activities: list[Activity] = []
-    for item in items:
-        ride_id = item["RideId"]
-        activities.append(
-            Activity(
-                ride_id=ride_id,
-                title=item.get("Title") or f"iGPSPORT {ride_id}",
-                start_time=item.get("StartTime") or item.get("StartDate") or "unknown date",
-            )
-        )
-    return activities
-
-
-def _list_activities_china(
-    session: requests.Session,
-    max_activities: int,
-    region: IgpRegionConfig,
-) -> list[Activity]:
-    """China queryMyActivity — camelCase rideId in data.rows."""
+    """queryMyActivity — camelCase rideId in data.rows (China and new intl accounts)."""
     resp = session.get(
         region.activity_query_url,
         params={
@@ -255,7 +205,9 @@ def _list_activities_china(
     for item in rows[:max_activities]:
         if not isinstance(item, dict):
             continue
-        ride_id = item.get("rideId") or item.get("RideId")
+        ride_id = item.get("rideId")
+        if ride_id is None:
+            ride_id = item.get("RideId")
         if ride_id is None:
             continue
         activities.append(
