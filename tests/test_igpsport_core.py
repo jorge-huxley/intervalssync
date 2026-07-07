@@ -120,38 +120,37 @@ def test_set_activity_type(monkeypatch, status, expected):
     assert core.set_activity_type("i1", "MountainBikeRide", "key") is expected
 
 
-def test_login_builds_bearer_from_cookie(monkeypatch):
-    class FakeCookies:
-        def get(self, name):
-            return "abc%20def" if name == "loginToken" else None
-
+def test_login_builds_bearer_from_access_token():
     class FakeSession:
-        cookies = FakeCookies()
+        headers: dict[str, str] = {}
 
         def post(self, *a, **k):
-            return FakeResponse(status=200)
+            return FakeResponse(
+                status=200,
+                json_data={"data": {"access_token": "intl.jwt.token"}},
+            )
 
-    headers = core.login(FakeSession(), "user", "pass")
-    assert headers == {"Authorization": "Bearer abc def"}  # %20 -> space
+        def update(self, headers):
+            self.headers.update(headers)
+
+    session = FakeSession()
+    headers = core.login(session, "user+tag@example.com", "igp&1%!")
+    assert headers == {"Authorization": "Bearer intl.jwt.token"}
 
 
-def test_login_raises_without_cookie(monkeypatch):
+def test_login_raises_when_access_token_missing():
     class FakeSession:
-        cookies = type("C", (), {"get": lambda self, n: None})()
-
         def post(self, *a, **k):
-            return FakeResponse(status=200, json_data={"Code": 403})
+            return FakeResponse(status=200, json_data={"message": "Password error"})
 
-    with pytest.raises(core.AuthError, match="loginToken cookie"):
-        core.login(FakeSession(), "user", "pass")
+    with pytest.raises(core.AuthError, match="Password error"):
+        core.login(FakeSession(), "user", "pass", region="china")
 
 
-def test_login_hints_china_region_when_intl_auth_fails():
+def test_login_international_adds_retry_hint_on_failure():
     class FakeSession:
-        cookies = type("C", (), {"get": lambda self, n: None})()
-
         def post(self, *a, **k):
-            return FakeResponse(status=200, json_data={"Code": 403})
+            return FakeResponse(status=200, json_data={"message": "Password error"})
 
     with pytest.raises(core.AuthError, match="app.igpsport.cn"):
         core.login(FakeSession(), "user", "pass")
@@ -234,12 +233,24 @@ def test_list_activities_requests_full_page_and_caps():
         def get(self, url, params=None):
             captured["url"] = url
             captured["params"] = params
-            items = [{"RideId": i, "Title": f"Ride {i}", "StartTime": "2026-05-28 19:20:42"}
-                     for i in range(50)]
-            return FakeResponse(json_data={"item": items, "total": 59})
+            rows = [
+                {
+                    "rideId": i,
+                    "title": f"Ride {i}",
+                    "startTime": "2026-05-28 19:20:42",
+                }
+                for i in range(50)
+            ]
+            return FakeResponse(json_data={"data": {"rows": rows}})
 
     acts = core.list_activities(FakeSession(), 50)
-    assert captured["params"] == {"pageNo": 1, "pageSize": 50}
+    assert "queryMyActivity" in captured["url"]
+    assert captured["params"] == {
+        "pageNo": "1",
+        "pageSize": "50",
+        "sort": "1",
+        "reqType": "0",
+    }
     assert len(acts) == 50
     assert acts[0].ride_id == 0
 
@@ -247,8 +258,8 @@ def test_list_activities_requests_full_page_and_caps():
 def test_list_activities_caps_when_server_returns_extra():
     class FakeSession:
         def get(self, url, params=None):
-            items = [{"RideId": i, "Title": "", "StartTime": ""} for i in range(20)]
-            return FakeResponse(json_data={"item": items, "total": 20})
+            rows = [{"rideId": i, "title": "", "startTime": ""} for i in range(20)]
+            return FakeResponse(json_data={"data": {"rows": rows}})
 
     acts = core.list_activities(FakeSession(), 5)
     assert len(acts) == 5
