@@ -470,10 +470,10 @@ def build_sync_view(
                     ),
                 ],
             ),
-            stats_card,
             action_area,
             progress,
             log_panel,
+            stats_card,
             ft.Container(height=theme.SPACE_MD),
         ],
     )

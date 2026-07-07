@@ -11,12 +11,10 @@ from . import theme
 
 KOFI_URL = "https://ko-fi.com/jorge_huxley"
 
-MILESTONES = [1, 5, 10, 25, 50, 100, 250, 500, 1000]
+MILESTONES = [5, 25, 50, 100, 250, 500, 1000]
 
 _MILESTONE_TITLES: dict[int, str] = {
-    1: "First transfer!",
     5: "Domestique status!",
-    10: "Breakaway!",
     25: "Quarter century!",
     50: "Half century!",
     100: "Century!",
