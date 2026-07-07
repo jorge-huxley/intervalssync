@@ -474,6 +474,11 @@ def build_sync_view(
             progress,
             log_panel,
             stats_card,
+            *(
+                [support_gamification.build_dev_milestone_panel(page, config, stats_refs)]
+                if support_gamification.dev_mode_enabled()
+                else []
+            ),
             ft.Container(height=theme.SPACE_MD),
         ],
     )

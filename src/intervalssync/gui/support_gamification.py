@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 import flet as ft
@@ -291,3 +292,153 @@ async def show_milestone_dialog(page: ft.Page, milestone: int) -> None:
         )
     )
     page.update()
+
+
+# --- Dev-only milestone testing (INTERVALSSYNC_DEV_GAMIFICATION=1) ---
+
+
+def dev_mode_enabled() -> bool:
+    return os.environ.get("INTERVALSSYNC_DEV_GAMIFICATION", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def dev_reset_stats(config: config_module.AppConfig) -> None:
+    config.lifetime_activities_uploaded = 0
+    config.lifetime_workouts_uploaded = 0
+    config.celebrated_milestones = []
+    config.stats_seeded = True
+    config_module.save(config)
+
+
+def dev_set_total(config: config_module.AppConfig, total: int) -> None:
+    total = max(0, total)
+    config.lifetime_activities_uploaded = total
+    config.lifetime_workouts_uploaded = 0
+    config.celebrated_milestones = [milestone for milestone in MILESTONES if milestone <= total]
+    config.stats_seeded = True
+    config_module.save(config)
+
+
+def dev_bump_and_maybe_celebrate(
+    page: ft.Page,
+    config: config_module.AppConfig,
+    stats_refs: StatsCardRefs,
+    *,
+    activities: int = 0,
+    workouts: int = 0,
+) -> None:
+    milestone = record_uploads(config, activities=activities, workouts=workouts)
+    update_stats_display(page, config, stats_refs)
+    if milestone is None:
+        page.update()
+        return
+
+    async def _celebrate() -> None:
+        await show_milestone_dialog(page, milestone)
+
+    page.run_task(_celebrate)
+
+
+def build_dev_milestone_panel(
+    page: ft.Page,
+    config: config_module.AppConfig,
+    stats_refs: StatsCardRefs,
+) -> ft.Container:
+    colors = theme.palette(page)
+    total_field = ft.TextField(
+        label="Total transfers",
+        value=str(total_uploads(config)),
+        keyboard_type=ft.KeyboardType.NUMBER,
+        width=140,
+        dense=True,
+    )
+
+    def _refresh_total_field() -> None:
+        total_field.value = str(total_uploads(config))
+
+    def on_reset(_: ft.ControlEvent) -> None:
+        dev_reset_stats(config)
+        update_stats_display(page, config, stats_refs)
+        _refresh_total_field()
+        page.update()
+
+    def on_bump(activities: int = 0, workouts: int = 0):
+        def handler(_: ft.ControlEvent) -> None:
+            dev_bump_and_maybe_celebrate(
+                page,
+                config,
+                stats_refs,
+                activities=activities,
+                workouts=workouts,
+            )
+            _refresh_total_field()
+            page.update()
+
+        return handler
+
+    def on_apply_total(_: ft.ControlEvent) -> None:
+        try:
+            total = int((total_field.value or "0").strip())
+        except ValueError:
+            return
+        dev_set_total(config, total)
+        update_stats_display(page, config, stats_refs)
+        _refresh_total_field()
+        page.update()
+
+    def on_preview(milestone: int):
+        async def handler(_: ft.ControlEvent) -> None:
+            await show_milestone_dialog(page, milestone)
+
+        return handler
+
+    preview_buttons = [
+        ft.TextButton(str(milestone), on_click=on_preview(milestone))
+        for milestone in MILESTONES
+    ]
+
+    return ft.Container(
+        content=ft.Column(
+            spacing=theme.SPACE_SM,
+            controls=[
+                ft.Text(
+                    "DEV milestone testing (INTERVALSSYNC_DEV_GAMIFICATION=1)",
+                    size=11,
+                    weight=ft.FontWeight.W_600,
+                    color=ft.Colors.ORANGE_400,
+                ),
+                ft.Row(
+                    wrap=True,
+                    spacing=theme.SPACE_SM,
+                    controls=[
+                        ft.OutlinedButton("+1 activity", on_click=on_bump(activities=1)),
+                        ft.OutlinedButton("+1 workout", on_click=on_bump(workouts=1)),
+                        ft.OutlinedButton("+5 transfers", on_click=on_bump(activities=5)),
+                        ft.OutlinedButton("Reset stats", on_click=on_reset),
+                    ],
+                ),
+                ft.Row(
+                    spacing=theme.SPACE_SM,
+                    controls=[
+                        total_field,
+                        ft.OutlinedButton("Set total", on_click=on_apply_total),
+                    ],
+                ),
+                ft.Row(
+                    wrap=True,
+                    spacing=0,
+                    controls=[
+                        ft.Text("Preview popup:", size=11, color=colors["text_muted"]),
+                        *preview_buttons,
+                    ],
+                ),
+            ],
+        ),
+        padding=theme.SPACE_MD,
+        bgcolor=colors["surface_alt"],
+        border=ft.Border.all(1, ft.Colors.ORANGE_400),
+        border_radius=theme.RADIUS_SM,
+    )
