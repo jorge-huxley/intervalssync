@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import math
 import os
+import random
 from dataclasses import dataclass
 
 import flet as ft
@@ -23,6 +26,33 @@ _MILESTONE_TITLES: dict[int, str] = {
     500: "Monument ride!",
     1000: "Legend status!",
 }
+
+_MILESTONE_MESSAGES: dict[int, str] = {
+    5: "Five activities synced on autopilot. Your training log just got a lot easier.",
+    25: "Twenty-five rides across, hands-free. You're in a proper rhythm now.",
+    50: "Fifty transfers done — that's a serious stack of saved clicks.",
+    100: "One hundred activities on autopilot. Every ride, right where it belongs.",
+    250: "250 syncs deep. Your data flows like a freshly-oiled drivetrain.",
+    500: "Five hundred transfers. That's real dedication — and a lot of saved time.",
+    1000: "One thousand syncs. You've officially reached legend status.",
+}
+
+_KOFI_LINE = (
+    "Intervals Sync is free and built in spare time. "
+    "A small Ko-fi keeps it rolling."
+)
+
+_CONFETTI_COLORS = (
+    theme.ACCENT,
+    theme.ACCENT_LIGHT,
+    "#F2C94C",
+    "#27AE60",
+    "#2D9CDB",
+    "#BB6BD9",
+)
+
+_CELEBRATION_WIDTH = 320
+_CELEBRATION_HEIGHT = 340
 
 
 @dataclass
@@ -85,6 +115,14 @@ def progress_fraction(total: int) -> float:
 
 def milestone_title(milestone: int) -> str:
     return _MILESTONE_TITLES.get(milestone, f"{milestone} transfers!")
+
+
+def milestone_message(milestone: int) -> str:
+    return _MILESTONE_MESSAGES.get(
+        milestone,
+        f"{milestone} activities synced on autopilot. Nice work keeping your "
+        "training data flowing.",
+    )
 
 
 def _newly_crossed_milestone(old_total: int, new_total: int) -> int | None:
@@ -259,40 +297,159 @@ def kofi_header_button(page: ft.Page) -> ft.IconButton:
     )
 
 
+def _build_confetti() -> list[ft.Container]:
+    """Small colored squares/circles that start near the top of the card."""
+    particles: list[ft.Container] = []
+    for _ in range(30):
+        size = random.randint(6, 12)
+        start_left = random.uniform(0, _CELEBRATION_WIDTH)
+        duration = random.randint(950, 1500)
+        particle = ft.Container(
+            width=size,
+            height=size,
+            bgcolor=random.choice(_CONFETTI_COLORS),
+            border_radius=size / 2 if random.random() > 0.5 else 2,
+            left=start_left,
+            top=random.uniform(-24, 8),
+            opacity=1.0,
+            rotate=ft.Rotate(0, alignment=ft.Alignment.CENTER),
+            ignore_interactions=True,
+            animate_position=ft.Animation(
+                duration=ft.Duration(milliseconds=duration),
+                curve=ft.AnimationCurve.EASE_IN,
+            ),
+            animate_opacity=ft.Animation(
+                duration=ft.Duration(milliseconds=duration),
+                curve=ft.AnimationCurve.EASE_IN,
+            ),
+            animate_rotation=ft.Animation(
+                duration=ft.Duration(milliseconds=duration),
+                curve=ft.AnimationCurve.LINEAR,
+            ),
+        )
+        particle.data = {
+            "left": start_left + random.uniform(-50, 50),
+            "top": _CELEBRATION_HEIGHT + random.uniform(0, 60),
+            "angle": random.uniform(-math.pi * 3, math.pi * 3),
+        }
+        particles.append(particle)
+    return particles
+
+
+async def _play_celebration(
+    page: ft.Page,
+    number_ref: ft.Ref[ft.Container],
+    particles: list[ft.Container],
+) -> None:
+    await asyncio.sleep(0.05)
+    if number_ref.current is not None:
+        number_ref.current.scale = 1.0
+        number_ref.current.opacity = 1.0
+    for particle in particles:
+        target = particle.data
+        particle.left = target["left"]
+        particle.top = target["top"]
+        particle.opacity = 0.0
+        particle.rotate = ft.Rotate(target["angle"], alignment=ft.Alignment.CENTER)
+    try:
+        page.update()
+    except Exception:
+        pass
+
+
 async def show_milestone_dialog(page: ft.Page, milestone: int) -> None:
     colors = theme.palette(page)
     title = milestone_title(milestone)
+    message = milestone_message(milestone)
+
+    number_ref: ft.Ref[ft.Container] = ft.Ref()
+    big_number = ft.Container(
+        ref=number_ref,
+        content=theme.display_text(
+            str(milestone),
+            size=76,
+            color=colors["accent"],
+            weight=ft.FontWeight.BOLD,
+        ),
+        alignment=ft.Alignment.CENTER,
+        opacity=0.0,
+        scale=0.5,
+        animate_scale=ft.Animation(
+            duration=ft.Duration(milliseconds=520),
+            curve=ft.AnimationCurve.EASE_OUT_BACK,
+        ),
+        animate_opacity=ft.Animation(
+            duration=ft.Duration(milliseconds=360),
+            curve=ft.AnimationCurve.EASE_OUT,
+        ),
+    )
+
+    content_column = ft.Column(
+        tight=True,
+        spacing=theme.SPACE_XS,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            big_number,
+            ft.Text(
+                "SYNCS COMPLETED",
+                size=11,
+                weight=ft.FontWeight.W_600,
+                color=colors["text_muted"],
+                text_align=ft.TextAlign.CENTER,
+            ),
+            ft.Container(height=theme.SPACE_SM),
+            theme.display_text(title, size=24, color=colors["text"]),
+            ft.Container(height=2),
+            ft.Text(
+                message,
+                size=13,
+                color=colors["text_muted"],
+                text_align=ft.TextAlign.CENTER,
+            ),
+            ft.Container(height=theme.SPACE_MD),
+            ft.Text(
+                _KOFI_LINE,
+                size=12,
+                color=colors["text_muted"],
+                text_align=ft.TextAlign.CENTER,
+            ),
+        ],
+    )
+
+    particles = _build_confetti()
+    content = ft.Container(
+        width=_CELEBRATION_WIDTH,
+        height=_CELEBRATION_HEIGHT,
+        content=ft.Stack(
+            controls=[
+                ft.Container(
+                    width=_CELEBRATION_WIDTH,
+                    height=_CELEBRATION_HEIGHT,
+                    alignment=ft.Alignment.CENTER,
+                    content=content_column,
+                ),
+                *particles,
+            ],
+        ),
+    )
 
     page.show_dialog(
         ft.AlertDialog(
             modal=True,
             shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_MD),
-            title=theme.display_text(title, size=22),
-            content=ft.Column(
-                tight=True,
-                spacing=theme.SPACE_SM,
-                controls=[
-                    ft.Text(
-                        f"You've completed {milestone} transfers with Intervals Sync. "
-                        "Nice work keeping your training data flowing.",
-                        size=13,
-                        color=colors["text_muted"],
-                    ),
-                    ft.Text(
-                        "If Intervals Sync saves you time, a small Ko-fi helps keep "
-                        "bug fixes and new features coming.",
-                        size=13,
-                        color=colors["text_muted"],
-                    ),
-                ],
-            ),
+            content=content,
             actions=[
-                ft.TextButton("Support on Ko-fi", url=KOFI_URL),
-                ft.TextButton("Keep rolling", on_click=lambda _: page.pop_dialog()),
+                ft.TextButton("Buy me a coffee", url=KOFI_URL),
+                ft.FilledButton(
+                    "Keep rolling",
+                    on_click=lambda _: page.pop_dialog(),
+                ),
             ],
         )
     )
     page.update()
+
+    page.run_task(_play_celebration, page, number_ref, particles)
 
 
 # --- Dev-only milestone testing (INTERVALSSYNC_DEV_GAMIFICATION=1) ---
