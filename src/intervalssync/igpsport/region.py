@@ -33,6 +33,14 @@ class IgpRegionConfig:
     def update_interval_url(self) -> str:
         return f"{self.mobile_api_base}/User/UpdatePersonalIntervalInfo"
 
+    @property
+    def user_info_url(self) -> str:
+        return f"{self.mobile_api_base}/User/UserInfo"
+
+    @property
+    def update_user_info_url(self) -> str:
+        return f"{self.mobile_api_base}/User/UpdateUserInfo"
+
 
 INTERNATIONAL = IgpRegionConfig(
     name="international",

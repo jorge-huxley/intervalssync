@@ -608,7 +608,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sync_zones_parser = subparsers.add_parser(
         "sync-zones",
         parents=[common],
-        help="Push FTP, LTHR, max HR, and zones from intervals.icu to iGPSPORT.",
+        help="Push FTP, LTHR, max HR, weight, and zones from intervals.icu to iGPSPORT.",
     )
     sync_zones_parser.add_argument(
         "--sport",

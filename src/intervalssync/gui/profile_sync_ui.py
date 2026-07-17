@@ -109,6 +109,8 @@ def _sync_success_message(result: ProfileSyncResult) -> str:
     for key, label in (("ftp", "FTP"), ("lthr", "LTHR"), ("mhr", "max HR")):
         if key in member:
             parts.append(f"{label} {member[key]}")
+    if result.weight_after is not None:
+        parts.append(f"weight {result.weight_after}")
     if parts:
         return "iGPSPORT profile updated — " + ", ".join(parts) + "."
     return "iGPSPORT profile updated."
@@ -190,13 +192,13 @@ async def prompt_if_needed(
                 spacing=theme.SPACE_SM,
                 controls=[
                     ft.Text(
-                        "Your iGPSPORT thresholds differ from intervals.icu:",
+                        "Your iGPSPORT profile differs from intervals.icu:",
                         size=13,
                         color=colors["text_muted"],
                     ),
                     *difference_lines,
                     ft.Text(
-                        "Power and heart-rate zones will be updated too.",
+                        "Power/HR zones and weight will be updated too.",
                         size=12,
                         color=colors["text_muted"],
                     ),

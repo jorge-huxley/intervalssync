@@ -143,13 +143,89 @@ def update_personal_interval_info(
     return result if isinstance(result, dict) else {}
 
 
+def fetch_user_info(
+    session: requests.Session,
+    headers: dict[str, str],
+    region: IgpRegionConfig | str | None = None,
+) -> dict[str, Any]:
+    """GET User/UserInfo (profile fields including weight shown in the app)."""
+    cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
+    get_headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
+    try:
+        resp = session.get(cfg.user_info_url, headers=get_headers, timeout=30)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"GET UserInfo failed: {exc}") from exc
+
+    try:
+        body = resp.json()
+    except ValueError as exc:
+        raise RuntimeError(
+            f"GET UserInfo: HTTP {resp.status_code}, non-JSON body"
+        ) from exc
+
+    if not isinstance(body, dict) or body.get("code") not in (0, None):
+        message = body.get("message") if isinstance(body, dict) else "unknown error"
+        raise RuntimeError(f"GET UserInfo failed: {message}")
+
+    data = body.get("data")
+    if not isinstance(data, dict):
+        raise RuntimeError("GET UserInfo: missing data object")
+    return data
+
+
+def update_user_weight(
+    session: requests.Session,
+    headers: dict[str, str],
+    weight_kg: int,
+    region: IgpRegionConfig | str | None = None,
+) -> dict[str, Any]:
+    """POST User/UpdateUserInfo with whole-kg weight (profile weight in the app).
+
+    Must send a full UserInfo payload: a weight-only body zeroes other profile fields.
+    """
+    cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
+    current = fetch_user_info(session, headers, region)
+    payload = {key: value for key, value in current.items() if key != "avatar"}
+    payload["weight"] = int(weight_kg)
+
+    try:
+        resp = session.post(
+            cfg.update_user_info_url,
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"POST UpdateUserInfo failed: {exc}") from exc
+
+    try:
+        result = resp.json()
+    except ValueError as exc:
+        raise RuntimeError(
+            f"POST UpdateUserInfo: HTTP {resp.status_code}, non-JSON body"
+        ) from exc
+
+    if not resp.ok:
+        raise RuntimeError(f"POST UpdateUserInfo: HTTP {resp.status_code}")
+
+    if isinstance(result, dict) and result.get("code") not in (0, None):
+        message = result.get("message") or "unknown error"
+        raise RuntimeError(f"POST UpdateUserInfo failed: {message}")
+
+    return result if isinstance(result, dict) else {}
+
+
 def zone_range_summary(zones: list[dict[str, Any]]) -> str:
     if not zones:
         return "(none)"
     return " | ".join(f"{z.get('start')}-{z.get('end')}" for z in zones)
 
 
-def profile_summary(body: dict[str, Any]) -> dict[str, Any]:
+def profile_summary(
+    body: dict[str, Any],
+    *,
+    weight: float | None = None,
+) -> dict[str, Any]:
     """Return a compact summary dict for CLI JSON output."""
     member = body.get("member") if isinstance(body.get("member"), dict) else {}
     power = body.get("power") if isinstance(body.get("power"), list) else []
@@ -158,6 +234,7 @@ def profile_summary(body: dict[str, Any]) -> dict[str, Any]:
         "ftp": member.get("ftp"),
         "lthr": member.get("lthr"),
         "mhr": member.get("mhr"),
+        "weight": weight if weight is not None else member.get("weight"),
         "heart_rate_compute_mode": member.get("heartRateComputeMode"),
         "power_zones": zone_range_summary(power),
         "hr_zones": zone_range_summary(heart_rate),

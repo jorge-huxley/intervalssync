@@ -59,7 +59,7 @@ class AppConfig:
     workout_days_ahead: int = 1
     # intervals.icu threshold fingerprint the user declined to sync; cleared after sync.
     profile_sync_declined_fingerprint: str = ""
-    # Prompt on launch when FTP, LTHR, or max HR differ from intervals.icu.
+    # Prompt on launch when FTP, LTHR, max HR, or weight differ from intervals.icu.
     profile_sync_check_on_launch: bool = True
     # Lifetime sync stats (GUI gamification).
     lifetime_activities_uploaded: int = 0

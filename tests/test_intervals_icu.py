@@ -85,3 +85,35 @@ def test_fetch_sport_settings(monkeypatch):
     assert settings.max_hr == 193.0
     assert settings.power_zones == [55.0, 75.0, 90.0, 105.0, 120.0, 999.0]
     assert settings.hr_zones == [120.0, 146.0, 166.0, 185.0, 193.0]
+
+
+def test_fetch_athlete_weight_prefers_icu_weight(monkeypatch):
+    captured: dict = {}
+
+    def fake_get(self, url, auth, timeout):
+        captured["url"] = url
+        captured["auth"] = auth
+        return FakeResponse(json_data={"icu_weight": 76.1, "weight": 70.0})
+
+    monkeypatch.setattr(intervals_icu.requests.Session, "get", fake_get)
+    assert intervals_icu.fetch_athlete_weight("api-key") == 76.1
+    assert captured["url"].endswith("/athlete/0")
+    assert captured["auth"] == ("API_KEY", "api-key")
+
+
+def test_fetch_athlete_weight_falls_back_to_weight(monkeypatch):
+    monkeypatch.setattr(
+        intervals_icu.requests.Session,
+        "get",
+        lambda self, *a, **k: FakeResponse(json_data={"weight": 72.5}),
+    )
+    assert intervals_icu.fetch_athlete_weight("api-key") == 72.5
+
+
+def test_fetch_athlete_weight_missing(monkeypatch):
+    monkeypatch.setattr(
+        intervals_icu.requests.Session,
+        "get",
+        lambda self, *a, **k: FakeResponse(json_data={"name": "Athlete"}),
+    )
+    assert intervals_icu.fetch_athlete_weight("api-key") is None
