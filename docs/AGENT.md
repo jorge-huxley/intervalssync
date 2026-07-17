@@ -100,8 +100,8 @@ uv run intervalssync sync-zones --env-file .env --json
 ```
 
 - **iGPSPORT-only** (no `--source` flag)
-- Reads FTP, LTHR, max HR, power zones, and HR zones from intervals.icu `sport-settings/Ride` (override with `--sport`)
-- Writes them to iGPSPORT via the mobile `UserIntervalInfo` API
+- Reads FTP, LTHR, max HR, power zones, and HR zones from intervals.icu `sport-settings/Ride` (override with `--sport`), plus athlete weight (`icu_weight`) rounded to whole kg
+- Writes thresholds/zones via `UpdatePersonalIntervalInfo`, and weight via `User/UpdatePersonalUserInfo` (the endpoint the app profile editor uses)
 - Progress on **stderr**; result JSON on **stdout**; same exit codes as other commands
 
 Success example:
@@ -114,18 +114,21 @@ Success example:
     "ftp": 240,
     "lthr": 153,
     "mhr": 193,
+    "weight": 79.0,
     "power_zones": "0-132 | 132-180 | …",
     "hr_zones": "0-120 | …"
   },
   "ftp": 242,
   "lthr": 176,
   "mhr": 193,
+  "weight": 76.0,
   "power_zones": "0-133 | 133-182 | …",
   "hr_zones": "0-120 | 120-146 | …",
   "after": {
     "ftp": 242,
     "lthr": 176,
     "mhr": 193,
+    "weight": 76.0,
     "power_zones": "0-133 | 133-182 | …",
     "hr_zones": "0-120 | 120-146 | …"
   }
@@ -173,4 +176,4 @@ Same as GUI **Upload to iGPSPORT** / **Upload to Bryton** — intervals.icu cale
 
 ### Zone sync
 
-Reads FTP, LTHR, max HR, and power/HR zones from intervals.icu sport settings and writes them to the iGPSPORT profile (CLI only for now).
+Reads FTP, LTHR, max HR, power/HR zones, and weight from intervals.icu and writes them to the iGPSPORT profile (CLI only for now).

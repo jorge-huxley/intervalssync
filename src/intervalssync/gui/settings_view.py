@@ -410,7 +410,7 @@ async def build_settings_view(
     profile_sync_options = ft.ExpansionTile(
         title=ft.Text("iGPSPORT profile", weight=ft.FontWeight.W_500),
         subtitle=ft.Text(
-            "FTP, LTHR, max HR, and zones from intervals.icu",
+            "FTP, LTHR, max HR, weight, and zones from intervals.icu",
             size=12,
             color=colors["text_muted"],
         ),

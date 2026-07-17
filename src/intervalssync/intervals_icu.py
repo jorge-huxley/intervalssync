@@ -17,6 +17,7 @@ INTERVALS_ACTIVITIES_URL = "https://intervals.icu/api/v1/athlete/0/activities"
 INTERVALS_ACTIVITY_URL = "https://intervals.icu/api/v1/activity"
 INTERVALS_EVENTS_URL = "https://intervals.icu/api/v1/athlete/0/events"
 INTERVALS_SPORT_SETTINGS_URL = "https://intervals.icu/api/v1/athlete/0/sport-settings"
+INTERVALS_ATHLETE_URL = "https://intervals.icu/api/v1/athlete/0"
 
 
 @dataclass
@@ -175,3 +176,22 @@ def fetch_sport_settings_max_hr(
 ) -> float | None:
     """Return athlete max HR (bpm) from intervals.icu sport settings."""
     return fetch_sport_settings(api_key, sport, http=http).max_hr
+
+
+def fetch_athlete_weight(
+    api_key: str,
+    *,
+    http: requests.Session | None = None,
+) -> float | None:
+    """Return athlete weight in kg from intervals.icu (`icu_weight`, else `weight`)."""
+    client = http or requests.Session()
+    resp = client.get(
+        INTERVALS_ATHLETE_URL,
+        auth=("API_KEY", api_key),
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        return None
+    return _num(data.get("icu_weight")) or _num(data.get("weight"))

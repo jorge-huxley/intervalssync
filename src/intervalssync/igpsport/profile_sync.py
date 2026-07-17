@@ -1,4 +1,4 @@
-"""Sync thresholds and zones from intervals.icu to iGPSPORT profile."""
+"""Sync thresholds, zones, and weight from intervals.icu to iGPSPORT profile."""
 
 from __future__ import annotations
 
@@ -15,10 +15,12 @@ from .region import resolve_region
 from .interval_info import (
     HEART_RATE_COMPUTE_MODE_MAX_HR,
     fetch_personal_interval_info,
+    fetch_user_info,
     mobile_headers,
     member_id_from_token,
     profile_summary,
     update_personal_interval_info,
+    update_user_weight,
     zone_range_summary,
 )
 from .zone_map import map_hr_zones, map_power_zones
@@ -43,6 +45,8 @@ class ProfileSyncConfig:
 class ProfileSyncResult:
     before: dict[str, Any] | None
     after: dict[str, Any] | None
+    weight_before: float | None = None
+    weight_after: float | None = None
 
 
 @dataclass
@@ -54,10 +58,27 @@ class ProfileThresholdStatus:
     igpsport: dict[str, int | None]
 
 
-_THRESHOLD_LABELS = {"ftp": "FTP", "lthr": "LTHR", "mhr": "max HR"}
+_THRESHOLD_LABELS = {"ftp": "FTP", "lthr": "LTHR", "mhr": "max HR", "weight": "Weight"}
 
 
-def _threshold_values(member: dict[str, Any]) -> dict[str, int | None]:
+def _whole_kg(value: Any) -> int | None:
+    """Round kg to a whole number; iGPSPORT only accepts integer kilograms."""
+    if value is None:
+        return None
+    try:
+        kg = int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+    if kg <= 0:
+        return None
+    return kg
+
+
+def _threshold_values(
+    member: dict[str, Any],
+    *,
+    weight: float | None = None,
+) -> dict[str, int | None]:
     def _int_val(key: str) -> int | None:
         value = member.get(key)
         if value is None:
@@ -71,38 +92,59 @@ def _threshold_values(member: dict[str, Any]) -> dict[str, int | None]:
         "ftp": _int_val("ftp"),
         "lthr": _int_val("lthr"),
         "mhr": _int_val("mhr"),
+        # App profile weight comes from User/UserInfo, not UserIntervalInfo.member.
+        "weight": _whole_kg(weight),
     }
 
 
-def _threshold_fingerprint(settings: SportSettings) -> str:
+def _threshold_fingerprint(
+    settings: SportSettings,
+    weight: float | None = None,
+) -> str:
     ftp = int(round(settings.ftp or 0))
     mhr = int(round(settings.max_hr or 0))
     lthr = int(round(settings.lthr)) if settings.lthr is not None else ""
-    return f"{ftp}|{lthr}|{mhr}"
+    weight_part = _whole_kg(weight) if weight is not None else ""
+    return f"{ftp}|{lthr}|{mhr}|{weight_part}"
 
 
-def _intervals_threshold_values(settings: SportSettings) -> dict[str, int | None]:
+def _intervals_threshold_values(
+    settings: SportSettings,
+    weight: float | None = None,
+) -> dict[str, int | None]:
     return {
         "ftp": int(round(settings.ftp or 0)),
         "lthr": int(round(settings.lthr)) if settings.lthr is not None else None,
         "mhr": int(round(settings.max_hr or 0)),
+        "weight": _whole_kg(weight),
     }
 
 
 def compare_profile_thresholds(
     current: dict[str, Any],
     settings: SportSettings,
+    *,
+    weight: float | None = None,
+    current_weight: float | None = None,
 ) -> ProfileThresholdStatus:
-    """Return whether FTP, LTHR, or max HR would change on sync."""
+    """Return whether FTP, LTHR, max HR, or weight would change on sync."""
     desired = apply_intervals_settings(current, settings)
     member = current.get("member")
     desired_member = desired.get("member")
-    current_vals = _threshold_values(member if isinstance(member, dict) else {})
-    desired_vals = _threshold_values(desired_member if isinstance(desired_member, dict) else {})
+    current_vals = _threshold_values(
+        member if isinstance(member, dict) else {},
+        weight=current_weight,
+    )
+    desired_vals = _threshold_values(
+        desired_member if isinstance(desired_member, dict) else {},
+        weight=weight,
+    )
 
     keys_to_compare = ["ftp", "mhr"]
     if settings.lthr is not None:
         keys_to_compare.append("lthr")
+    if weight is not None and _whole_kg(weight) is not None:
+        keys_to_compare.append("weight")
 
     differences: list[str] = []
     for key in keys_to_compare:
@@ -116,8 +158,8 @@ def compare_profile_thresholds(
     return ProfileThresholdStatus(
         needs_sync=bool(differences),
         differences=differences,
-        intervals_fingerprint=_threshold_fingerprint(settings),
-        intervals=_intervals_threshold_values(settings),
+        intervals_fingerprint=_threshold_fingerprint(settings, weight),
+        intervals=_intervals_threshold_values(settings, weight),
         igpsport=current_vals,
     )
 
@@ -137,7 +179,11 @@ def apply_intervals_settings(
     body: dict[str, Any],
     settings: SportSettings,
 ) -> dict[str, Any]:
-    """Return a copy of the iGPSPORT payload with thresholds and zones updated."""
+    """Return a copy of the iGPSPORT payload with thresholds and zones updated.
+
+    Weight is updated separately via User/UpdatePersonalUserInfo — UpdatePersonalIntervalInfo
+    ignores member.weight.
+    """
     updated = copy.deepcopy(body)
     member = updated.get("member")
     if not isinstance(member, dict):
@@ -164,19 +210,25 @@ def apply_intervals_settings(
     return updated
 
 
-def _report_summary(report: Progress, label: str, body: dict[str, Any]) -> None:
+def _report_summary(
+    report: Progress,
+    label: str,
+    body: dict[str, Any],
+    *,
+    weight: float | None = None,
+) -> None:
     member = body.get("member") if isinstance(body.get("member"), dict) else {}
     power = body.get("power") if isinstance(body.get("power"), list) else []
     heart_rate = body.get("heartRate") if isinstance(body.get("heartRate"), list) else []
     report(f"{label}:")
-    report(
-        "  member: "
-        + ", ".join(
-            f"{key}={member[key]}"
-            for key in ("ftp", "mhr", "lthr", "heartRateComputeMode", "quietHeartRate")
-            if key in member
-        )
-    )
+    parts = [
+        f"{key}={member[key]}"
+        for key in ("ftp", "mhr", "lthr", "heartRateComputeMode", "quietHeartRate")
+        if key in member
+    ]
+    if weight is not None:
+        parts.append(f"weight={weight}")
+    report("  member: " + ", ".join(parts))
     report(f"  power:  {zone_range_summary(power)}")
     report(f"  heartRate: {zone_range_summary(heart_rate)}")
 
@@ -211,15 +263,33 @@ def sync_profile_zones(
 
     _validate_sport_settings(settings)
 
+    report("Fetching athlete weight from intervals.icu…")
+    try:
+        weight = intervals_icu.fetch_athlete_weight(
+            config.intervals_api_key,
+            http=session,
+        )
+    except requests.RequestException as exc:
+        raise SyncError(f"Could not fetch intervals.icu athlete weight: {exc}") from exc
+
     report("Fetching iGPSPORT profile…")
     try:
         current = fetch_personal_interval_info(session, headers, region)
+        user_info = fetch_user_info(session, headers, region)
     except RuntimeError as exc:
         raise SyncError(str(exc)) from exc
 
+    weight_before = user_info.get("weight")
+    target_weight = _whole_kg(weight)
+
     updated = apply_intervals_settings(current, settings)
-    _report_summary(report, "Before", current)
-    _report_summary(report, "After", updated)
+    _report_summary(report, "Before", current, weight=weight_before)
+    _report_summary(
+        report,
+        "After",
+        updated,
+        weight=float(target_weight) if target_weight is not None else weight_before,
+    )
 
     report("Updating iGPSPORT profile…")
     try:
@@ -227,14 +297,37 @@ def sync_profile_zones(
     except RuntimeError as exc:
         raise SyncError(str(exc)) from exc
 
+    if target_weight is not None and _whole_kg(weight_before) != target_weight:
+        saved_city_id = user_info.get("cityId")
+        report("Updating iGPSPORT weight…")
+        try:
+            update_user_weight(session, headers, target_weight, region)
+        except RuntimeError as exc:
+            raise SyncError(str(exc)) from exc
+        user_info_after_weight = fetch_user_info(session, headers, region)
+        city_after = user_info_after_weight.get("cityId")
+        if saved_city_id not in (None, 0, "0") and city_after in (None, 0, "", "0"):
+            report(
+                "Note: iGPSPORT cleared profile location while updating weight; "
+                "set location again in the app."
+            )
+
     report("Verifying iGPSPORT profile…")
     try:
-        after = fetch_personal_interval_info(session, headers)
+        after = fetch_personal_interval_info(session, headers, region)
+        user_info_after = fetch_user_info(session, headers, region)
     except RuntimeError as exc:
         raise SyncError(str(exc)) from exc
 
-    _report_summary(report, "Read-back", after)
-    return ProfileSyncResult(before=current, after=after)
+    weight_after = user_info_after.get("weight")
+
+    _report_summary(report, "Read-back", after, weight=weight_after)
+    return ProfileSyncResult(
+        before=current,
+        after=after,
+        weight_before=float(weight_before) if weight_before is not None else None,
+        weight_after=float(weight_after) if weight_after is not None else None,
+    )
 
 
 def fetch_profile_threshold_status(config: ProfileSyncConfig) -> ProfileThresholdStatus:
@@ -261,11 +354,25 @@ def fetch_profile_threshold_status(config: ProfileSyncConfig) -> ProfileThreshol
     _validate_sport_settings(settings)
 
     try:
+        weight = intervals_icu.fetch_athlete_weight(
+            config.intervals_api_key,
+            http=session,
+        )
+    except requests.RequestException as exc:
+        raise SyncError(f"Could not fetch intervals.icu athlete weight: {exc}") from exc
+
+    try:
         current = fetch_personal_interval_info(session, headers, region)
+        user_info = fetch_user_info(session, headers, region)
     except RuntimeError as exc:
         raise SyncError(str(exc)) from exc
 
-    return compare_profile_thresholds(current, settings)
+    return compare_profile_thresholds(
+        current,
+        settings,
+        weight=weight,
+        current_weight=user_info.get("weight"),
+    )
 
 
 def result_payload(result: ProfileSyncResult, *, ok: bool, error: str | None = None) -> dict[str, Any]:
@@ -274,9 +381,9 @@ def result_payload(result: ProfileSyncResult, *, ok: bool, error: str | None = N
         "source": "igpsport",
     }
     if result.before is not None:
-        payload["before"] = profile_summary(result.before)
+        payload["before"] = profile_summary(result.before, weight=result.weight_before)
     if result.after is not None:
-        summary = profile_summary(result.after)
+        summary = profile_summary(result.after, weight=result.weight_after)
         payload.update(summary)
         payload["after"] = summary
     if error is not None:
