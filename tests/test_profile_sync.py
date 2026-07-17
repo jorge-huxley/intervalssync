@@ -101,7 +101,97 @@ def test_compare_profile_thresholds_mhr_mismatch_only():
     assert status.differences == ["max HR: iGPSPORT 190 → intervals.icu 193"]
 
 
-def test_compare_profile_thresholds_weight_mismatch_only():
+def test_build_personal_user_info_payload_maps_city_and_sex():
+    from intervalssync.igpsport.interval_info import build_personal_user_info_payload
+
+    payload = build_personal_user_info_payload(
+        {
+            "cityId": 103172,
+            "cityName": "Braga",
+            "sex": 1,
+            "height": 179,
+            "nickName": "Jorge Silva",
+            "birthDate": "1998-08-17",
+            "weight": 79.0,
+            "ftp": 242,
+            "avatar": "https://example.com/a.png",
+        },
+        76,
+    )
+    assert payload == {
+        "areaId": 103172,
+        "birthDate": "1998-08-17",
+        "gender": 1,
+        "height": 179,
+        "nickName": "Jorge Silva",
+        "weight": 76.0,
+    }
+
+
+def test_build_personal_user_info_payload_prefers_area_id_and_gender():
+    from intervalssync.igpsport.interval_info import build_personal_user_info_payload
+
+    payload = build_personal_user_info_payload(
+        {
+            "cityId": 0,
+            "areaId": 1101172,
+            "gender": 1,
+            "sex": 0,
+            "height": 179,
+            "nickName": "Jorge",
+            "birthDate": "1998-08-17",
+        },
+        76,
+    )
+    assert payload["areaId"] == 1101172
+    assert payload["gender"] == 1
+    assert payload["weight"] == 76.0
+
+
+def test_update_user_weight_posts_personal_user_info(monkeypatch):
+    from intervalssync.igpsport import interval_info
+
+    posted: dict = {}
+
+    class FakeResp:
+        ok = True
+        status_code = 200
+
+        def json(self):
+            return {"code": 0, "data": True}
+
+    class FakeSession:
+        def post(self, url, headers=None, json=None, timeout=None):
+            posted["url"] = url
+            posted["json"] = json
+            return FakeResp()
+
+    monkeypatch.setattr(
+        interval_info,
+        "fetch_user_info",
+        lambda *a, **k: {
+            "cityId": 103172,
+            "cityName": "Braga",
+            "sex": 1,
+            "height": 179,
+            "nickName": "Jorge Silva",
+            "birthDate": "1998-08-17",
+            "weight": 79.0,
+        },
+    )
+
+    result = interval_info.update_user_weight(FakeSession(), {"Authorization": "Bearer x"}, 76)
+    assert result["code"] == 0
+    assert posted["url"].endswith("/User/UpdatePersonalUserInfo")
+    assert posted["json"] == {
+        "areaId": 103172,
+        "birthDate": "1998-08-17",
+        "gender": 1,
+        "height": 179,
+        "nickName": "Jorge Silva",
+        "weight": 76.0,
+    }
+
     body = apply_intervals_settings(_igpsport_payload(), _ride_settings())
     status = compare_profile_thresholds(
         body, _ride_settings(), weight=76.1, current_weight=79.0

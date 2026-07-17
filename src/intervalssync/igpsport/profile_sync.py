@@ -181,7 +181,7 @@ def apply_intervals_settings(
 ) -> dict[str, Any]:
     """Return a copy of the iGPSPORT payload with thresholds and zones updated.
 
-    Weight is updated separately via User/UpdateUserInfo — UpdatePersonalIntervalInfo
+    Weight is updated separately via User/UpdatePersonalUserInfo — UpdatePersonalIntervalInfo
     ignores member.weight.
     """
     updated = copy.deepcopy(body)
@@ -309,12 +309,12 @@ def sync_profile_zones(
         if saved_city_id not in (None, 0, "0") and city_after in (None, 0, "", "0"):
             report(
                 "Note: iGPSPORT cleared profile location while updating weight; "
-                "set location again in the app. Later syncs keep it if weight is unchanged."
+                "set location again in the app."
             )
 
     report("Verifying iGPSPORT profile…")
     try:
-        after = fetch_personal_interval_info(session, headers)
+        after = fetch_personal_interval_info(session, headers, region)
         user_info_after = fetch_user_info(session, headers, region)
     except RuntimeError as exc:
         raise SyncError(str(exc)) from exc

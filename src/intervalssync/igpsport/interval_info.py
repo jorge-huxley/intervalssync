@@ -173,44 +173,72 @@ def fetch_user_info(
     return data
 
 
+def build_personal_user_info_payload(
+    user_info: dict[str, Any],
+    weight_kg: int,
+) -> dict[str, Any]:
+    """Build the UpdatePersonalUserInfo body the iGPSPORT app sends.
+
+    Captured from the Android profile editor: a 6-field personal payload with
+    ``areaId`` (UserInfo ``cityId``) and ``gender`` (UserInfo ``sex``). Using
+    ``UpdateUserInfo`` with a full UserInfo merge clears location.
+    """
+    area_id = user_info.get("cityId")
+    if area_id in (None, "", 0, "0"):
+        area_id = user_info.get("areaId")
+    gender = user_info.get("gender")
+    if gender is None:
+        gender = user_info.get("sex")
+
+    return {
+        "areaId": int(area_id) if area_id not in (None, "") else 0,
+        "birthDate": user_info.get("birthDate") or "",
+        "gender": int(gender) if gender is not None else 0,
+        "height": int(user_info["height"]) if user_info.get("height") is not None else 0,
+        "nickName": user_info.get("nickName") or "",
+        # App sends a float (e.g. 76.0); whole-kg rounding happens before call.
+        "weight": float(int(weight_kg)),
+    }
+
+
 def update_user_weight(
     session: requests.Session,
     headers: dict[str, str],
     weight_kg: int,
     region: IgpRegionConfig | str | None = None,
 ) -> dict[str, Any]:
-    """POST User/UpdateUserInfo with whole-kg weight (profile weight in the app).
+    """POST User/UpdatePersonalUserInfo with whole-kg weight (app profile weight).
 
-    Must send a full UserInfo payload: a weight-only body zeroes other profile fields.
+    Matches the Android editor: personal fields only, with ``areaId`` so location
+    is preserved. ``UpdateUserInfo`` clears ``cityId`` even when present in body.
     """
     cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
     current = fetch_user_info(session, headers, region)
-    payload = {key: value for key, value in current.items() if key != "avatar"}
-    payload["weight"] = int(weight_kg)
+    payload = build_personal_user_info_payload(current, weight_kg)
 
     try:
         resp = session.post(
-            cfg.update_user_info_url,
+            cfg.update_personal_user_info_url,
             headers=headers,
             json=payload,
             timeout=30,
         )
     except requests.RequestException as exc:
-        raise RuntimeError(f"POST UpdateUserInfo failed: {exc}") from exc
+        raise RuntimeError(f"POST UpdatePersonalUserInfo failed: {exc}") from exc
 
     try:
         result = resp.json()
     except ValueError as exc:
         raise RuntimeError(
-            f"POST UpdateUserInfo: HTTP {resp.status_code}, non-JSON body"
+            f"POST UpdatePersonalUserInfo: HTTP {resp.status_code}, non-JSON body"
         ) from exc
 
     if not resp.ok:
-        raise RuntimeError(f"POST UpdateUserInfo: HTTP {resp.status_code}")
+        raise RuntimeError(f"POST UpdatePersonalUserInfo: HTTP {resp.status_code}")
 
     if isinstance(result, dict) and result.get("code") not in (0, None):
         message = result.get("message") or "unknown error"
-        raise RuntimeError(f"POST UpdateUserInfo failed: {message}")
+        raise RuntimeError(f"POST UpdatePersonalUserInfo failed: {message}")
 
     return result if isinstance(result, dict) else {}
 

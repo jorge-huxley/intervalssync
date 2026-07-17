@@ -101,7 +101,7 @@ uv run intervalssync sync-zones --env-file .env --json
 
 - **iGPSPORT-only** (no `--source` flag)
 - Reads FTP, LTHR, max HR, power zones, and HR zones from intervals.icu `sport-settings/Ride` (override with `--sport`), plus athlete weight (`icu_weight`) rounded to whole kg
-- Writes thresholds/zones via `UpdatePersonalIntervalInfo`, and weight via `User/UpdateUserInfo` (the endpoint the app profile uses)
+- Writes thresholds/zones via `UpdatePersonalIntervalInfo`, and weight via `User/UpdatePersonalUserInfo` (the endpoint the app profile editor uses)
 - Progress on **stderr**; result JSON on **stdout**; same exit codes as other commands
 
 Success example:
