@@ -225,34 +225,69 @@ def test_list_activities_china_parses_camel_case_rows():
 
 
 def test_list_activities_requests_full_page_and_caps():
-    """pageSize is sent so we get more than the server's default 10, and the
-    result is still capped at max_activities as a safety belt."""
-    captured = {}
+    """Paginates when the API caps each page at 20 rows."""
+    captured_pages: list[dict] = []
 
     class FakeSession:
         def get(self, url, params=None):
-            captured["url"] = url
-            captured["params"] = params
+            captured_pages.append(dict(params or {}))
+            page_no = int(params["pageNo"])
+            page_size = int(params["pageSize"])
+            start = (page_no - 1) * page_size
+            end = min(start + page_size, 50)
             rows = [
                 {
                     "rideId": i,
                     "title": f"Ride {i}",
                     "startTime": "2026-05-28 19:20:42",
                 }
-                for i in range(50)
+                for i in range(start, end)
             ]
             return FakeResponse(json_data={"data": {"rows": rows}})
 
     acts = core.list_activities(FakeSession(), 50)
-    assert "queryMyActivity" in captured["url"]
-    assert captured["params"] == {
+    assert len(captured_pages) == 3
+    assert captured_pages[0]["pageNo"] == "1"
+    assert captured_pages[0]["pageSize"] == "20"
+    assert captured_pages[1]["pageNo"] == "2"
+    assert captured_pages[2]["pageNo"] == "3"
+    assert len(acts) == 50
+    assert acts[0].ride_id == 0
+    assert acts[-1].ride_id == 49
+
+
+def test_list_activities_paginates_when_api_caps_page_size():
+    """Real API returns at most 20 rows per page even when pageSize is larger."""
+    captured_pages: list[dict] = []
+
+    class FakeSession:
+        def get(self, url, params=None):
+            captured_pages.append(dict(params or {}))
+            page_no = int(params["pageNo"])
+            # Simulate iGPSPORT: always cap at 20 rows per page.
+            start = (page_no - 1) * 20
+            if start >= 35:
+                rows = []
+            else:
+                end = min(start + 20, 35)
+                rows = [
+                    {"rideId": i, "title": f"Ride {i}", "startTime": "2026-05-28 19:20:42"}
+                    for i in range(start, end)
+                ]
+            return FakeResponse(json_data={"data": {"rows": rows}})
+
+    acts = core.list_activities(FakeSession(), 30)
+    assert len(captured_pages) == 2
+    assert captured_pages[0] == {
         "pageNo": "1",
-        "pageSize": "50",
+        "pageSize": "20",
         "sort": "1",
         "reqType": "0",
     }
-    assert len(acts) == 50
+    assert captured_pages[1]["pageNo"] == "2"
+    assert len(acts) == 30
     assert acts[0].ride_id == 0
+    assert acts[-1].ride_id == 29
 
 
 def test_list_activities_caps_when_server_returns_extra():

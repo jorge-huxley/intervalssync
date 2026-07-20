@@ -187,42 +187,59 @@ def _list_activities_query(
     max_activities: int,
     region: IgpRegionConfig,
 ) -> list[Activity]:
-    """queryMyActivity — camelCase rideId in data.rows (China and new intl accounts)."""
-    resp = session.get(
-        region.activity_query_url,
-        params={
-            "pageNo": "1",
-            "pageSize": str(max_activities),
-            "sort": "1",
-            "reqType": "0",
-        },
-    )
-    resp.raise_for_status()
-
-    data = resp.json().get("data") or {}
-    rows = (data.get("rows") if isinstance(data, dict) else None) or []
+    """queryMyActivity across pages until max is reached or no more rows exist."""
+    # API responses are effectively paged in chunks of up to 20 items.
+    page_size = min(max_activities, 20)
     activities: list[Activity] = []
-    for item in rows[:max_activities]:
-        if not isinstance(item, dict):
-            continue
-        ride_id = item.get("rideId")
-        if ride_id is None:
-            ride_id = item.get("RideId")
-        if ride_id is None:
-            continue
-        activities.append(
-            Activity(
-                ride_id=int(ride_id),
-                title=item.get("title") or item.get("Title") or f"iGPSPORT {ride_id}",
-                start_time=(
-                    item.get("startTime")
-                    or item.get("StartTime")
-                    or item.get("startTimeString")
-                    or item.get("StartTimeString")
-                    or "unknown date"
-                ),
-            )
+    page_no = 1
+
+    while len(activities) < max_activities:
+        resp = session.get(
+            region.activity_query_url,
+            params={
+                "pageNo": str(page_no),
+                "pageSize": str(page_size),
+                "sort": "1",
+                "reqType": "0",
+            },
         )
+        resp.raise_for_status()
+
+        body = resp.json()
+        data = body.get("data") if isinstance(body, dict) else {}
+        rows = (data.get("rows") if isinstance(data, dict) else None) or []
+        if not rows:
+            break
+
+        for item in rows:
+            if len(activities) >= max_activities:
+                break
+            if not isinstance(item, dict):
+                continue
+            ride_id = item.get("rideId")
+            if ride_id is None:
+                ride_id = item.get("RideId")
+            if ride_id is None:
+                continue
+            activities.append(
+                Activity(
+                    ride_id=int(ride_id),
+                    title=item.get("title") or item.get("Title") or f"iGPSPORT {ride_id}",
+                    start_time=(
+                        item.get("startTime")
+                        or item.get("StartTime")
+                        or item.get("startTimeString")
+                        or item.get("StartTimeString")
+                        or "unknown date"
+                    ),
+                )
+            )
+
+        if len(rows) < page_size:
+            break
+
+        page_no += 1
+
     return activities
 
 
