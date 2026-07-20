@@ -37,8 +37,28 @@ from .region import INTERNATIONAL, IgpRegionConfig, resolve_region
 
 LOGIN_URL = INTERNATIONAL.login_url
 GATEWAY = INTERNATIONAL.gateway_base
-# iGPSPORT reports activity start times as "YYYY-MM-DD HH:MM:SS".
+# iGPSPORT usually reports start times as "YYYY-MM-DD HH:MM:SS", but some
+# accounts/regions return date-only dotted forms like "2026.07.19".
 IGP_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+IGP_TIME_FORMATS = (
+    IGP_TIME_FORMAT,
+    "%Y-%m-%d",
+    "%Y.%m.%d %H:%M:%S",
+    "%Y.%m.%d",
+)
+
+
+def parse_igp_start_time(value: str) -> datetime | None:
+    """Parse an iGPSPORT activity start time; return None if unrecognised."""
+    if not value or not isinstance(value, str):
+        return None
+    text = value.strip()
+    for fmt in IGP_TIME_FORMATS:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
 
 # iGPSPORT exports every ride as the generic "Ride". intervals.icu doesn't take
 # a sport on upload, so we PUT the desired type afterwards. An empty activity
@@ -72,9 +92,8 @@ def dropbox_filename_for(activity: "Activity", use_date: bool = True) -> str:
     fallback = f"{external_id_for(activity.ride_id)}.fit"
     if not use_date:
         return fallback
-    try:
-        start = datetime.strptime(activity.start_time, IGP_TIME_FORMAT)
-    except (TypeError, ValueError):
+    start = parse_igp_start_time(activity.start_time)
+    if start is None:
         return fallback
     return f"ride-0-{start:%Y-%m-%d-%H-%M-%S}.fit"
 
@@ -187,42 +206,59 @@ def _list_activities_query(
     max_activities: int,
     region: IgpRegionConfig,
 ) -> list[Activity]:
-    """queryMyActivity — camelCase rideId in data.rows (China and new intl accounts)."""
-    resp = session.get(
-        region.activity_query_url,
-        params={
-            "pageNo": "1",
-            "pageSize": str(max_activities),
-            "sort": "1",
-            "reqType": "0",
-        },
-    )
-    resp.raise_for_status()
-
-    data = resp.json().get("data") or {}
-    rows = (data.get("rows") if isinstance(data, dict) else None) or []
+    """queryMyActivity across pages until max is reached or no more rows exist."""
+    # API responses are effectively paged in chunks of up to 20 items.
+    page_size = min(max_activities, 20)
     activities: list[Activity] = []
-    for item in rows[:max_activities]:
-        if not isinstance(item, dict):
-            continue
-        ride_id = item.get("rideId")
-        if ride_id is None:
-            ride_id = item.get("RideId")
-        if ride_id is None:
-            continue
-        activities.append(
-            Activity(
-                ride_id=int(ride_id),
-                title=item.get("title") or item.get("Title") or f"iGPSPORT {ride_id}",
-                start_time=(
-                    item.get("startTime")
-                    or item.get("StartTime")
-                    or item.get("startTimeString")
-                    or item.get("StartTimeString")
-                    or "unknown date"
-                ),
-            )
+    page_no = 1
+
+    while len(activities) < max_activities:
+        resp = session.get(
+            region.activity_query_url,
+            params={
+                "pageNo": str(page_no),
+                "pageSize": str(page_size),
+                "sort": "1",
+                "reqType": "0",
+            },
         )
+        resp.raise_for_status()
+
+        body = resp.json()
+        data = body.get("data") if isinstance(body, dict) else {}
+        rows = (data.get("rows") if isinstance(data, dict) else None) or []
+        if not rows:
+            break
+
+        for item in rows:
+            if len(activities) >= max_activities:
+                break
+            if not isinstance(item, dict):
+                continue
+            ride_id = item.get("rideId")
+            if ride_id is None:
+                ride_id = item.get("RideId")
+            if ride_id is None:
+                continue
+            activities.append(
+                Activity(
+                    ride_id=int(ride_id),
+                    title=item.get("title") or item.get("Title") or f"iGPSPORT {ride_id}",
+                    start_time=(
+                        item.get("startTime")
+                        or item.get("StartTime")
+                        or item.get("startTimeString")
+                        or item.get("StartTimeString")
+                        or "unknown date"
+                    ),
+                )
+            )
+
+        if len(rows) < page_size:
+            break
+
+        page_no += 1
+
     return activities
 
 
@@ -285,10 +321,9 @@ def _activity_date_range(activities: list[Activity]) -> tuple[date, date]:
     """
     dates: list[date] = []
     for act in activities:
-        try:
-            dates.append(datetime.strptime(act.start_time, IGP_TIME_FORMAT).date())
-        except (ValueError, TypeError):
-            continue
+        start = parse_igp_start_time(act.start_time)
+        if start is not None:
+            dates.append(start.date())
 
     if not dates:
         today = date.today()
@@ -363,7 +398,7 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
             )
             report(
                 f"{len(already_uploaded)} activities already on intervals.icu "
-                "in this date range."
+                f"in {oldest.isoformat()}…{newest.isoformat()}."
             )
         except requests.RequestException as exc:
             report(f"⚠ Could not check intervals.icu (will process all): {exc}")
