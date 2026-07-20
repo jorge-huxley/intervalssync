@@ -94,7 +94,7 @@ share the production app's rate limit.
   libsecret) via the `flet-secure-storage` service — never in a file. Don't add
   real API keys, passwords, or personal data to the repo, tests, or commits.
 - The Flet API changes between versions — verify control arguments against the
-  installed version (currently 0.85.x) rather than older tutorials.
+  installed version (currently 0.86.x) rather than older tutorials.
 
 ## Cutting a release
 
