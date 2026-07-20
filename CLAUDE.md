@@ -64,4 +64,4 @@ src/intervalssync/
 
 ## Flet version note
 
-Built against Flet 0.85.x. Uses `ft.Icons` / `ft.Colors`, `page.show_dialog`, `ft.run(main)`.
+Built against Flet 0.86.x. Uses `ft.Icons` / `ft.Colors`, `page.show_dialog`, `ft.run(main)`.
