@@ -62,6 +62,28 @@ def test_activity_date_range_from_start_times():
     assert newest == date(2026, 5, 29)  # max + 1 day
 
 
+def test_activity_date_range_parses_dotted_dates():
+    """Some iGPSPORT accounts return date-only 'YYYY.MM.DD' start times."""
+    acts = [
+        core.Activity(1, "a", "2026.07.19"),
+        core.Activity(2, "b", "2026.05.03"),
+    ]
+    oldest, newest = core._activity_date_range(acts)
+    assert oldest == date(2026, 5, 2)
+    assert newest == date(2026, 7, 20)
+
+
+def test_parse_igp_start_time_formats():
+    assert core.parse_igp_start_time("2026-05-28 19:20:42").date() == date(2026, 5, 28)
+    assert core.parse_igp_start_time("2026.07.19").date() == date(2026, 7, 19)
+    assert core.parse_igp_start_time("unknown date") is None
+
+
+def test_dropbox_filename_for_dotted_date():
+    act = core.Activity(1, "Ride", "2026.07.19")
+    assert core.dropbox_filename_for(act) == "ride-0-2026-07-19-00-00-00.fit"
+
+
 def test_activity_date_range_fallback_when_unparseable():
     acts = [core.Activity(1, "a", "unknown date")]
     oldest, newest = core._activity_date_range(acts)

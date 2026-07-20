@@ -99,7 +99,11 @@ def fetch_uploaded_external_ids(
         auth=("API_KEY", api_key),
     )
     resp.raise_for_status()
-    return {a["external_id"] for a in resp.json() if a.get("external_id")}
+    return {
+        a["external_id"]
+        for a in resp.json()
+        if isinstance(a, dict) and a.get("external_id")
+    }
 
 
 def fetch_calendar_workouts(
