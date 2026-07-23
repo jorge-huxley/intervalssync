@@ -339,9 +339,9 @@ async def _app(page: ft.Page) -> None:
                         content=body,
                         expand=True,
                         padding=ft.Padding(
-                            theme.SPACE_LG,
+                            theme.SPACE_MD if is_mobile else theme.SPACE_LG,
                             theme.SPACE_MD,
-                            theme.SPACE_LG,
+                            theme.SPACE_MD if is_mobile else theme.SPACE_LG,
                             theme.SPACE_LG if not is_mobile else theme.SPACE_MD,
                         ),
                     ),

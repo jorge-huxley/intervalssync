@@ -53,9 +53,18 @@ async def build_settings_view(
 
     def _input_field(**kwargs: object) -> ft.TextField:
         kwargs.setdefault("border_radius", theme.RADIUS_SM)
+        # Material TextField helpers default to one line and ellipsize on narrow screens.
+        kwargs.setdefault("helper_max_lines", 4)
+        # Fill the settings column width so attached helpers are not clipped early.
+        kwargs.setdefault("width", float("inf"))
         if is_mobile:
             kwargs.setdefault("text_size", 14)
         return ft.TextField(**kwargs)
+
+    def _dropdown(**kwargs: object) -> ft.Dropdown:
+        kwargs.setdefault("border_radius", theme.RADIUS_SM)
+        kwargs.setdefault("width", float("inf"))
+        return ft.Dropdown(**kwargs)
 
     enable_igpsport = ft.Switch(
         label="Enable iGPSPORT",
@@ -65,7 +74,7 @@ async def build_settings_view(
     igp_region_value = (
         config.igp_region if config.igp_region in ("international", "china") else "international"
     )
-    igp_region = ft.Dropdown(
+    igp_region = _dropdown(
         label="iGPSPORT region",
         value=igp_region_value,
         options=[
@@ -138,10 +147,9 @@ async def build_settings_view(
         ),
     )
 
-    activity_type = ft.Dropdown(
+    activity_type = _dropdown(
         label="Activity type on intervals.icu",
         value=config.activity_type,
-        border_radius=theme.RADIUS_SM,
         options=[
             ft.dropdown.Option(key="", text="Don't change (leave as uploaded)"),
             *(
@@ -167,23 +175,24 @@ async def build_settings_view(
         ft.PagePlatform.ANDROID,
         ft.PagePlatform.ANDROID_TV,
     )
-    auto_sync_interval_value = str(
-        config_module.clamp_auto_sync_interval(config.auto_sync_interval_minutes)
+    # TextField (not Dropdown) so helper_max_lines can wrap like other settings helpers.
+    selected_auto_sync_minutes = config_module.clamp_auto_sync_interval(
+        config.auto_sync_interval_minutes
     )
+
+    def _auto_sync_interval_label(minutes: int) -> str:
+        return f"Every {minutes} minutes"
+
     auto_sync_enabled = ft.Switch(
         label="Auto-sync in background",
         value=config.auto_sync_enabled,
         active_color=colors["accent"],
     )
-    auto_sync_interval = ft.Dropdown(
+    auto_sync_interval = _input_field(
         label="Auto-sync interval",
-        value=auto_sync_interval_value,
-        border_radius=theme.RADIUS_SM,
-        options=[
-            ft.dropdown.Option(str(minutes), f"Every {minutes} minutes")
-            for minutes in config_module.AUTO_SYNC_INTERVALS
-        ],
-        helper_text=(
+        value=_auto_sync_interval_label(selected_auto_sync_minutes),
+        read_only=True,
+        helper=(
             "Shorter intervals use more battery. On Android a persistent "
             "notification keeps sync running while enabled; force-stopping "
             "the app still stops auto-sync. On desktop, sync only runs while "
@@ -194,6 +203,24 @@ async def build_settings_view(
                 "the app is open (use the CLI + Task Scheduler for unattended PC sync)."
             )
         ),
+    )
+
+    def _select_auto_sync_interval(minutes: int) -> None:
+        nonlocal selected_auto_sync_minutes
+        selected_auto_sync_minutes = minutes
+        auto_sync_interval.value = _auto_sync_interval_label(minutes)
+        page.update()
+
+    auto_sync_interval.suffix = ft.PopupMenuButton(
+        icon=ft.Icons.ARROW_DROP_DOWN,
+        tooltip="Choose interval",
+        items=[
+            ft.PopupMenuItem(
+                content=ft.Text(_auto_sync_interval_label(minutes)),
+                on_click=lambda _e, m=minutes: _select_auto_sync_interval(m),
+            )
+            for minutes in config_module.AUTO_SYNC_INTERVALS
+        ],
     )
 
     upload_dropbox = ft.Switch(
@@ -549,10 +576,12 @@ async def build_settings_view(
 
     igp_credentials = ft.Column(
         spacing=theme.SPACE_SM,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         controls=[igp_region, igp_user, igp_password],
     )
     bryton_credentials = ft.Column(
         spacing=theme.SPACE_SM,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         controls=[bryton_user, bryton_password],
     )
     workout_sync_section = ft.Container(
@@ -651,13 +680,12 @@ async def build_settings_view(
         config.upload_dropbox = bool(upload_dropbox.value)
 
         want_auto_sync = bool(auto_sync_enabled.value)
-        try:
-            config.auto_sync_interval_minutes = config_module.clamp_auto_sync_interval(
-                int(auto_sync_interval.value or "60")
-            )
-        except (TypeError, ValueError):
-            config.auto_sync_interval_minutes = 60
-        auto_sync_interval.value = str(config.auto_sync_interval_minutes)
+        config.auto_sync_interval_minutes = config_module.clamp_auto_sync_interval(
+            selected_auto_sync_minutes
+        )
+        auto_sync_interval.value = _auto_sync_interval_label(
+            config.auto_sync_interval_minutes
+        )
 
         message = "Saved securely to your system credential store."
         if want_auto_sync and is_android and perms is not None:
@@ -738,6 +766,7 @@ async def build_settings_view(
 
     return ft.Column(
         spacing=theme.SPACE_LG,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         controls=[
             ft.Column(
                 spacing=theme.SPACE_SM,
