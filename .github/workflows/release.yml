@@ -101,6 +101,16 @@ jobs:
 
       # flet build apk auto-installs the Flutter/Android SDK + JDK on first run.
       # It picks up the FLET_ANDROID_SIGNING_* env vars set above when present.
+      # flet-android-notifications needs a post-template manifest/Gradle patch;
+      # the first build may fail at Gradle before that patch exists.
+      - name: Bootstrap Flutter project for Android
+        run: uv run flet build apk --yes --verbose --build-version "${{ env.APP_VERSION }}" || true
+
+      - name: Patch Android project for notifications / foreground service
+        run: |
+          test -d build/flutter
+          uv run flet-android-notifications-patch --project-root build/flutter
+
       - name: Build Android APK
         run: uv run flet build apk --yes --verbose --build-version "${{ env.APP_VERSION }}"
 

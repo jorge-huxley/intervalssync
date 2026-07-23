@@ -39,6 +39,7 @@ async def build_settings_view(
     perms: PermissionHandler | None = None,
     apply_download_location: Callable[[], Awaitable[None]] | None = None,
     on_profile_sync_check: Callable[[], Awaitable[None]] | None = None,
+    on_auto_sync_changed: Callable[[], Awaitable[None]] | None = None,
 ) -> ft.Control:
     colors = theme.palette(page)
 
@@ -160,6 +161,39 @@ async def build_settings_view(
         label="Force re-sync (re-download even if already uploaded)",
         value=config.force_resync,
         active_color=colors["accent"],
+    )
+
+    is_android = page.platform in (
+        ft.PagePlatform.ANDROID,
+        ft.PagePlatform.ANDROID_TV,
+    )
+    auto_sync_interval_value = str(
+        config_module.clamp_auto_sync_interval(config.auto_sync_interval_minutes)
+    )
+    auto_sync_enabled = ft.Switch(
+        label="Auto-sync in background",
+        value=config.auto_sync_enabled,
+        active_color=colors["accent"],
+    )
+    auto_sync_interval = ft.Dropdown(
+        label="Auto-sync interval",
+        value=auto_sync_interval_value,
+        border_radius=theme.RADIUS_SM,
+        options=[
+            ft.dropdown.Option(str(minutes), f"Every {minutes} minutes")
+            for minutes in config_module.AUTO_SYNC_INTERVALS
+        ],
+        helper_text=(
+            "Shorter intervals use more battery. On Android a persistent "
+            "notification keeps sync running while enabled; force-stopping "
+            "the app still stops auto-sync. On desktop, sync only runs while "
+            "the app is open."
+            if is_android
+            else (
+                "Shorter intervals use more battery. Auto-sync runs only while "
+                "the app is open (use the CLI + Task Scheduler for unattended PC sync)."
+            )
+        ),
     )
 
     upload_dropbox = ft.Switch(
@@ -616,7 +650,33 @@ async def build_settings_view(
         config.dropbox_date_filenames = bool(dropbox_date_filenames_switch.value)
         config.upload_dropbox = bool(upload_dropbox.value)
 
+        want_auto_sync = bool(auto_sync_enabled.value)
+        try:
+            config.auto_sync_interval_minutes = config_module.clamp_auto_sync_interval(
+                int(auto_sync_interval.value or "60")
+            )
+        except (TypeError, ValueError):
+            config.auto_sync_interval_minutes = 60
+        auto_sync_interval.value = str(config.auto_sync_interval_minutes)
+
         message = "Saved securely to your system credential store."
+        if want_auto_sync and is_android and perms is not None:
+            notify_status = await perms.request(Permission.NOTIFICATION)
+            battery_status = await perms.request(Permission.IGNORE_BATTERY_OPTIMIZATIONS)
+            if notify_status != PermissionStatus.GRANTED:
+                want_auto_sync = False
+                auto_sync_enabled.value = False
+                message = (
+                    "Saved, but auto-sync stayed off — notification permission "
+                    "is required on Android."
+                )
+            elif battery_status != PermissionStatus.GRANTED:
+                message = (
+                    "Saved with auto-sync on. For best results, allow unrestricted "
+                    "battery use for Intervals Sync in system settings."
+                )
+        config.auto_sync_enabled = want_auto_sync
+
         if config.upload_dropbox and not dropbox_app_key:
             config.upload_dropbox = False
             upload_dropbox.value = False
@@ -655,6 +715,8 @@ async def build_settings_view(
 
         page.show_dialog(ft.SnackBar(ft.Text(message)))
         await on_saved()
+        if on_auto_sync_changed is not None:
+            await on_auto_sync_changed()
         if on_profile_sync_check is not None and config.enable_igpsport:
             await on_profile_sync_check()
 
@@ -705,6 +767,8 @@ async def build_settings_view(
                 activity_type,
                 delete_after_upload,
                 force_resync,
+                auto_sync_enabled,
+                auto_sync_interval,
                 workout_sync_section,
             ),
             profile_sync_section,

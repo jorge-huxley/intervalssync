@@ -64,6 +64,7 @@
 - Stores your credentials in the **OS secure vault** (Windows Credential Manager / macOS Keychain / Android Keystore), never in a file
 - Lets you know when a newer version is available
 - **Sync zones to iGPSPORT** — push FTP, LTHR, max HR, weight, and power/HR zones from intervals.icu into your iGPSPORT profile (Settings → iGPSPORT profile, or `intervalssync sync-zones`; the app prompts on launch when thresholds differ)
+- **Optional auto-sync** — periodically check for new rides and notify when uploads succeed (Settings → Auto-sync). On Android this uses a persistent notification while enabled; on desktop it only runs while the app is open. For unattended PC sync, prefer the [CLI](#cli--automation-ai-agents) with Task Scheduler / cron
 - **Headless CLI** — activity sync, workout upload, and iGPSPORT zone/threshold sync from the terminal, with JSON output and exit codes for automation and AI agents (see [CLI & automation](#cli--automation-ai-agents))
 - **China iGPSPORT region** — accounts on [app.igpsport.cn](https://app.igpsport.cn/login) use a separate API; choose **China** in Settings (or `INTERVALSSYNC_IGPSPORT_REGION=china` in the CLI)
 

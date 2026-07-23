@@ -159,6 +159,16 @@ Success example:
 
 Non-secret defaults in `intervalssync-cli` `config.json` (`platformdirs`). Secrets never go there.
 
+## GUI auto-sync
+
+Optional Settings toggle (`auto_sync_enabled`) polls enabled sources on an interval
+(`15` / `30` / `60` / `120` minutes) and notifies when new rides upload.
+
+- **Android:** foreground service sticky notification while enabled; force-stop still
+  stops sync. Shorter intervals use more battery.
+- **Desktop:** runs only while the GUI process is open. For unattended PC sync use
+  this CLI with Task Scheduler / cron (`intervalssync sync`).
+
 ## What it does
 
 ### Activity sync

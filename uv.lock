@@ -87,6 +87,18 @@ wheels = [
 ]
 
 [[package]]
+name = "flet-android-notifications"
+version = "0.10.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flet" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a8/f5/24d9ca84f1046cc69f6c28e3669c5b88de43ccc0680ade407c8a6103ca53/flet_android_notifications-0.10.0.tar.gz", hash = "sha256:281a233fb62c443950a9436404c99e83fbb9603f3d79f8f84ef7ce8a5f95dd87", size = 26113, upload-time = "2026-07-21T21:08:59.28Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/63/e1c1a03f5e107388340f695def3a50a614207b628c48448617e76b53caa8/flet_android_notifications-0.10.0-py3-none-any.whl", hash = "sha256:ae31781f9c806478adf35c8835ec99d10449cb2cde1b8f49b56e2438fb8c9288", size = 28672, upload-time = "2026-07-21T21:08:58.057Z" },
+]
+
+[[package]]
 name = "flet-permission-handler"
 version = "0.86.1"
 source = { registry = "https://pypi.org/simple" }
@@ -181,6 +193,7 @@ source = { editable = "." }
 dependencies = [
     { name = "dropbox" },
     { name = "flet" },
+    { name = "flet-android-notifications" },
     { name = "flet-permission-handler" },
     { name = "flet-secure-storage" },
     { name = "garmin-fit-sdk" },
@@ -199,6 +212,7 @@ dev = [
 requires-dist = [
     { name = "dropbox", specifier = ">=12.0.2" },
     { name = "flet", specifier = "==0.86.1" },
+    { name = "flet-android-notifications", specifier = ">=0.10.0,<0.11" },
     { name = "flet-permission-handler", specifier = "==0.86.1" },
     { name = "flet-secure-storage", specifier = "==0.86.1" },
     { name = "garmin-fit-sdk", specifier = ">=21.208.0" },

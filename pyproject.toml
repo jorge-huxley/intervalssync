@@ -14,6 +14,7 @@ dependencies = [
     # newer Python `flet` with an older Flutter client (or vice versa) breaks
     # the wire protocol and the packaged app stays on a black screen.
     "flet==0.86.1",
+    "flet-android-notifications>=0.10.0,<0.11",
     "flet-permission-handler==0.86.1",
     "flet-secure-storage==0.86.1",
     "garmin-fit-sdk>=21.208.0",
@@ -54,8 +55,15 @@ bundle_id = "io.github.jorgehuxley.intervalssync"
 # Android permissions baked into AndroidManifest.xml by `flet build apk`.
 # MANAGE_EXTERNAL_STORAGE ("all files access") + the legacy storage perms let
 # users opt into saving downloads to the public Downloads folder.
+# Auto-sync uses notifications + a foreground service (specialUse) so periodic
+# sync can continue while the UI is backgrounded.
 [tool.flet.android.permission]
 "android.permission.INTERNET" = true
 "android.permission.MANAGE_EXTERNAL_STORAGE" = true
 "android.permission.READ_EXTERNAL_STORAGE" = true
 "android.permission.WRITE_EXTERNAL_STORAGE" = true
+"android.permission.POST_NOTIFICATIONS" = true
+"android.permission.FOREGROUND_SERVICE" = true
+"android.permission.FOREGROUND_SERVICE_SPECIAL_USE" = true
+"android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" = true
+"android.permission.RECEIVE_BOOT_COMPLETED" = true

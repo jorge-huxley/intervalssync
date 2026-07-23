@@ -14,6 +14,7 @@ from flet_secure_storage import SecureStorage
 from .. import __version__
 from . import config as config_module
 from . import secrets as secrets_module
+from .auto_sync import AutoSyncController
 from .update_check import RELEASES_PAGE, check_for_update
 from .settings_view import build_settings_view
 from .sync_view import build_sync_view
@@ -24,6 +25,7 @@ from . import theme
 
 _DESKTOP = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX}
 _MOBILE = {ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV, ft.PagePlatform.IOS}
+_ANDROID = {ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV}
 _PERMISSION_HANDLER_PLATFORMS = {
     ft.PagePlatform.ANDROID,
     ft.PagePlatform.ANDROID_TV,
@@ -91,10 +93,25 @@ async def _app(page: ft.Page) -> None:
 
     store, storage = _secret_store_for_platform(page.platform)
     perms = PermissionHandler() if _supports_permission_handler(page.platform) else None
+    notifications = None
+    if page.platform in _ANDROID:
+        from flet_android_notifications import FletAndroidNotifications
+
+        notifications = FletAndroidNotifications()
     if storage is not None:
         page.services.append(storage)
     if perms is not None:
         page.services.append(perms)
+    if notifications is not None:
+        page.services.append(notifications)
+
+    auto_sync = AutoSyncController(
+        page,
+        config,
+        store,
+        notifications=notifications,
+        is_android=page.platform in _ANDROID,
+    )
 
     def _private_download_dir() -> str:
         base = os.getenv("FLET_APP_STORAGE_DATA") or tempfile.gettempdir()
@@ -272,6 +289,7 @@ async def _app(page: ft.Page) -> None:
                 perms=perms,
                 apply_download_location=apply_download_location,
                 on_profile_sync_check=on_profile_sync_check,
+                on_auto_sync_changed=auto_sync.apply,
             )
         )
         header_slot.content = _header()
@@ -301,6 +319,12 @@ async def _app(page: ft.Page) -> None:
                     theme.SPACE_MD, theme.SPACE_SM, theme.SPACE_MD, theme.SPACE_SM
                 ),
             )
+
+    def on_lifecycle(e: ft.AppLifecycleStateChangeEvent) -> None:
+        if e.state == ft.AppLifecycleState.RESUME:
+            page.run_task(auto_sync.on_app_resume)
+
+    page.on_app_lifecycle_state_change = on_lifecycle
 
     page.add(
         ft.SafeArea(
@@ -342,6 +366,7 @@ async def _app(page: ft.Page) -> None:
 
     page.run_task(auto_check_updates)
     page.run_task(auto_check_profile_sync)
+    page.run_task(auto_sync.apply)
 
 
 def main() -> None:
