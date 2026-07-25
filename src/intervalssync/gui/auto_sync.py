@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import flet as ft
 
+from ..i18n import t
 from . import config as config_module
 from . import secrets as secrets_module
 from . import support_gamification
@@ -19,8 +20,6 @@ if TYPE_CHECKING:
 _FGS_NOTIFICATION_ID = 1001
 _UPLOAD_NOTIFICATION_ID = 1002
 _CHANNEL_ID = "intervalssync_auto_sync"
-_CHANNEL_NAME = "Auto-sync"
-_CHANNEL_DESCRIPTION = "Background activity sync for Intervals Sync"
 # Skip resume-triggered sync if a run finished within this many seconds.
 _RESUME_MIN_GAP_SECONDS = 5 * 60
 
@@ -73,6 +72,13 @@ class AutoSyncController:
             name="intervalssync-auto-sync",
         )
 
+    async def refresh_locale(self) -> None:
+        """Rebuild FGS notification text after UI language change."""
+        if not self._config.auto_sync_enabled or not self._fgs_active:
+            return
+        await self._stop_foreground_service()
+        await self._start_foreground_service()
+
     async def on_app_resume(self) -> None:
         """Run a sync soon after the app returns to the foreground."""
         if not self._config.auto_sync_enabled:
@@ -120,9 +126,13 @@ class AutoSyncController:
         await self._notify_uploads(outcome.uploaded)
 
     async def _notify_uploads(self, uploaded: int) -> None:
-        ride_word = "ride" if uploaded == 1 else "rides"
-        title = "Intervals Sync"
-        body = f"Uploaded {uploaded} {ride_word} to intervals.icu"
+        title = t("autosync.notification.title")
+        body = t(
+            "autosync.notification.upload.one"
+            if uploaded == 1
+            else "autosync.notification.upload.many",
+            n=uploaded,
+        )
 
         if self._is_android and self._notifications is not None:
             try:
@@ -131,8 +141,8 @@ class AutoSyncController:
                     title=title,
                     body=body,
                     channel_id=_CHANNEL_ID,
-                    channel_name=_CHANNEL_NAME,
-                    channel_description=_CHANNEL_DESCRIPTION,
+                    channel_name=t("autosync.channel.name"),
+                    channel_description=t("autosync.channel.description"),
                     importance="default",
                     play_sound=True,
                     enable_vibration=True,
@@ -146,19 +156,21 @@ class AutoSyncController:
         self._page.update()
 
     async def _start_foreground_service(self) -> None:
-        if not self._is_android or self._notifications is None or self._fgs_active:
+        if not self._is_android or self._notifications is None:
             return
+        if self._fgs_active:
+            await self._stop_foreground_service()
         interval = self._config.auto_sync_interval_minutes
         try:
             await self._notifications.request_permissions()
             await self._notifications.start_foreground_service(
                 notification_id=_FGS_NOTIFICATION_ID,
-                title="Intervals Sync — auto-sync on",
-                body=f"Checking for new rides every {interval} minutes",
+                title=t("autosync.fgs.title"),
+                body=t("autosync.fgs.body", interval=interval),
                 foreground_service_types=["special_use"],
                 channel_id=_CHANNEL_ID,
-                channel_name=_CHANNEL_NAME,
-                channel_description=_CHANNEL_DESCRIPTION,
+                channel_name=t("autosync.channel.name"),
+                channel_description=t("autosync.channel.description"),
                 importance="low",
                 play_sound=False,
                 enable_vibration=False,

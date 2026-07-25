@@ -10,6 +10,7 @@ from typing import Callable
 from ..bryton.core import SyncConfig as BrytonSyncConfig, sync as bryton_sync
 from ..bryton.exceptions import BrytonSyncError
 from ..dropbox_client import get_dropbox_app_key
+from ..i18n import t
 from ..igpsport.core import SyncConfig as IgpSyncConfig, SyncError, sync as igpsport_sync
 from . import config as config_module
 from . import secrets as secrets_module
@@ -119,9 +120,9 @@ def run_enabled_activity_sync(
     try:
         if config.enable_igpsport:
             if not config.igp_user or not igp_password:
-                outcome.errors.append("iGPSPORT credentials missing")
+                outcome.errors.append(t("error.credentials.igpsport"))
             else:
-                report("Auto-sync: iGPSPORT…")
+                report(t("progress.autosync.igpsport"))
                 try:
                     result = igpsport_sync(
                         igp_sync_config(
@@ -139,16 +140,16 @@ def run_enabled_activity_sync(
                     outcome.failed += result.failed
                 except SyncError as exc:
                     outcome.errors.append(str(exc))
-                    report(f"✗ iGPSPORT: {exc}")
+                    report(t("progress.error.igpsport", exc=exc))
                 except Exception as exc:  # noqa: BLE001 — surface unexpected failures
                     outcome.errors.append(str(exc))
-                    report(f"✗ iGPSPORT unexpected error: {exc}")
+                    report(t("progress.error.igpsport.unexpected", exc=exc))
 
         if config.enable_bryton:
             if not config.bryton_user or not bryton_password:
-                outcome.errors.append("Bryton credentials missing")
+                outcome.errors.append(t("error.credentials.bryton"))
             else:
-                report("Auto-sync: Bryton…")
+                report(t("progress.autosync.bryton"))
                 try:
                     result = bryton_sync(
                         bryton_sync_config(
@@ -166,10 +167,10 @@ def run_enabled_activity_sync(
                     outcome.failed += result.failed
                 except BrytonSyncError as exc:
                     outcome.errors.append(str(exc))
-                    report(f"✗ Bryton: {exc}")
+                    report(t("progress.error.bryton", exc=exc))
                 except Exception as exc:  # noqa: BLE001 — surface unexpected failures
                     outcome.errors.append(str(exc))
-                    report(f"✗ Bryton unexpected error: {exc}")
+                    report(t("progress.error.bryton.unexpected", exc=exc))
     finally:
         end_sync()
 

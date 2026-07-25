@@ -13,6 +13,8 @@ from pathlib import Path
 
 from platformdirs import user_config_dir, user_downloads_dir
 
+from ..i18n import detect_system_language, normalize_language
+
 APP_NAME = "intervalssync"
 
 CONFIG_DIR = Path(user_config_dir(APP_NAME, appauthor=False))
@@ -39,6 +41,8 @@ def clamp_auto_sync_interval(minutes: int) -> int:
 
 @dataclass
 class AppConfig:
+    # GUI interface language: "en" | "zh". First launch follows system locale.
+    language: str = "en"
     enable_igpsport: bool = True
     enable_bryton: bool = False
     igp_user: str = ""
@@ -101,10 +105,19 @@ def load() -> AppConfig:
 
     # Migrate legacy single-source picker (ignored on save going forward).
     activity_source = data.pop("activity_source", None)
+    had_language = "language" in data
     cfg = AppConfig(**{k: v for k, v in data.items() if k in AppConfig.__annotations__})
     if activity_source == "bryton":
         cfg.enable_bryton = True
         cfg.enable_igpsport = False
+    dirty = False
+    # First launch: follow device/OS language (zh* → 简体中文). After that,
+    # honour the user's saved choice so EN/ZH can switch freely.
+    if not had_language:
+        cfg.language = detect_system_language()
+        dirty = True
+    else:
+        cfg.language = normalize_language(cfg.language)
     cfg.auto_sync_interval_minutes = clamp_auto_sync_interval(
         cfg.auto_sync_interval_minutes
     )
@@ -113,6 +126,8 @@ def load() -> AppConfig:
             cfg.uploaded_bryton_workouts
         )
         cfg.stats_seeded = True
+        dirty = True
+    if dirty:
         save(cfg)
     return cfg
 

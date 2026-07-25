@@ -9,6 +9,7 @@ from intervalssync.gui import config as config_module
 
 def test_defaults():
     cfg = config_module.AppConfig()
+    assert cfg.language == "en"
     assert cfg.enable_igpsport is True
     assert cfg.igp_region == "international"
     assert cfg.enable_bryton is False

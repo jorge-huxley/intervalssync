@@ -16,6 +16,7 @@ from ..bryton.workout import (
 from ..igpsport.core import SyncError, sync as igpsport_sync
 from ..dropbox_client import get_dropbox_app_key
 from ..igpsport.workout import WorkoutUploadConfig, apply_uploaded_workout_map, upload_workouts
+from ..i18n import localize_user_error, t
 from . import support_gamification
 from . import sync_runner
 from . import theme
@@ -56,7 +57,7 @@ def build_sync_view(
                 ft.Text(
                     label,
                     size=label_size,
-                    font_family=f"{theme.FONT_BODY}Medium",
+                    font_family=theme.body_font_medium(),
                     overflow=ft.TextOverflow.ELLIPSIS,
                     max_lines=1,
                     expand=True,
@@ -91,7 +92,7 @@ def build_sync_view(
                         title,
                         size=15,
                         weight=ft.FontWeight.W_600,
-                        font_family=f"{theme.FONT_BODY}Medium",
+                        font_family=theme.body_font_medium(),
                         color=colors["text"],
                     ),
                     ft.Column(
@@ -110,20 +111,20 @@ def build_sync_view(
             expand=True,
         )
 
-    sync_igp_button = _action_button("Sync activities", ft.Icons.SYNC)
-    sync_bryton_button = _action_button("Sync activities", ft.Icons.SYNC)
+    sync_igp_button = _action_button(t("sync.action.sync_activities"), ft.Icons.SYNC)
+    sync_bryton_button = _action_button(t("sync.action.sync_activities"), ft.Icons.SYNC)
     upload_igp_workouts_button = _action_button(
-        "Upload workouts", ft.Icons.FITNESS_CENTER_OUTLINED, outlined=True
+        t("sync.action.upload_workouts"), ft.Icons.FITNESS_CENTER_OUTLINED, outlined=True
     )
     upload_bryton_workouts_button = _action_button(
-        "Upload workouts", ft.Icons.FITNESS_CENTER_OUTLINED, outlined=True
+        t("sync.action.upload_workouts"), ft.Icons.FITNESS_CENTER_OUTLINED, outlined=True
     )
 
     action_cards: list[ft.Container] = []
     if config.enable_igpsport:
-        action_cards.append(_source_card("iGPSPORT", sync_igp_button, upload_igp_workouts_button))
+        action_cards.append(_source_card(t("sync.source.igpsport"), sync_igp_button, upload_igp_workouts_button))
     if config.enable_bryton:
-        action_cards.append(_source_card("Bryton", sync_bryton_button, upload_bryton_workouts_button))
+        action_cards.append(_source_card(t("sync.source.bryton"), sync_bryton_button, upload_bryton_workouts_button))
 
     if len(action_cards) == 1:
         action_area = ft.Row(
@@ -136,7 +137,7 @@ def build_sync_view(
         else:
             action_area = ft.Row(spacing=theme.SPACE_MD, controls=action_cards)
     else:
-        action_area = theme.muted_text("Enable a source in Settings to sync.", page)
+        action_area = theme.muted_text(t("sync.empty.no_source"), page)
 
     action_buttons: list[ft.FilledButton | ft.OutlinedButton] = []
     if config.enable_igpsport:
@@ -152,14 +153,14 @@ def build_sync_view(
         line_color = colors["text"]
         if message.startswith("✗"):
             line_color = ft.Colors.RED_400
-        elif message.startswith("\nDone"):
+        elif message.startswith("\nDone") or message.startswith("\n完成"):
             line_color = colors["accent"]
         log.controls.append(
             ft.Text(
                 message,
                 size=12,
                 selectable=True,
-                font_family="Courier New",
+                font_family=theme.body_font(),
                 color=line_color,
             )
         )
@@ -199,16 +200,21 @@ def build_sync_view(
             )
             uploaded_count = result.uploaded
             append_log(
-                f"\nDone — intervals uploaded {result.uploaded}, "
-                f"Dropbox uploaded {result.uploaded_dropbox}, "
-                f"downloaded {result.downloaded}, "
-                f"skipped {result.skipped}, Dropbox skipped {result.skipped_dropbox}, "
-                f"failed {result.failed}, Dropbox failed {result.failed_dropbox}."
+                "\n" + t(
+                    "sync.log.done.activity",
+                    uploaded=result.uploaded,
+                    uploaded_dropbox=result.uploaded_dropbox,
+                    downloaded=result.downloaded,
+                    skipped=result.skipped,
+                    skipped_dropbox=result.skipped_dropbox,
+                    failed=result.failed,
+                    failed_dropbox=result.failed_dropbox,
+                )
             )
         except SyncError as exc:
-            append_log(f"✗ {exc}")
+            append_log(t("sync.log.error.detail", exc=localize_user_error(exc)))
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
-            append_log(f"✗ Unexpected error: {exc}")
+            append_log(t("sync.log.error.unexpected", exc=localize_user_error(exc)))
         finally:
             sync_runner.end_sync()
             if uploaded_count > 0:
@@ -237,16 +243,21 @@ def build_sync_view(
             )
             uploaded_count = result.uploaded
             append_log(
-                f"\nDone — intervals uploaded {result.uploaded}, "
-                f"Dropbox uploaded {result.uploaded_dropbox}, "
-                f"downloaded {result.downloaded}, "
-                f"skipped {result.skipped}, Dropbox skipped {result.skipped_dropbox}, "
-                f"failed {result.failed}, Dropbox failed {result.failed_dropbox}."
+                "\n" + t(
+                    "sync.log.done.activity",
+                    uploaded=result.uploaded,
+                    uploaded_dropbox=result.uploaded_dropbox,
+                    downloaded=result.downloaded,
+                    skipped=result.skipped,
+                    skipped_dropbox=result.skipped_dropbox,
+                    failed=result.failed,
+                    failed_dropbox=result.failed_dropbox,
+                )
             )
         except BrytonSyncError as exc:
-            append_log(f"✗ {exc}")
+            append_log(t("sync.log.error.detail", exc=localize_user_error(exc)))
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
-            append_log(f"✗ Unexpected error: {exc}")
+            append_log(t("sync.log.error.unexpected", exc=localize_user_error(exc)))
         finally:
             sync_runner.end_sync()
             if uploaded_count > 0:
@@ -274,14 +285,18 @@ def build_sync_view(
                 config_module.save(config)
             uploaded_count = result.uploaded
             append_log(
-                f"\nDone — uploaded {result.uploaded}, "
-                f"skipped {result.skipped}, no steps {result.no_steps}, "
-                f"failed {result.failed}."
+                "\n" + t(
+                    "sync.log.done.workout",
+                    uploaded=result.uploaded,
+                    skipped=result.skipped,
+                    no_steps=result.no_steps,
+                    failed=result.failed,
+                )
             )
         except SyncError as exc:
-            append_log(f"✗ {exc}")
+            append_log(t("sync.log.error.detail", exc=localize_user_error(exc)))
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
-            append_log(f"✗ Unexpected error: {exc}")
+            append_log(t("sync.log.error.unexpected", exc=localize_user_error(exc)))
         finally:
             if uploaded_count > 0:
                 _on_sync_complete(workouts=uploaded_count)
@@ -307,14 +322,18 @@ def build_sync_view(
                 config_module.save(config)
             uploaded_count = result.uploaded
             append_log(
-                f"\nDone — uploaded {result.uploaded}, "
-                f"skipped {result.skipped}, no steps {result.no_steps}, "
-                f"failed {result.failed}."
+                "\n" + t(
+                    "sync.log.done.workout",
+                    uploaded=result.uploaded,
+                    skipped=result.skipped,
+                    no_steps=result.no_steps,
+                    failed=result.failed,
+                )
             )
         except BrytonSyncError as exc:
-            append_log(f"✗ {exc}")
+            append_log(t("sync.log.error.detail", exc=localize_user_error(exc)))
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
-            append_log(f"✗ Unexpected error: {exc}")
+            append_log(t("sync.log.error.unexpected", exc=localize_user_error(exc)))
         finally:
             if uploaded_count > 0:
                 _on_sync_complete(workouts=uploaded_count)
@@ -325,11 +344,11 @@ def build_sync_view(
     async def on_sync_igp_click(_: ft.ControlEvent) -> None:
         igp_password = await store.get(secrets_module.IGP_PASSWORD)
         if not config.igp_user or not igp_password:
-            page.show_dialog(ft.SnackBar(ft.Text("Add your iGPSPORT credentials in Settings first.")))
+            page.show_dialog(ft.SnackBar(ft.Text(t("sync.snack.no_igp_creds"))))
             return
         if not sync_runner.try_begin_sync():
             page.show_dialog(
-                ft.SnackBar(ft.Text("A sync is already running. Try again in a moment."))
+                ft.SnackBar(ft.Text(t("sync.snack.sync_busy")))
             )
             return
         api_key = await store.get(secrets_module.INTERVALS_API_KEY)
@@ -351,11 +370,11 @@ def build_sync_view(
     async def on_sync_bryton_click(_: ft.ControlEvent) -> None:
         bryton_password = await store.get(secrets_module.BRYTON_PASSWORD)
         if not config.bryton_user or not bryton_password:
-            page.show_dialog(ft.SnackBar(ft.Text("Add your Bryton credentials in Settings first.")))
+            page.show_dialog(ft.SnackBar(ft.Text(t("sync.snack.no_bryton_creds"))))
             return
         if not sync_runner.try_begin_sync():
             page.show_dialog(
-                ft.SnackBar(ft.Text("A sync is already running. Try again in a moment."))
+                ft.SnackBar(ft.Text(t("sync.snack.sync_busy")))
             )
             return
         api_key = await store.get(secrets_module.INTERVALS_API_KEY)
@@ -377,12 +396,12 @@ def build_sync_view(
     async def on_upload_igp_workouts_click(_: ft.ControlEvent) -> None:
         igp_password = await store.get(secrets_module.IGP_PASSWORD)
         if not config.igp_user or not igp_password:
-            page.show_dialog(ft.SnackBar(ft.Text("Add your iGPSPORT credentials in Settings first.")))
+            page.show_dialog(ft.SnackBar(ft.Text(t("sync.snack.no_igp_creds"))))
             return
         api_key = await store.get(secrets_module.INTERVALS_API_KEY)
         if not api_key:
             page.show_dialog(
-                ft.SnackBar(ft.Text("Add your intervals.icu API key in Settings first."))
+                ft.SnackBar(ft.Text(t("sync.snack.no_api_key")))
             )
             return
 
@@ -395,12 +414,12 @@ def build_sync_view(
     async def on_upload_bryton_workouts_click(_: ft.ControlEvent) -> None:
         bryton_password = await store.get(secrets_module.BRYTON_PASSWORD)
         if not config.bryton_user or not bryton_password:
-            page.show_dialog(ft.SnackBar(ft.Text("Add your Bryton credentials in Settings first.")))
+            page.show_dialog(ft.SnackBar(ft.Text(t("sync.snack.no_bryton_creds"))))
             return
         api_key = await store.get(secrets_module.INTERVALS_API_KEY)
         if not api_key:
             page.show_dialog(
-                ft.SnackBar(ft.Text("Add your intervals.icu API key in Settings first."))
+                ft.SnackBar(ft.Text(t("sync.snack.no_api_key")))
             )
             return
 
@@ -422,12 +441,12 @@ def build_sync_view(
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     controls=[
-                        theme.section_label("Activity log", page),
+                        theme.section_label(t("sync.log.title"), page),
                         ft.Text(
-                            "live",
+                            t("sync.log.live"),
                             size=10,
                             color=colors["accent"],
-                            font_family=f"{theme.FONT_BODY}Medium",
+                            font_family=theme.body_font_medium(),
                         ),
                     ],
                 ),
@@ -453,12 +472,8 @@ def build_sync_view(
             ft.Column(
                 spacing=theme.SPACE_SM,
                 controls=[
-                    theme.display_text("Your rides, synced", size=26, color=colors["text"]),
-                    theme.muted_text(
-                        "Pull recent activities from iGPSPORT or Bryton into intervals.icu, "
-                        "or push planned workouts the other way.",
-                        page,
-                    ),
+                    theme.display_text(t("sync.page.title"), size=26, color=colors["text"]),
+                    theme.muted_text(t("sync.page.subtitle"), page),
                 ],
             ),
             action_area,
