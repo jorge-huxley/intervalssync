@@ -78,6 +78,14 @@ def test_map_hr_more_intervals_than_igpsport():
     assert zones[4]["end"] == MAX_HR
 
 
+def test_map_power_same_count_as_igpsport_with_open_zone():
+    """intervals.icu zone count (incl. open-zone sentinel) equals iGPSPORT slot
+    count exactly — the sentinel must be dropped, not treated as a real bound."""
+    intervals_pct = [55, 75, 90, 105, 120, 150, 999]
+    zones = map_power_zones(intervals_pct, 200, _template_zones(7))
+    assert [zone["end"] for zone in zones] == [110, 150, 180, 210, 240, 300, POWER_LAST_ZONE_END]
+
+
 def test_map_power_dedupes_equal_boundaries():
     zones = map_power_zones([55, 55, 75, 90, 105, 120], FTP, _template_zones(6))
     assert zones[0]["end"] == 133

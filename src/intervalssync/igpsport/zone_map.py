@@ -6,6 +6,10 @@ from typing import Any
 
 POWER_INTERIOR_CAP = 1999
 POWER_LAST_ZONE_END = 2500
+# intervals.icu's open-ended top power zone (e.g. "151%+") has no real upper
+# bound; its API reports this zone's upper bound as this sentinel percentage
+# rather than omitting it.
+OPEN_ZONE_SENTINEL_PCT = 999
 
 
 def power_upper_bounds_watts(power_zones_pct: list[float], ftp: float) -> list[int]:
@@ -107,6 +111,13 @@ def map_power_zones(
     if not igpsport_zones:
         return []
     intervals_ends = power_upper_bounds_watts(intervals_pct, ftp)
+    if (
+        intervals_pct
+        and intervals_pct[-1] >= OPEN_ZONE_SENTINEL_PCT
+        and len(intervals_ends) > 1
+    ):
+        # Drop the open-ended zone's sentinel bound; POWER_LAST_ZONE_END covers it.
+        intervals_ends = intervals_ends[:-1]
     slot_count = len(igpsport_zones)
     if slot_count == 1:
         slot_ends = [POWER_LAST_ZONE_END]
