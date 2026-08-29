@@ -12,6 +12,7 @@ import json
 import sys
 from pathlib import Path
 
+from .. import __version__
 from ..bryton.core import SyncConfig as BrytonSyncConfig
 from ..bryton.core import SyncResult as BrytonSyncResult
 from ..bryton.core import sync as bryton_sync
@@ -539,6 +540,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="intervalssync",
         description="Sync cycling activities to intervals.icu from iGPSPORT or Bryton Active.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
 
     subparsers = parser.add_subparsers(dest="command")

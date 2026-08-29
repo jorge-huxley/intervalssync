@@ -106,6 +106,14 @@ isn't on the Play Store, so the "unknown source" prompt is expected.
 
 Headless `intervalssync` CLI — sync from iGPSPORT or Bryton, upload workouts to iGPSPORT or Bryton, sync thresholds and zones to iGPSPORT, JSON on stdout. See [Agent / headless sync](docs/AGENT.md).
 
+With [uv](https://docs.astral.sh/uv/) installed, run the latest stable release
+directly from PyPI—no clone or manual upgrade required:
+
+```bash
+uvx --python 3.13 intervalssync@latest --version
+uvx --python 3.13 intervalssync@latest sync --json
+```
+
 ## Run from source
 
 Requires [uv](https://docs.astral.sh/uv/).

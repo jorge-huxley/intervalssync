@@ -106,17 +106,33 @@ git tag v0.1.0      # pick the next version number
 git push origin v0.1.0
 ```
 
-The workflow builds the Windows app **and the Android APK** on clean runners and
-attaches both (`intervalssync-v*-windows.zip` and an `.apk`) to a new GitHub
-Release. Watch it run under the repo's **Actions** tab; the result appears under
-**Releases**.
+The workflow builds the Windows app, macOS app, Android APK, and Python
+distributions on clean runners. It attaches the GUI artifacts to a new GitHub
+Release and publishes stable Python distributions to PyPI, which makes the new
+version available through `uvx intervalssync@latest`. Watch the workflow under
+the repository's **Actions** tab.
+
+PyPI publishing uses Trusted Publishing rather than an API-token secret. The
+repository owner must configure a PyPI publisher for this repository with:
+
+- owner: `jorge-huxley`
+- repository: `intervalssync`
+- workflow name: `release.yml` (PyPI wants only the filename, not the
+  `.github/workflows/` path)
+- environment: `pypi`
+- project: `intervalssync`
+
+Create the matching protected `pypi` environment in GitHub before the first
+stable package release. Existing PyPI versions are immutable, so retry a failed
+release with a new version after fixing the workflow.
 
 ### Pre-releases (test a build before shipping)
 
 Tag with a hyphen, e.g. `v0.3.0-rc1`, to publish a **pre-release**. It still
 builds installable artifacts you can test on a device, but GitHub keeps the last
 stable as **Latest** and the in-app update check ignores it — so users on the
-stable version aren't notified. Once it's good, tag the final `v0.3.0`.
+stable version aren't notified. Pre-releases are not published to PyPI. Once
+it's good, tag the final `v0.3.0`.
 
 ### Urgent hotfix while `master` has unreleased work
 

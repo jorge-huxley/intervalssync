@@ -23,6 +23,11 @@ dependencies = [
     "websocket-client>=1.8.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/jorge-huxley/intervalssync"
+Repository = "https://github.com/jorge-huxley/intervalssync"
+Issues = "https://github.com/jorge-huxley/intervalssync/issues"
+
 [project.scripts]
 intervalssync = "intervalssync.cli:main"
 

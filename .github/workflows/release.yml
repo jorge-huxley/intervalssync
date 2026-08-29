@@ -1,5 +1,5 @@
-# Builds the Windows app, macOS app, and Android APK, then publishes them as a
-# single GitHub Release.
+# Builds the Windows app, macOS app, Android APK, and Python package. GUI
+# artifacts go to one GitHub Release; stable Python packages also go to PyPI.
 #
 # It runs only when you push a version tag like "v0.1.0" — see how to do that
 # in the README's "Cutting a release" section. The build jobs upload their
@@ -22,6 +22,47 @@ env:
   FLET_CLI_NO_RICH_OUTPUT: "1" # plain, log-friendly output from `flet build`
 
 jobs:
+  python-package:
+    # Pre-releases remain GitHub-only. `uvx intervalssync@latest` therefore
+    # always resolves to a tested stable release from PyPI.
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Compute version from tag
+        run: echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Stamp package and runtime versions
+        run: |
+          uv version "$APP_VERSION" --frozen
+          echo "__version__ = \"$APP_VERSION\"" > src/intervalssync/_version.py
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Validate distributions
+        run: uvx --from twine twine check dist/*
+
+      - name: Smoke-test the wheel
+        run: |
+          wheel="dist/intervalssync-${APP_VERSION}-py3-none-any.whl"
+          uvx --python 3.13 --from "$wheel" intervalssync --version
+          uvx --python 3.13 --from "$wheel" intervalssync --help
+          mkdir -p "$RUNNER_TEMP/hermes"
+          {
+            echo "INTERVALSSYNC_IGPSPORT_USER=test@example.com"
+            echo "INTERVALSSYNC_IGPSPORT_PASSWORD=test-password"
+            echo "INTERVALSSYNC_INTERVALS_API_KEY=test-api-key"
+          } > "$RUNNER_TEMP/hermes/.env"
+          HERMES_HOME="$RUNNER_TEMP/hermes" uvx --python 3.13 --from "$wheel" intervalssync check --json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: dist/*
+
   windows:
     runs-on: windows-latest # ships with Visual Studio 2022 + C++
     steps:
@@ -148,6 +189,26 @@ jobs:
         with:
           name: macos
           path: "intervalssync-${{ github.ref_name }}-macos.zip"
+
+  pypi-publish:
+    if: ${{ !contains(github.ref_name, '-') }}
+    needs: python-package
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/intervalssync
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download Python distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package
+          path: dist
+
+      - name: Publish distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
 
   release:
     needs: [windows, android, macos]

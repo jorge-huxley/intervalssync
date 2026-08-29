@@ -8,8 +8,10 @@ Also uploads planned workouts from intervals.icu to **iGPSPORT** or **Bryton Act
 ## Prerequisites
 
 - [uv](https://docs.astral.sh/uv/) installed
-- This repository cloned locally
-- Dependencies installed: `uv sync`
+
+No repository clone or virtual environment is needed. `uvx` downloads the
+latest stable `intervalssync` release from PyPI into an isolated environment.
+The explicit `@latest` refreshes uv's cached package metadata on every run.
 
 ## User setup (human — not the agent)
 
@@ -48,20 +50,26 @@ For a named Hermes profile, use `$HERMES_HOME/.env` (that profile's directory).
 Verify:
 
 ```bash
-uv run intervalssync check                    # iGPSPORT keys
-uv run intervalssync check --source bryton      # Bryton keys
+uvx --python 3.13 intervalssync@latest check                   # iGPSPORT keys
+uvx --python 3.13 intervalssync@latest check --source bryton   # Bryton keys
 ```
 
 Optional: `--env-file /path/to/.env` on the **intervalssync** command (e.g.
-`uv run intervalssync sync-zones --env-file .env`), not as a `uv run` flag.
+`uvx --python 3.13 intervalssync@latest sync-zones --env-file .env`).
+
+Check which release the agent will run:
+
+```bash
+uvx --python 3.13 intervalssync@latest --version
+```
 
 ## Agent invocation
 
 ### Activity sync
 
 ```bash
-uv run intervalssync sync --json                        # iGPSPORT
-uv run intervalssync sync --source bryton --json        # Bryton Active
+uvx --python 3.13 intervalssync@latest sync --json                   # iGPSPORT
+uvx --python 3.13 intervalssync@latest sync --source bryton --json   # Bryton Active
 ```
 
 - **Progress** on **stderr**; **result** JSON on **stdout**.
@@ -87,8 +95,8 @@ Bryton success uses `"source": "bryton"` and `activity_id` instead of `ride_id`.
 ### Workout upload (intervals.icu → iGPSPORT or Bryton)
 
 ```bash
-uv run intervalssync upload-workouts --json                        # iGPSPORT
-uv run intervalssync upload-workouts --source bryton --json        # Bryton Active
+uvx --python 3.13 intervalssync@latest upload-workouts --json                   # iGPSPORT
+uvx --python 3.13 intervalssync@latest upload-workouts --source bryton --json   # Bryton Active
 ```
 
 Requires credentials for the chosen target. Same exit-code rules.
@@ -96,7 +104,7 @@ Requires credentials for the chosen target. Same exit-code rules.
 ### Zone sync (intervals.icu → iGPSPORT profile)
 
 ```bash
-uv run intervalssync sync-zones --env-file .env --json
+uvx --python 3.13 intervalssync@latest sync-zones --env-file .env --json
 ```
 
 - **iGPSPORT-only** (no `--source` flag)
@@ -154,6 +162,10 @@ Success example:
 | `intervalssync upload-workouts` | Planned workouts → iGPSPORT or Bryton (`--source`) |
 | `intervalssync sync-zones` | Push thresholds + zones from intervals.icu → iGPSPORT profile |
 | `intervalssync check` | Validate `.env` keys (no network) |
+
+`@latest` means the newest stable release published to PyPI, not the newest
+commit on `master`. Maintainers must cut a new stable tag before agents receive
+a merged fix.
 
 ## CLI config
 

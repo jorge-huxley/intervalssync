@@ -16,6 +16,14 @@ from intervalssync.bryton.exceptions import BrytonSyncError
 from intervalssync.igpsport import core, workout
 
 
+def test_version_flag_reports_runtime_version(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--version"])
+
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out == f"intervalssync {cli.__version__}\n"
+
+
 def _write_env(path: Path, **overrides: str) -> None:
     values = {
         cli_env.IGPSPORT_USER_KEY: "user@example.com",
