@@ -22,12 +22,23 @@ def test_defaults():
     assert cfg.uploaded_workouts == {}
     assert cfg.uploaded_bryton_workouts == {}
     assert cfg.workout_days_ahead == 1
+    assert cfg.auto_sync_enabled is False
+    assert cfg.auto_sync_interval_minutes == 60
     assert cfg.lifetime_activities_uploaded == 0
     assert cfg.lifetime_workouts_uploaded == 0
     assert cfg.celebrated_milestones == []
     assert cfg.stats_seeded is False
     assert config_module.total_uploads(cfg) == 0
     assert config_module.any_source_enabled(cfg) is True
+
+
+def test_clamp_auto_sync_interval():
+    assert config_module.clamp_auto_sync_interval(60) == 60
+    assert config_module.clamp_auto_sync_interval(15) == 15
+    assert config_module.clamp_auto_sync_interval(20) == 15
+    assert config_module.clamp_auto_sync_interval(90) == 60
+    assert config_module.clamp_auto_sync_interval(200) == 120
+    assert config_module.clamp_auto_sync_interval("nope") == 60  # type: ignore[arg-type]
 
 
 def test_save_and_load_roundtrip(tmp_path, monkeypatch):
@@ -170,3 +181,33 @@ def test_save_and_load_igp_region(tmp_path, monkeypatch):
     loaded = config_module.load()
     assert loaded.igp_region == "china"
     assert loaded.igp_user == "13800000000"
+
+
+def test_save_and_load_auto_sync(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    monkeypatch.setattr(config_module, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config_module, "CONFIG_PATH", path)
+
+    cfg = config_module.AppConfig(
+        auto_sync_enabled=True,
+        auto_sync_interval_minutes=30,
+    )
+    config_module.save(cfg)
+
+    loaded = config_module.load()
+    assert loaded.auto_sync_enabled is True
+    assert loaded.auto_sync_interval_minutes == 30
+
+
+def test_load_clamps_auto_sync_interval(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    path.write_text(
+        '{"auto_sync_enabled": true, "auto_sync_interval_minutes": 17}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_module, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config_module, "CONFIG_PATH", path)
+
+    loaded = config_module.load()
+    assert loaded.auto_sync_enabled is True
+    assert loaded.auto_sync_interval_minutes == 15

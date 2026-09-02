@@ -47,6 +47,8 @@ src/intervalssync/
 - **`gui/secrets.py`** — async OS vault via `flet-secure-storage`.
 - **`gui/config.py`** — GUI JSON settings: `enable_igpsport` / `enable_bryton`, per-source usernames, shared sync options.
 - **`gui/sync_view.py`** — dispatches to `igpsport.core.sync` or `bryton.core.sync` per enabled source; workout upload is iGPSPORT-only.
+- **`gui/sync_runner.py`** — shared activity sync + overlap lock for manual Sync and auto-sync.
+- **`gui/auto_sync.py`** — optional periodic sync loop; Android FGS + OS notifications when rides upload.
 - **`cli/env.py`** — `.env` credential loading for the headless CLI.
 
 ## iGPSPORT API notes

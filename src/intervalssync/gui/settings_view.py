@@ -39,6 +39,7 @@ async def build_settings_view(
     perms: PermissionHandler | None = None,
     apply_download_location: Callable[[], Awaitable[None]] | None = None,
     on_profile_sync_check: Callable[[], Awaitable[None]] | None = None,
+    on_auto_sync_changed: Callable[[], Awaitable[None]] | None = None,
 ) -> ft.Control:
     colors = theme.palette(page)
 
@@ -52,9 +53,18 @@ async def build_settings_view(
 
     def _input_field(**kwargs: object) -> ft.TextField:
         kwargs.setdefault("border_radius", theme.RADIUS_SM)
+        # Material TextField helpers default to one line and ellipsize on narrow screens.
+        kwargs.setdefault("helper_max_lines", 4)
+        # Fill the settings column width so attached helpers are not clipped early.
+        kwargs.setdefault("width", float("inf"))
         if is_mobile:
             kwargs.setdefault("text_size", 14)
         return ft.TextField(**kwargs)
+
+    def _dropdown(**kwargs: object) -> ft.Dropdown:
+        kwargs.setdefault("border_radius", theme.RADIUS_SM)
+        kwargs.setdefault("width", float("inf"))
+        return ft.Dropdown(**kwargs)
 
     enable_igpsport = ft.Switch(
         label="Enable iGPSPORT",
@@ -64,7 +74,7 @@ async def build_settings_view(
     igp_region_value = (
         config.igp_region if config.igp_region in ("international", "china") else "international"
     )
-    igp_region = ft.Dropdown(
+    igp_region = _dropdown(
         label="iGPSPORT region",
         value=igp_region_value,
         options=[
@@ -137,10 +147,9 @@ async def build_settings_view(
         ),
     )
 
-    activity_type = ft.Dropdown(
+    activity_type = _dropdown(
         label="Activity type on intervals.icu",
         value=config.activity_type,
-        border_radius=theme.RADIUS_SM,
         options=[
             ft.dropdown.Option(key="", text="Don't change (leave as uploaded)"),
             *(
@@ -160,6 +169,58 @@ async def build_settings_view(
         label="Force re-sync (re-download even if already uploaded)",
         value=config.force_resync,
         active_color=colors["accent"],
+    )
+
+    is_android = page.platform in (
+        ft.PagePlatform.ANDROID,
+        ft.PagePlatform.ANDROID_TV,
+    )
+    # TextField (not Dropdown) so helper_max_lines can wrap like other settings helpers.
+    selected_auto_sync_minutes = config_module.clamp_auto_sync_interval(
+        config.auto_sync_interval_minutes
+    )
+
+    def _auto_sync_interval_label(minutes: int) -> str:
+        return f"Every {minutes} minutes"
+
+    auto_sync_enabled = ft.Switch(
+        label="Auto-sync in background",
+        value=config.auto_sync_enabled,
+        active_color=colors["accent"],
+    )
+    auto_sync_interval = _input_field(
+        label="Auto-sync interval",
+        value=_auto_sync_interval_label(selected_auto_sync_minutes),
+        read_only=True,
+        helper=(
+            "Shorter intervals use more battery. On Android a persistent "
+            "notification keeps sync running while enabled; force-stopping "
+            "the app still stops auto-sync. On desktop, sync only runs while "
+            "the app is open."
+            if is_android
+            else (
+                "Shorter intervals use more battery. Auto-sync runs only while "
+                "the app is open (use the CLI + Task Scheduler for unattended PC sync)."
+            )
+        ),
+    )
+
+    def _select_auto_sync_interval(minutes: int) -> None:
+        nonlocal selected_auto_sync_minutes
+        selected_auto_sync_minutes = minutes
+        auto_sync_interval.value = _auto_sync_interval_label(minutes)
+        page.update()
+
+    auto_sync_interval.suffix = ft.PopupMenuButton(
+        icon=ft.Icons.ARROW_DROP_DOWN,
+        tooltip="Choose interval",
+        items=[
+            ft.PopupMenuItem(
+                content=ft.Text(_auto_sync_interval_label(minutes)),
+                on_click=lambda _e, m=minutes: _select_auto_sync_interval(m),
+            )
+            for minutes in config_module.AUTO_SYNC_INTERVALS
+        ],
     )
 
     upload_dropbox = ft.Switch(
@@ -515,10 +576,12 @@ async def build_settings_view(
 
     igp_credentials = ft.Column(
         spacing=theme.SPACE_SM,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         controls=[igp_region, igp_user, igp_password],
     )
     bryton_credentials = ft.Column(
         spacing=theme.SPACE_SM,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         controls=[bryton_user, bryton_password],
     )
     workout_sync_section = ft.Container(
@@ -616,7 +679,32 @@ async def build_settings_view(
         config.dropbox_date_filenames = bool(dropbox_date_filenames_switch.value)
         config.upload_dropbox = bool(upload_dropbox.value)
 
+        want_auto_sync = bool(auto_sync_enabled.value)
+        config.auto_sync_interval_minutes = config_module.clamp_auto_sync_interval(
+            selected_auto_sync_minutes
+        )
+        auto_sync_interval.value = _auto_sync_interval_label(
+            config.auto_sync_interval_minutes
+        )
+
         message = "Saved securely to your system credential store."
+        if want_auto_sync and is_android and perms is not None:
+            notify_status = await perms.request(Permission.NOTIFICATION)
+            battery_status = await perms.request(Permission.IGNORE_BATTERY_OPTIMIZATIONS)
+            if notify_status != PermissionStatus.GRANTED:
+                want_auto_sync = False
+                auto_sync_enabled.value = False
+                message = (
+                    "Saved, but auto-sync stayed off — notification permission "
+                    "is required on Android."
+                )
+            elif battery_status != PermissionStatus.GRANTED:
+                message = (
+                    "Saved with auto-sync on. For best results, allow unrestricted "
+                    "battery use for Intervals Sync in system settings."
+                )
+        config.auto_sync_enabled = want_auto_sync
+
         if config.upload_dropbox and not dropbox_app_key:
             config.upload_dropbox = False
             upload_dropbox.value = False
@@ -655,6 +743,8 @@ async def build_settings_view(
 
         page.show_dialog(ft.SnackBar(ft.Text(message)))
         await on_saved()
+        if on_auto_sync_changed is not None:
+            await on_auto_sync_changed()
         if on_profile_sync_check is not None and config.enable_igpsport:
             await on_profile_sync_check()
 
@@ -676,6 +766,7 @@ async def build_settings_view(
 
     return ft.Column(
         spacing=theme.SPACE_LG,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         controls=[
             ft.Column(
                 spacing=theme.SPACE_SM,
@@ -705,6 +796,8 @@ async def build_settings_view(
                 activity_type,
                 delete_after_upload,
                 force_resync,
+                auto_sync_enabled,
+                auto_sync_interval,
                 workout_sync_section,
             ),
             profile_sync_section,

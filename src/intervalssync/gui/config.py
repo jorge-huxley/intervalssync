@@ -18,9 +18,23 @@ APP_NAME = "intervalssync"
 CONFIG_DIR = Path(user_config_dir(APP_NAME, appauthor=False))
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
+# Allowed auto-sync poll intervals (minutes). Shorter = more battery use.
+AUTO_SYNC_INTERVALS: tuple[int, ...] = (15, 30, 60, 120)
+
 
 def _default_download_dir() -> str:
     return str(Path(user_downloads_dir()) / "intervalssync-fit")
+
+
+def clamp_auto_sync_interval(minutes: int) -> int:
+    """Snap to the nearest allowed auto-sync interval."""
+    try:
+        value = int(minutes)
+    except (TypeError, ValueError):
+        return 60
+    if value in AUTO_SYNC_INTERVALS:
+        return value
+    return min(AUTO_SYNC_INTERVALS, key=lambda allowed: abs(allowed - value))
 
 
 @dataclass
@@ -61,6 +75,9 @@ class AppConfig:
     profile_sync_declined_fingerprint: str = ""
     # Prompt on launch when FTP, LTHR, max HR, or weight differ from intervals.icu.
     profile_sync_check_on_launch: bool = True
+    # Periodic activity sync while the app (or Android FGS) stays alive.
+    auto_sync_enabled: bool = False
+    auto_sync_interval_minutes: int = 60
     # Lifetime sync stats (GUI gamification).
     lifetime_activities_uploaded: int = 0
     lifetime_workouts_uploaded: int = 0
@@ -88,6 +105,9 @@ def load() -> AppConfig:
     if activity_source == "bryton":
         cfg.enable_bryton = True
         cfg.enable_igpsport = False
+    cfg.auto_sync_interval_minutes = clamp_auto_sync_interval(
+        cfg.auto_sync_interval_minutes
+    )
     if not cfg.stats_seeded:
         cfg.lifetime_workouts_uploaded = len(cfg.uploaded_workouts) + len(
             cfg.uploaded_bryton_workouts

@@ -204,12 +204,15 @@ def settings_section(
             ft.Text(subtitle, size=13, color=colors["text_muted"])
         )
     header.append(ft.Container(height=SPACE_SM))
+    # Tighter side padding on phones so fields/helpers get more horizontal room.
+    side = SPACE_MD if is_mobile(page) else SPACE_LG
     return ft.Container(
         content=ft.Column(
             spacing=SPACE_MD,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
             controls=[*header, *controls],
         ),
-        padding=ft.Padding(SPACE_LG, SPACE_LG, SPACE_LG, SPACE_LG),
+        padding=ft.Padding(side, SPACE_LG, side, SPACE_LG),
         bgcolor=colors["surface"],
         border=ft.Border.all(1, colors["border"]),
         border_radius=RADIUS_MD,

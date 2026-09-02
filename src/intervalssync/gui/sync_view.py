@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import flet as ft
 
 from . import config as config_module
 from . import secrets as secrets_module
-from ..bryton.core import SyncConfig as BrytonSyncConfig, sync as bryton_sync
+from ..bryton.core import sync as bryton_sync
 from ..bryton.exceptions import BrytonSyncError
 from ..bryton.workout import (
     BrytonWorkoutUploadConfig,
     apply_uploaded_bryton_workout_map,
     upload_workouts as bryton_upload_workouts,
 )
-from ..igpsport.core import SyncConfig as IgpSyncConfig, SyncError, sync as igpsport_sync
+from ..igpsport.core import SyncError, sync as igpsport_sync
 from ..dropbox_client import get_dropbox_app_key
 from ..igpsport.workout import WorkoutUploadConfig, apply_uploaded_workout_map, upload_workouts
 from . import support_gamification
+from . import sync_runner
 from . import theme
 
 
@@ -186,30 +185,18 @@ def build_sync_view(
         dropbox_refresh_token: str | None,
         dropbox_app_key: str | None,
     ) -> None:
-        sync_config = IgpSyncConfig(
-            igp_user=config.igp_user,
-            igp_password=igp_password,
-            igp_region=config.igp_region,
-            intervals_api_key=api_key,
-            dropbox_refresh_token=dropbox_refresh_token,
-            dropbox_app_key=dropbox_app_key,
-            max_activities=config.max_activities,
-            download_dir=config.download_dir,
-            delete_after_upload=config.delete_after_upload,
-            force_resync=config.force_resync,
-            activity_type=config.activity_type,
-            list_activities=config.step_list_activities,
-            get_download_url=config.step_get_download_url,
-            download_fit=config.step_download_fit,
-            upload_intervals=config.step_upload_intervals,
-            upload_dropbox=config.upload_dropbox,
-            dropbox_folder=config.dropbox_folder,
-            dropbox_date_filenames=config.dropbox_date_filenames,
-        )
-
         uploaded_count = 0
         try:
-            result = igpsport_sync(sync_config, progress=append_log)
+            result = igpsport_sync(
+                sync_runner.igp_sync_config(
+                    config,
+                    igp_password=igp_password,
+                    api_key=api_key,
+                    dropbox_refresh_token=dropbox_refresh_token,
+                    dropbox_app_key=dropbox_app_key,
+                ),
+                progress=append_log,
+            )
             uploaded_count = result.uploaded
             append_log(
                 f"\nDone — intervals uploaded {result.uploaded}, "
@@ -223,6 +210,7 @@ def build_sync_view(
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
             append_log(f"✗ Unexpected error: {exc}")
         finally:
+            sync_runner.end_sync()
             if uploaded_count > 0:
                 _on_sync_complete(activities=uploaded_count)
             progress.visible = False
@@ -235,28 +223,18 @@ def build_sync_view(
         dropbox_refresh_token: str | None,
         dropbox_app_key: str | None,
     ) -> None:
-        sync_config = BrytonSyncConfig(
-            bryton_email=config.bryton_user,
-            bryton_password=bryton_password,
-            intervals_api_key=api_key,
-            dropbox_refresh_token=dropbox_refresh_token,
-            dropbox_app_key=dropbox_app_key,
-            max_activities=config.max_activities,
-            download_dir=Path(config.download_dir),
-            delete_after_upload=config.delete_after_upload,
-            force_resync=config.force_resync,
-            activity_type=config.activity_type,
-            list_activities=config.step_list_activities,
-            download_fit=config.step_download_fit,
-            upload_intervals=config.step_upload_intervals,
-            upload_dropbox=config.upload_dropbox,
-            dropbox_folder=config.dropbox_folder,
-            dropbox_date_filenames=config.dropbox_date_filenames,
-        )
-
         uploaded_count = 0
         try:
-            result = bryton_sync(sync_config, progress=append_log)
+            result = bryton_sync(
+                sync_runner.bryton_sync_config(
+                    config,
+                    bryton_password=bryton_password,
+                    api_key=api_key,
+                    dropbox_refresh_token=dropbox_refresh_token,
+                    dropbox_app_key=dropbox_app_key,
+                ),
+                progress=append_log,
+            )
             uploaded_count = result.uploaded
             append_log(
                 f"\nDone — intervals uploaded {result.uploaded}, "
@@ -270,6 +248,7 @@ def build_sync_view(
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
             append_log(f"✗ Unexpected error: {exc}")
         finally:
+            sync_runner.end_sync()
             if uploaded_count > 0:
                 _on_sync_complete(activities=uploaded_count)
             progress.visible = False
@@ -348,6 +327,11 @@ def build_sync_view(
         if not config.igp_user or not igp_password:
             page.show_dialog(ft.SnackBar(ft.Text("Add your iGPSPORT credentials in Settings first.")))
             return
+        if not sync_runner.try_begin_sync():
+            page.show_dialog(
+                ft.SnackBar(ft.Text("A sync is already running. Try again in a moment."))
+            )
+            return
         api_key = await store.get(secrets_module.INTERVALS_API_KEY)
         dropbox_refresh_token = await store.get(secrets_module.DROPBOX_REFRESH_TOKEN)
         dropbox_app_key = get_dropbox_app_key()
@@ -368,6 +352,11 @@ def build_sync_view(
         bryton_password = await store.get(secrets_module.BRYTON_PASSWORD)
         if not config.bryton_user or not bryton_password:
             page.show_dialog(ft.SnackBar(ft.Text("Add your Bryton credentials in Settings first.")))
+            return
+        if not sync_runner.try_begin_sync():
+            page.show_dialog(
+                ft.SnackBar(ft.Text("A sync is already running. Try again in a moment."))
+            )
             return
         api_key = await store.get(secrets_module.INTERVALS_API_KEY)
         dropbox_refresh_token = await store.get(secrets_module.DROPBOX_REFRESH_TOKEN)
