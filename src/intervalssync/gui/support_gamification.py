@@ -1,4 +1,4 @@
-"""Lifetime sync stats, milestone celebrations, and Ko-fi support UI."""
+"""Lifetime sync stats, milestone celebrations, and support / partner UI."""
 
 from __future__ import annotations
 
@@ -10,37 +10,34 @@ from dataclasses import dataclass
 
 import flet as ft
 
+from ..i18n import is_chinese, t
 from . import config as config_module
 from . import theme
 
 KOFI_URL = "https://ko-fi.com/jorge_huxley"
+PARTNER_LOGO = "endurance_logo.png"
 
 MILESTONES = [5, 25, 50, 100, 250, 500, 1000]
 
-_MILESTONE_TITLES: dict[int, str] = {
-    5: "Domestique status!",
-    25: "Quarter century!",
-    50: "Half century!",
-    100: "Century!",
-    250: "Grand tour stage!",
-    500: "Monument ride!",
-    1000: "Legend status!",
+_MILESTONE_TITLE_KEYS: dict[int, str] = {
+    5: "milestone.title.5",
+    25: "milestone.title.25",
+    50: "milestone.title.50",
+    100: "milestone.title.100",
+    250: "milestone.title.250",
+    500: "milestone.title.500",
+    1000: "milestone.title.1000",
 }
 
-_MILESTONE_MESSAGES: dict[int, str] = {
-    5: "Five activities synced on autopilot. Your training log just got a lot easier.",
-    25: "Twenty-five rides across, hands-free. You're in a proper rhythm now.",
-    50: "Fifty transfers done — that's a serious stack of saved clicks.",
-    100: "One hundred activities on autopilot. Every ride, right where it belongs.",
-    250: "250 syncs deep. Your data flows like a freshly-oiled drivetrain.",
-    500: "Five hundred transfers. That's real dedication — and a lot of saved time.",
-    1000: "One thousand syncs. You've officially reached legend status.",
+_MILESTONE_MSG_KEYS: dict[int, str] = {
+    5: "milestone.msg.5",
+    25: "milestone.msg.25",
+    50: "milestone.msg.50",
+    100: "milestone.msg.100",
+    250: "milestone.msg.250",
+    500: "milestone.msg.500",
+    1000: "milestone.msg.1000",
 }
-
-_KOFI_LINE = (
-    "Intervals Sync is free and built in spare time. "
-    "A small Ko-fi keeps it rolling."
-)
 
 _CONFETTI_COLORS = (
     theme.ACCENT,
@@ -71,20 +68,20 @@ def total_uploads(config: config_module.AppConfig) -> int:
 
 def rank_for(total: int) -> str:
     if total <= 0:
-        return "Rookie"
+        return t("rank.rookie")
     if total < 5:
-        return "Warm-up lap"
+        return t("rank.warmup")
     if total < 10:
-        return "Domestique"
+        return t("rank.domestique")
     if total < 25:
-        return "Breakaway"
+        return t("rank.breakaway")
     if total < 50:
-        return "Climber"
+        return t("rank.climber")
     if total < 100:
-        return "Sprinter"
+        return t("rank.sprinter")
     if total < 250:
-        return "Century rider"
-    return "Grand tourer"
+        return t("rank.century")
+    return t("rank.grand_tourer")
 
 
 def next_milestone(total: int) -> int | None:
@@ -116,15 +113,17 @@ def progress_fraction(total: int) -> float:
 
 
 def milestone_title(milestone: int) -> str:
-    return _MILESTONE_TITLES.get(milestone, f"{milestone} transfers!")
+    key = _MILESTONE_TITLE_KEYS.get(milestone)
+    if key is None:
+        return t("milestone.title.fallback", n=milestone)
+    return t(key)
 
 
 def milestone_message(milestone: int) -> str:
-    return _MILESTONE_MESSAGES.get(
-        milestone,
-        f"{milestone} activities synced on autopilot. Nice work keeping your "
-        "training data flowing.",
-    )
+    key = _MILESTONE_MSG_KEYS.get(milestone)
+    if key is None:
+        return t("milestone.msg.fallback", n=milestone)
+    return t(key)
 
 
 def _newly_crossed_milestone(old_total: int, new_total: int) -> int | None:
@@ -162,25 +161,31 @@ def record_uploads(
 def _breakdown_text(config: config_module.AppConfig) -> str:
     activities = config.lifetime_activities_uploaded
     workouts = config.lifetime_workouts_uploaded
-    activity_word = "activity" if activities == 1 else "activities"
-    workout_word = "workout" if workouts == 1 else "workouts"
-    return f"{activities} {activity_word} · {workouts} {workout_word}"
+    activity_word = t("stats.activity.one" if activities == 1 else "stats.activity.many")
+    workout_word = t("stats.workout.one" if workouts == 1 else "stats.workout.many")
+    return t(
+        "stats.breakdown",
+        activities=activities,
+        activity_word=activity_word,
+        workouts=workouts,
+        workout_word=workout_word,
+    )
 
 
 def _target_text(total: int) -> str:
     nxt = next_milestone(total)
     if nxt is None:
-        return "Every milestone cleared"
-    return f"Next milestone · {nxt}"
+        return t("stats.target.all_done")
+    return t("stats.target.next", n=nxt)
 
 
 def _remaining_text(total: int) -> str:
     nxt = next_milestone(total)
     if nxt is None:
-        return "Legend"
+        return t("stats.remaining.legend")
     remaining = nxt - total
-    word = "sync" if remaining == 1 else "syncs"
-    return f"{remaining} {word} to go"
+    word = t("stats.sync.one" if remaining == 1 else "stats.sync.many")
+    return t("stats.remaining", n=remaining, word=word)
 
 
 def update_stats_display(
@@ -219,10 +224,10 @@ def build_stats_card(
         size=46,
         color=colors["accent"],
         weight=ft.FontWeight.BOLD,
-        font_family=theme.FONT_DISPLAY,
+        font_family=theme.display_font(),
     )
     eyebrow = ft.Text(
-        "LIFETIME SYNCS",
+        t("stats.eyebrow"),
         size=10,
         weight=ft.FontWeight.W_700,
         color=colors["text_muted"],
@@ -268,7 +273,7 @@ def build_stats_card(
         size=11,
         weight=ft.FontWeight.W_600,
         color=colors["text_muted"],
-        font_family=f"{theme.FONT_BODY}Medium",
+        font_family=theme.body_font_medium(),
     )
     remaining = ft.Text(
         _remaining_text(total),
@@ -293,20 +298,35 @@ def build_stats_card(
         controls=[progress_header, progress_bar],
     )
 
+    async def on_partner_click(_: ft.ControlEvent) -> None:
+        await show_partner_dialog(page)
+
+    if is_chinese():
+        support_btn: ft.Control = ft.TextButton(
+            t("stats.kofi_button"),
+            on_click=on_partner_click,
+            style=ft.ButtonStyle(
+                color=colors["text_muted"],
+                padding=ft.Padding(0, 0, 0, 0),
+            ),
+        )
+    else:
+        support_btn = ft.TextButton(
+            t("stats.kofi_button"),
+            url=KOFI_URL,
+            style=ft.ButtonStyle(
+                color=colors["text_muted"],
+                padding=ft.Padding(0, 0, 0, 0),
+            ),
+        )
+
     return ft.Container(
         content=ft.Column(
             spacing=theme.SPACE_MD,
             controls=[
                 top_row,
                 progress,
-                ft.TextButton(
-                    "Saved you time? Buy me a coffee",
-                    url=KOFI_URL,
-                    style=ft.ButtonStyle(
-                        color=colors["text_muted"],
-                        padding=ft.Padding(0, 0, 0, 0),
-                    ),
-                ),
+                support_btn,
             ],
         ),
         padding=theme.SPACE_LG,
@@ -317,37 +337,104 @@ def build_stats_card(
 
 
 async def show_kofi_dialog(page: ft.Page) -> None:
+    """English Ko-fi support dialog (unchanged behavior)."""
     colors = theme.palette(page)
 
     page.show_dialog(
         ft.AlertDialog(
             modal=True,
             shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_MD),
-            title=theme.display_text("Support development", size=22),
+            title=theme.display_text(t("kofi.dialog.title"), size=22),
             content=ft.Text(
-                "If Intervals Sync saves you time, consider supporting development on Ko-fi. "
-                "Tips help fund bug fixes, releases, and new features.",
+                t("kofi.dialog.body"),
                 size=13,
                 color=colors["text_muted"],
             ),
             actions=[
-                ft.TextButton("Not now", on_click=lambda _: page.pop_dialog()),
-                ft.TextButton("Support on Ko-fi", url=KOFI_URL),
+                ft.TextButton(t("kofi.dialog.not_now"), on_click=lambda _: page.pop_dialog()),
+                ft.TextButton(t("kofi.dialog.support"), url=KOFI_URL),
             ],
         )
     )
     page.update()
 
 
+async def show_partner_dialog(page: ft.Page) -> None:
+    """Chinese Endurance Cycling partner intro (no external link)."""
+    colors = theme.palette(page)
+
+    # Two layers: app surface color under a transparent-bg logo (no white plate).
+    logo = ft.Container(
+        content=ft.Image(
+            src=PARTNER_LOGO,
+            width=220,
+            fit=ft.BoxFit.CONTAIN,
+        ),
+        bgcolor=colors["surface"],
+        padding=ft.Padding(theme.SPACE_MD, theme.SPACE_SM, theme.SPACE_MD, theme.SPACE_SM),
+        border_radius=theme.RADIUS_SM,
+        alignment=ft.Alignment.CENTER,
+    )
+
+    page.show_dialog(
+        ft.AlertDialog(
+            modal=True,
+            bgcolor=colors["surface"],
+            shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_MD),
+            content=ft.Container(
+                bgcolor=colors["surface"],
+                content=ft.Column(
+                    tight=True,
+                    spacing=theme.SPACE_MD,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        logo,
+                        theme.display_text(t("kofi.dialog.title"), size=22),
+                        ft.Text(
+                            t("partner.slogan"),
+                            size=14,
+                            weight=ft.FontWeight.W_600,
+                            color=colors["text"],
+                            text_align=ft.TextAlign.CENTER,
+                            font_family=theme.body_font_medium(),
+                        ),
+                        ft.Text(
+                            t("kofi.dialog.body"),
+                            size=13,
+                            color=colors["text_muted"],
+                            text_align=ft.TextAlign.CENTER,
+                            font_family=theme.body_font(),
+                        ),
+                    ],
+                ),
+            ),
+            actions=[
+                ft.FilledButton(
+                    t("kofi.dialog.support"),
+                    on_click=lambda _: page.pop_dialog(),
+                ),
+            ],
+        )
+    )
+    page.update()
+
+
+async def show_support_dialog(page: ft.Page) -> None:
+    if is_chinese():
+        await show_partner_dialog(page)
+    else:
+        await show_kofi_dialog(page)
+
+
 def kofi_header_button(page: ft.Page) -> ft.IconButton:
     colors = theme.palette(page)
 
     async def on_click(_: ft.ControlEvent) -> None:
-        await show_kofi_dialog(page)
+        await show_support_dialog(page)
 
     return ft.IconButton(
-        icon=ft.Icons.LOCAL_CAFE_OUTLINED,
-        tooltip="Support on Ko-fi",
+        icon=ft.Icons.DIRECTIONS_BIKE if is_chinese() else ft.Icons.LOCAL_CAFE_OUTLINED,
+        tooltip=t("kofi.tooltip"),
         icon_color=colors["text_muted"],
         on_click=on_click,
     )
@@ -447,7 +534,7 @@ async def show_milestone_dialog(page: ft.Page, milestone: int) -> None:
         controls=[
             big_number,
             ft.Text(
-                "SYNCS COMPLETED",
+                t("celebration.syncs_completed"),
                 size=11,
                 weight=ft.FontWeight.W_600,
                 color=colors["text_muted"],
@@ -464,7 +551,7 @@ async def show_milestone_dialog(page: ft.Page, milestone: int) -> None:
             ),
             ft.Container(height=theme.SPACE_MD),
             ft.Text(
-                _KOFI_LINE,
+                t("celebration.kofi_line"),
                 size=12,
                 color=colors["text_muted"],
                 text_align=ft.TextAlign.CENTER,
@@ -489,15 +576,27 @@ async def show_milestone_dialog(page: ft.Page, milestone: int) -> None:
         ),
     )
 
+    async def on_partner_from_milestone(_: ft.ControlEvent) -> None:
+        page.pop_dialog()
+        await show_partner_dialog(page)
+
+    if is_chinese():
+        primary_action: ft.Control = ft.TextButton(
+            t("celebration.buy_coffee"),
+            on_click=on_partner_from_milestone,
+        )
+    else:
+        primary_action = ft.TextButton(t("celebration.buy_coffee"), url=KOFI_URL)
+
     page.show_dialog(
         ft.AlertDialog(
             modal=True,
             shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_MD),
             content=content,
             actions=[
-                ft.TextButton("Buy me a coffee", url=KOFI_URL),
+                primary_action,
                 ft.FilledButton(
-                    "Keep rolling",
+                    t("celebration.keep_rolling"),
                     on_click=lambda _: page.pop_dialog(),
                 ),
             ],

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import flet as ft
 
+from ..i18n import is_chinese
+
 # Palette — asphalt neutrals + signal-orange accent (bike-computer LED, not Material indigo).
 ACCENT = "#D94E1F"
 ACCENT_LIGHT = "#FF7A45"
@@ -24,8 +26,15 @@ BORDER_DARK = "#2A3039"
 TEXT_DARK = "#F2F4F7"
 TEXT_MUTED_DARK = "#8B95A3"
 
-FONT_BODY = "DMSans"
-FONT_DISPLAY = "Outfit"
+# English (OFL): DM Sans / Outfit. Chinese (OFL): Noto Sans SC bundled under assets/fonts.
+FONT_BODY_EN = "DMSans"
+FONT_DISPLAY_EN = "Outfit"
+FONT_BODY_ZH = "NotoSansSC"
+FONT_DISPLAY_ZH = "NotoSansSCBold"
+
+# Back-compat aliases used by existing call sites; prefer body_font() / display_font().
+FONT_BODY = FONT_BODY_EN
+FONT_DISPLAY = FONT_DISPLAY_EN
 
 RADIUS_SM = 10
 RADIUS_MD = 14
@@ -72,20 +81,36 @@ def palette(page: ft.Page) -> dict[str, str]:
     }
 
 
+def body_font() -> str:
+    return FONT_BODY_ZH if is_chinese() else FONT_BODY_EN
+
+
+def body_font_medium() -> str:
+    return f"{FONT_BODY_ZH}Medium" if is_chinese() else f"{FONT_BODY_EN}Medium"
+
+
+def display_font() -> str:
+    return FONT_DISPLAY_ZH if is_chinese() else FONT_DISPLAY_EN
+
+
 def apply_page_theme(page: ft.Page) -> None:
     page.fonts = {
-        FONT_BODY: (
+        FONT_BODY_EN: (
             "https://github.com/googlefonts/dm-fonts/raw/main/Sans/fonts/ttf/"
             "DMSans-Regular.ttf"
         ),
-        f"{FONT_BODY}Medium": (
+        f"{FONT_BODY_EN}Medium": (
             "https://github.com/googlefonts/dm-fonts/raw/main/Sans/fonts/ttf/"
             "DMSans-Medium.ttf"
         ),
-        FONT_DISPLAY: (
+        FONT_DISPLAY_EN: (
             "https://github.com/googlefonts/outfit/raw/main/fonts/ttf/"
             "Outfit-SemiBold.ttf"
         ),
+        # Bundled OFL Noto Sans SC (Simplified Chinese) — local assets, no network.
+        FONT_BODY_ZH: "fonts/NotoSansSC-Regular.ttf",
+        f"{FONT_BODY_ZH}Medium": "fonts/NotoSansSC-Medium.ttf",
+        FONT_DISPLAY_ZH: "fonts/NotoSansSC-Bold.ttf",
     }
 
     scheme = ft.ColorScheme(
@@ -123,16 +148,26 @@ def apply_page_theme(page: ft.Page) -> None:
         surface_container_highest=SURFACE_DARK,
     )
 
+    active = body_font()
     page.theme = ft.Theme(
         color_scheme=scheme,
-        font_family=FONT_BODY,
+        font_family=active,
         use_material3=True,
     )
     page.dark_theme = ft.Theme(
         color_scheme=scheme_dark,
-        font_family=FONT_BODY,
+        font_family=active,
         use_material3=True,
     )
+
+
+def refresh_theme_fonts(page: ft.Page) -> None:
+    """Re-bind Material theme font after language switch."""
+    active = body_font()
+    if page.theme is not None:
+        page.theme.font_family = active
+    if page.dark_theme is not None:
+        page.dark_theme.font_family = active
 
 
 def display_text(
@@ -147,13 +182,18 @@ def display_text(
         size=size,
         color=color,
         weight=weight,
-        font_family=FONT_DISPLAY,
+        font_family=display_font(),
     )
 
 
 def muted_text(text: str, page: ft.Page, *, size: int = 14) -> ft.Text:
     colors = palette(page)
-    return ft.Text(text, size=size, color=colors["text_muted"])
+    return ft.Text(
+        text,
+        size=size,
+        color=colors["text_muted"],
+        font_family=body_font(),
+    )
 
 
 def section_label(text: str, page: ft.Page) -> ft.Text:
@@ -163,7 +203,7 @@ def section_label(text: str, page: ft.Page) -> ft.Text:
         size=11,
         weight=ft.FontWeight.W_600,
         color=colors["text_muted"],
-        font_family=f"{FONT_BODY}Medium",
+        font_family=body_font_medium(),
     )
 
 
@@ -201,15 +241,18 @@ def settings_section(
     header: list[ft.Control] = [section_label(title, page)]
     if subtitle:
         header.append(
-            ft.Text(subtitle, size=13, color=colors["text_muted"])
+            ft.Text(subtitle, size=13, color=colors["text_muted"], font_family=body_font())
         )
     header.append(ft.Container(height=SPACE_SM))
+    # Tighter side padding on phones so fields/helpers get more horizontal room.
+    side = SPACE_MD if is_mobile(page) else SPACE_LG
     return ft.Container(
         content=ft.Column(
             spacing=SPACE_MD,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
             controls=[*header, *controls],
         ),
-        padding=ft.Padding(SPACE_LG, SPACE_LG, SPACE_LG, SPACE_LG),
+        padding=ft.Padding(side, SPACE_LG, side, SPACE_LG),
         bgcolor=colors["surface"],
         border=ft.Border.all(1, colors["border"]),
         border_radius=RADIUS_MD,

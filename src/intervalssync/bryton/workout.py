@@ -15,6 +15,7 @@ from typing import Any, Callable
 import requests
 
 from .. import intervals_icu
+from ..i18n import t
 from .ddp import WEB_HOST, BrytonSession, call_method, login
 from .exceptions import BrytonSyncError
 from .fit_encode import bryton_hr_uses_mhr, icu_workout_doc_to_bryton_fit
@@ -237,14 +238,14 @@ def upload_workouts(
     days = max(1, config.workout_days_ahead)
     newest = config.newest or (today + timedelta(days=days - 1))
 
-    report("Logging in to Bryton Active…")
+    report(t("progress.login.bryton"))
     session = web_login(config.bryton_email, config.bryton_password)
-    report("Logged in.")
+    report(t("progress.login.done"))
 
     live_ids, live_names = _fetch_workout_library(session)
-    report(f"Found {len(live_ids)} custom workouts on Bryton.")
+    report(t("progress.workout.library.bryton", n=len(live_ids)))
 
-    report("Fetching planned workouts from intervals.icu…")
+    report(t("progress.workout.fetch.start"))
     intervals_http = requests.Session()
     try:
         calendar = intervals_icu.fetch_calendar_workouts(
@@ -257,7 +258,7 @@ def upload_workouts(
         raise BrytonSyncError(f"Could not fetch intervals.icu workouts: {exc}") from exc
 
     result.listed = len(calendar)
-    report(f"Found {len(calendar)} planned workouts.")
+    report(t("progress.workout.fetch.found", n=len(calendar)))
 
     http = requests.Session()
     cached_max_hr: float | None = None
@@ -267,8 +268,11 @@ def upload_workouts(
 
         if workout.activity_type not in _CYCLING_TYPES:
             report(
-                f"↷ Skipping {workout.name} — unsupported type "
-                f"{workout.activity_type!r} (cycling only in v1)."
+                t(
+                    "progress.workout.skip.unsupported",
+                    name=workout.name,
+                    type=repr(workout.activity_type),
+                )
             )
             result.skipped += 1
             continue
@@ -277,7 +281,7 @@ def upload_workouts(
         on_bryton = _stored_on_bryton(stored, live_ids, live_names)
 
         if on_bryton and not config.force_resync:
-            report(f"↷ Skipping {workout.name} — already on Bryton.")
+            report(t("progress.workout.skip.bryton", name=workout.name))
             result.skipped += 1
             continue
 
@@ -305,10 +309,7 @@ def upload_workouts(
             max_hr=encode_max_hr,
         )
         if fit_bytes is None:
-            report(
-                f"⚠ Skipping {workout.name} — no structured steps "
-                "(open the workout in intervals.icu first)."
-            )
+            report(t("progress.workout.skip.no_steps", name=workout.name))
             result.no_steps += 1
             continue
 
@@ -318,19 +319,19 @@ def upload_workouts(
             else _auto_workout_filename()
         )
 
-        report(f"Uploading {workout.name}…")
+        report(t("progress.workout.upload.start", name=workout.name))
         if upload_workout_fit(session, fit_bytes, upload_name, http=http):
             after_ids, _ = _fetch_workout_library(session)
             new_ids = after_ids - ids_before
             stored_value = next(iter(new_ids), upload_name)
-            report(f"✓ Uploaded {workout.name} ({upload_name}.fit)")
+            report(t("progress.workout.upload.ok.bryton", name=workout.name, upload_name=upload_name))
             result.uploaded += 1
             result.uploaded_map[event_key] = stored_value
             live_ids.add(stored_value)
             live_names.add(upload_name)
             live_names.add(_file_stem(upload_name))
         else:
-            report(f"✗ Failed to upload {workout.name}.")
+            report(t("progress.workout.upload.fail", name=workout.name))
             result.failed += 1
 
     for event_key, stored_value in config.uploaded_workouts.items():

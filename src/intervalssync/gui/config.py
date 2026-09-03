@@ -13,18 +13,36 @@ from pathlib import Path
 
 from platformdirs import user_config_dir, user_downloads_dir
 
+from ..i18n import detect_system_language, normalize_language
+
 APP_NAME = "intervalssync"
 
 CONFIG_DIR = Path(user_config_dir(APP_NAME, appauthor=False))
 CONFIG_PATH = CONFIG_DIR / "config.json"
+
+# Allowed auto-sync poll intervals (minutes). Shorter = more battery use.
+AUTO_SYNC_INTERVALS: tuple[int, ...] = (15, 30, 60, 120)
 
 
 def _default_download_dir() -> str:
     return str(Path(user_downloads_dir()) / "intervalssync-fit")
 
 
+def clamp_auto_sync_interval(minutes: int) -> int:
+    """Snap to the nearest allowed auto-sync interval."""
+    try:
+        value = int(minutes)
+    except (TypeError, ValueError):
+        return 60
+    if value in AUTO_SYNC_INTERVALS:
+        return value
+    return min(AUTO_SYNC_INTERVALS, key=lambda allowed: abs(allowed - value))
+
+
 @dataclass
 class AppConfig:
+    # GUI interface language: "en" | "zh". First launch follows system locale.
+    language: str = "en"
     enable_igpsport: bool = True
     enable_bryton: bool = False
     igp_user: str = ""
@@ -61,6 +79,9 @@ class AppConfig:
     profile_sync_declined_fingerprint: str = ""
     # Prompt on launch when FTP, LTHR, max HR, or weight differ from intervals.icu.
     profile_sync_check_on_launch: bool = True
+    # Periodic activity sync while the app (or Android FGS) stays alive.
+    auto_sync_enabled: bool = False
+    auto_sync_interval_minutes: int = 60
     # Lifetime sync stats (GUI gamification).
     lifetime_activities_uploaded: int = 0
     lifetime_workouts_uploaded: int = 0
@@ -84,15 +105,29 @@ def load() -> AppConfig:
 
     # Migrate legacy single-source picker (ignored on save going forward).
     activity_source = data.pop("activity_source", None)
+    had_language = "language" in data
     cfg = AppConfig(**{k: v for k, v in data.items() if k in AppConfig.__annotations__})
     if activity_source == "bryton":
         cfg.enable_bryton = True
         cfg.enable_igpsport = False
+    dirty = False
+    # First launch: follow device/OS language (zh* → 简体中文). After that,
+    # honour the user's saved choice so EN/ZH can switch freely.
+    if not had_language:
+        cfg.language = detect_system_language()
+        dirty = True
+    else:
+        cfg.language = normalize_language(cfg.language)
+    cfg.auto_sync_interval_minutes = clamp_auto_sync_interval(
+        cfg.auto_sync_interval_minutes
+    )
     if not cfg.stats_seeded:
         cfg.lifetime_workouts_uploaded = len(cfg.uploaded_workouts) + len(
             cfg.uploaded_bryton_workouts
         )
         cfg.stats_seeded = True
+        dirty = True
+    if dirty:
         save(cfg)
     return cfg
 

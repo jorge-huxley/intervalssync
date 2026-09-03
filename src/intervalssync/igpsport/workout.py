@@ -15,6 +15,7 @@ from typing import Any, Callable
 import requests
 
 from .. import intervals_icu
+from ..i18n import t
 from .core import SyncError, login
 from .region import IgpRegionConfig, resolve_region
 
@@ -429,16 +430,16 @@ def upload_workouts(
     days = max(1, config.workout_days_ahead)
     newest = config.newest or (today + timedelta(days=days - 1))
 
-    report("Logging in to iGPSPORT…")
+    report(t("progress.login.igpsport"))
     session = requests.Session()
     region = resolve_region(config.igp_region)
     auth_headers = login(session, config.igp_user, config.igp_password, region)
-    report("Logged in.")
+    report(t("progress.login.done"))
 
     live_ids = fetch_all_custom_workout_ids(session, auth_headers, region=region)
-    report(f"Found {len(live_ids)} custom workouts on iGPSPORT.")
+    report(t("progress.workout.library.igpsport", n=len(live_ids)))
 
-    report("Fetching planned workouts from intervals.icu…")
+    report(t("progress.workout.fetch.start"))
     try:
         calendar = intervals_icu.fetch_calendar_workouts(
             config.intervals_api_key, oldest, newest
@@ -447,15 +448,18 @@ def upload_workouts(
         raise SyncError(f"Could not fetch intervals.icu workouts: {exc}") from exc
 
     result.listed = len(calendar)
-    report(f"Found {len(calendar)} planned workouts.")
+    report(t("progress.workout.fetch.found", n=len(calendar)))
 
     for workout in calendar:
         event_key = str(workout.event_id)
 
         if workout.activity_type not in _CYCLING_TYPES:
             report(
-                f"↷ Skipping {workout.name} — unsupported type "
-                f"{workout.activity_type!r} (cycling only in v1)."
+                t(
+                    "progress.workout.skip.unsupported",
+                    name=workout.name,
+                    type=repr(workout.activity_type),
+                )
             )
             result.skipped += 1
             continue
@@ -464,7 +468,7 @@ def upload_workouts(
         on_igpsport = stored_id is not None and stored_id in live_ids
 
         if on_igpsport and not config.force_resync:
-            report(f"↷ Skipping {workout.name} — already on iGPSPORT.")
+            report(t("progress.workout.skip.igpsport", name=workout.name))
             result.skipped += 1
             continue
 
@@ -476,22 +480,19 @@ def upload_workouts(
             existing_workout_id=update_id,
         )
         if body is None:
-            report(
-                f"⚠ Skipping {workout.name} — no structured steps "
-                "(open the workout in intervals.icu first)."
-            )
+            report(t("progress.workout.skip.no_steps", name=workout.name))
             result.no_steps += 1
             continue
 
-        report(f"Uploading {workout.name}…")
+        report(t("progress.workout.upload.start", name=workout.name))
         workout_id = upload_custom_workout(session, auth_headers, body, region=region)
         if workout_id:
-            report(f"✓ Uploaded {workout.name} (workoutId {workout_id})")
+            report(t("progress.workout.upload.ok.igpsport", name=workout.name, id=workout_id))
             result.uploaded += 1
             result.uploaded_map[event_key] = workout_id
             live_ids.add(workout_id)
         else:
-            report(f"✗ Failed to upload {workout.name}.")
+            report(t("progress.workout.upload.fail", name=workout.name))
             result.failed += 1
 
     for event_key, workout_id in config.uploaded_workouts.items():

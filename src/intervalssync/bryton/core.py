@@ -20,6 +20,7 @@ from ..intervals_icu import (
 )
 from .api import download_fit_to_path
 from .ddp import DEFAULT_HOST, BrytonSession, list_activities, login
+from ..i18n import activity_type_label, t
 from .exceptions import BrytonSyncError
 
 ACTIVITY_TYPE_KEEP = ""
@@ -118,9 +119,9 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
     report = progress or _noop
     result = SyncResult()
 
-    report("Logging in to Bryton Active…")
+    report(t("progress.login.bryton"))
     session = login(config.bryton_email, config.bryton_password, host=config.host)
-    report("Logged in.")
+    report(t("progress.login.done"))
 
     raw_activities = list_activities(session, limit=config.max_activities)
     activities = [_to_activity(doc) for doc in raw_activities]
@@ -128,9 +129,9 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
     result.listed = len(activities)
 
     if config.list_activities:
-        report(f"Found {len(activities)} activities.")
+        report(t("progress.list.found", n=len(activities)))
         for act in activities:
-            report(f"  • {act.activity_id} | {act.start_time} | {act.title}")
+            report(t("progress.list.item", id=act.activity_id, start_time=act.start_time, title=act.title))
 
     if not (config.download_fit or config.upload_intervals or config.upload_dropbox):
         return result
@@ -143,11 +144,13 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
                 config.intervals_api_key, oldest, newest
             )
             report(
-                f"{len(already_uploaded)} activities already on intervals.icu "
-                "in this date range."
+                t(
+                    "progress.intervals.already.range_simple",
+                    n=len(already_uploaded),
+                )
             )
         except requests.RequestException as exc:
-            report(f"⚠ Could not check intervals.icu (will process all): {exc}")
+            report(t("progress.intervals.check_failed", exc=exc))
 
     dropbox_uploaded_names: set[str] = set()
     if config.upload_dropbox:
@@ -163,9 +166,9 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
                     config.dropbox_refresh_token,
                     config.dropbox_app_key,
                 )
-                report(f"{len(dropbox_uploaded_names)} activities already in Dropbox.")
+                report(t("progress.dropbox.already", n=len(dropbox_uploaded_names)))
             except Exception as exc:  # noqa: BLE001 — non-fatal; process all
-                report(f"⚠ Could not check Dropbox (will process all): {exc}")
+                report(t("progress.dropbox.check_failed", exc=exc))
 
     download_dir = Path(config.download_dir)
     any_upload_enabled = config.upload_intervals or config.upload_dropbox
@@ -181,21 +184,21 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
         )
 
         if config.upload_intervals and not intervals_needs_it:
-            report(f"↷ Skipping {act.activity_id} — already on intervals.icu.")
+            report(t("progress.skip.intervals", id=act.activity_id))
             result.skipped += 1
         if config.upload_dropbox and not dropbox_needs_it:
-            report(f"↷ Skipping {act.activity_id} — already in Dropbox.")
+            report(t("progress.skip.dropbox", id=act.activity_id))
             result.skipped_dropbox += 1
 
         if any_upload_enabled and not intervals_needs_it and not dropbox_needs_it:
             continue
 
         if config.download_fit or intervals_needs_it or dropbox_needs_it:
-            report(f"Downloading {act.activity_id}…")
+            report(t("progress.download", id=act.activity_id))
             try:
                 download_fit_to_path(act.activity_id, session, fit_path)
             except (requests.RequestException, ValueError) as exc:
-                report(f"⚠ Could not download FIT for {act.activity_id}: {exc}")
+                report(t("progress.download.fail", id=act.activity_id, exc=exc))
                 result.failed += 1
                 continue
             result.downloaded += 1
@@ -209,23 +212,29 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
                 fit_path, act.title, ext, config.intervals_api_key
             )
             if activity_id:
-                report(f"✓ Uploaded {act.activity_id}: {act.title}")
+                report(t("progress.upload.intervals.ok", id=act.activity_id, title=act.title))
                 result.uploaded += 1
                 if config.activity_type:
                     if set_activity_type(
                         activity_id, config.activity_type, config.intervals_api_key
                     ):
-                        report(f"↻ Set {act.activity_id} → {config.activity_type}")
+                        report(
+                            t(
+                                "progress.activity_type.ok",
+                                id=act.activity_id,
+                                type=activity_type_label(config.activity_type),
+                            )
+                        )
                     else:
-                        report(f"⚠ Could not set activity type for {act.activity_id}.")
+                        report(t("progress.activity_type.fail", id=act.activity_id))
             else:
-                report(f"✗ Failed to upload {act.activity_id}.")
+                report(t("progress.upload.intervals.fail", id=act.activity_id))
                 result.failed += 1
                 intervals_ok = False
 
         dropbox_ok = True
         if dropbox_needs_it:
-            report(f"Uploading {act.activity_id} to Dropbox…")
+            report(t("progress.upload.dropbox.start", id=act.activity_id))
             try:
                 upload_to_dropbox(
                     fit_path,
@@ -237,13 +246,13 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
             except Exception as exc:  # noqa: BLE001 — surface provider failures
                 dropbox_ok = False
                 result.failed_dropbox += 1
-                report(f"⚠ Dropbox upload failed for {act.activity_id}: {exc}")
+                report(t("progress.upload.dropbox.fail", id=act.activity_id, exc=exc))
             else:
                 result.uploaded_dropbox += 1
-                report(f"✓ Uploaded {act.activity_id} to Dropbox")
+                report(t("progress.upload.dropbox.ok", id=act.activity_id))
 
         if config.delete_after_upload and any_upload_enabled and intervals_ok and dropbox_ok:
             fit_path.unlink(missing_ok=True)
-            report(f"  Removed local file {fit_path.name}")
+            report(t("progress.file.removed", filename=fit_path.name))
 
     return result

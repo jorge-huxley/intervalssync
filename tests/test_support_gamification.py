@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from intervalssync import i18n
 from intervalssync.gui import config as config_module
 from intervalssync.gui import support_gamification as gamification
 
 
 def test_rank_for_tiers():
+    i18n.set_language("en")
     assert gamification.rank_for(0) == "Rookie"
     assert gamification.rank_for(1) == "Warm-up lap"
     assert gamification.rank_for(4) == "Warm-up lap"

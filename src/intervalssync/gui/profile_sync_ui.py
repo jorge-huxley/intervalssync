@@ -7,6 +7,7 @@ from typing import Callable
 
 import flet as ft
 
+from ..i18n import localize_user_error, t
 from ..igpsport.core import SyncError
 from ..igpsport.profile_sync import (
     ProfileSyncConfig,
@@ -101,19 +102,23 @@ def _save_declined_fingerprint(
 
 def _sync_success_message(result: ProfileSyncResult) -> str:
     if result.after is None:
-        return "iGPSPORT profile updated."
+        return t("profile.success.base")
     member = result.after.get("member")
     if not isinstance(member, dict):
-        return "iGPSPORT profile updated."
+        return t("profile.success.base")
     parts: list[str] = []
-    for key, label in (("ftp", "FTP"), ("lthr", "LTHR"), ("mhr", "max HR")):
+    for key, label_key in (
+        ("ftp", "profile.success.part.ftp"),
+        ("lthr", "profile.success.part.lthr"),
+        ("mhr", "profile.success.part.mhr"),
+    ):
         if key in member:
-            parts.append(f"{label} {member[key]}")
+            parts.append(t(label_key, value=member[key]))
     if result.weight_after is not None:
-        parts.append(f"weight {result.weight_after}")
+        parts.append(t("profile.success.part.weight", value=result.weight_after))
     if parts:
-        return "iGPSPORT profile updated — " + ", ".join(parts) + "."
-    return "iGPSPORT profile updated."
+        return t("profile.success.with_values", parts=", ".join(parts))
+    return t("profile.success.base")
 
 
 async def sync_with_feedback(
@@ -126,15 +131,13 @@ async def sync_with_feedback(
     creds = await credentials_ready(config, store)
     if creds is None:
         page.show_dialog(
-            ft.SnackBar(
-                ft.Text("Add iGPSPORT credentials and intervals.icu API key in Settings first.")
-            )
+            ft.SnackBar(ft.Text(t("profile.snack.no_creds")))
         )
         page.update()
         return False
 
     igp_password, api_key = creds
-    page.show_dialog(ft.SnackBar(ft.Text("Updating iGPSPORT profile…")))
+    page.show_dialog(ft.SnackBar(ft.Text(t("profile.snack.updating"))))
     page.update()
 
     def _run_sync() -> tuple[bool, str]:
@@ -142,9 +145,9 @@ async def sync_with_feedback(
             result = run_sync_profile_zones(config, igp_password, api_key)
             return True, _sync_success_message(result)
         except SyncError as exc:
-            return False, str(exc)
+            return False, localize_user_error(exc)
         except Exception as exc:  # noqa: BLE001 — surface any failure to the user
-            return False, f"Unexpected error: {exc}"
+            return False, t("profile.error.unexpected", exc=localize_user_error(exc))
 
     ok, message = await asyncio.to_thread(_run_sync)
     if ok and clear_declined:
@@ -186,27 +189,27 @@ async def prompt_if_needed(
         ft.AlertDialog(
             modal=True,
             shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_MD),
-            title=theme.display_text("Update iGPSPORT profile?", size=20),
+            title=theme.display_text(t("profile.dialog.title"), size=20),
             content=ft.Column(
                 tight=True,
                 spacing=theme.SPACE_SM,
                 controls=[
                     ft.Text(
-                        "Your iGPSPORT profile differs from intervals.icu:",
+                        t("profile.dialog.body"),
                         size=13,
                         color=colors["text_muted"],
                     ),
                     *difference_lines,
                     ft.Text(
-                        "Power/HR zones and weight will be updated too.",
+                        t("profile.dialog.footer"),
                         size=12,
                         color=colors["text_muted"],
                     ),
                 ],
             ),
             actions=[
-                ft.TextButton("Not now", on_click=dismiss),
-                ft.TextButton("Update now", on_click=update_now),
+                ft.TextButton(t("profile.dialog.not_now"), on_click=dismiss),
+                ft.TextButton(t("profile.dialog.update_now"), on_click=update_now),
             ],
         )
     )
@@ -215,11 +218,12 @@ async def prompt_if_needed(
 
 def format_threshold_status(status: ProfileThresholdStatus | None) -> str:
     if status is None:
-        return "Could not check profile status."
+        return t("profile.status.check_failed")
     if not status.needs_sync:
-        return "In sync with intervals.icu."
+        return t("profile.status.in_sync")
     if len(status.differences) == 1:
-        return f"Out of sync: {status.differences[0]}"
-    return "Out of sync: " + ", ".join(
-        diff.split(":")[0] for diff in status.differences
+        return t("profile.status.out_of_sync.one", diff=status.differences[0])
+    return t(
+        "profile.status.out_of_sync.many",
+        labels=", ".join(diff.split(":")[0] for diff in status.differences),
     )

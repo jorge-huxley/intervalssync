@@ -9,6 +9,7 @@ from typing import Any, Callable
 import requests
 
 from .. import intervals_icu
+from ..i18n import t
 from ..intervals_icu import SportSettings
 from .core import SyncError, login
 from .region import resolve_region
@@ -56,9 +57,6 @@ class ProfileThresholdStatus:
     intervals_fingerprint: str
     intervals: dict[str, int | None]
     igpsport: dict[str, int | None]
-
-
-_THRESHOLD_LABELS = {"ftp": "FTP", "lthr": "LTHR", "mhr": "max HR", "weight": "Weight"}
 
 
 def _whole_kg(value: Any) -> int | None:
@@ -149,10 +147,13 @@ def compare_profile_thresholds(
     differences: list[str] = []
     for key in keys_to_compare:
         if current_vals.get(key) != desired_vals.get(key):
-            label = _THRESHOLD_LABELS[key]
             differences.append(
-                f"{label}: iGPSPORT {current_vals.get(key)} "
-                f"→ intervals.icu {desired_vals.get(key)}"
+                t(
+                    "profile.diff.line",
+                    label=t(f"profile.diff.label.{key}"),
+                    current=current_vals.get(key),
+                    desired=desired_vals.get(key),
+                )
             )
 
     return ProfileThresholdStatus(
@@ -220,7 +221,7 @@ def _report_summary(
     member = body.get("member") if isinstance(body.get("member"), dict) else {}
     power = body.get("power") if isinstance(body.get("power"), list) else []
     heart_rate = body.get("heartRate") if isinstance(body.get("heartRate"), list) else []
-    report(f"{label}:")
+    report(t("progress.profile.summary.label", label=label))
     parts = [
         f"{key}={member[key]}"
         for key in ("ftp", "mhr", "lthr", "heartRateComputeMode", "quietHeartRate")
@@ -228,9 +229,9 @@ def _report_summary(
     ]
     if weight is not None:
         parts.append(f"weight={weight}")
-    report("  member: " + ", ".join(parts))
-    report(f"  power:  {zone_range_summary(power)}")
-    report(f"  heartRate: {zone_range_summary(heart_rate)}")
+    report(t("progress.profile.summary.member", parts=", ".join(parts)))
+    report(t("progress.profile.summary.power", ranges=zone_range_summary(power)))
+    report(t("progress.profile.summary.heartrate", ranges=zone_range_summary(heart_rate)))
 
 
 def sync_profile_zones(
@@ -242,7 +243,7 @@ def sync_profile_zones(
 
     session = requests.Session()
     region = resolve_region(config.igp_region)
-    report("Logging in to iGPSPORT…")
+    report(t("progress.login.igpsport"))
     try:
         auth_headers = login(session, config.igp_user, config.igp_password, region)
     except Exception as exc:
@@ -251,7 +252,7 @@ def sync_profile_zones(
     member_id = member_id_from_token(auth_headers)
     headers = mobile_headers(auth_headers, member_id, region)
 
-    report("Fetching sport settings from intervals.icu…")
+    report(t("progress.profile.fetch.settings"))
     try:
         settings = intervals_icu.fetch_sport_settings(
             config.intervals_api_key,
@@ -263,7 +264,7 @@ def sync_profile_zones(
 
     _validate_sport_settings(settings)
 
-    report("Fetching athlete weight from intervals.icu…")
+    report(t("progress.profile.fetch.weight"))
     try:
         weight = intervals_icu.fetch_athlete_weight(
             config.intervals_api_key,
@@ -272,7 +273,7 @@ def sync_profile_zones(
     except requests.RequestException as exc:
         raise SyncError(f"Could not fetch intervals.icu athlete weight: {exc}") from exc
 
-    report("Fetching iGPSPORT profile…")
+    report(t("progress.profile.fetch.profile"))
     try:
         current = fetch_personal_interval_info(session, headers, region)
         user_info = fetch_user_info(session, headers, region)
@@ -283,15 +284,15 @@ def sync_profile_zones(
     target_weight = _whole_kg(weight)
 
     updated = apply_intervals_settings(current, settings)
-    _report_summary(report, "Before", current, weight=weight_before)
+    _report_summary(report, t("progress.profile.label.before"), current, weight=weight_before)
     _report_summary(
         report,
-        "After",
+        t("progress.profile.label.after"),
         updated,
         weight=float(target_weight) if target_weight is not None else weight_before,
     )
 
-    report("Updating iGPSPORT profile…")
+    report(t("progress.profile.update"))
     try:
         update_personal_interval_info(session, headers, updated, region)
     except RuntimeError as exc:
@@ -299,7 +300,7 @@ def sync_profile_zones(
 
     if target_weight is not None and _whole_kg(weight_before) != target_weight:
         saved_city_id = user_info.get("cityId")
-        report("Updating iGPSPORT weight…")
+        report(t("progress.profile.update.weight"))
         try:
             update_user_weight(session, headers, target_weight, region)
         except RuntimeError as exc:
@@ -307,12 +308,9 @@ def sync_profile_zones(
         user_info_after_weight = fetch_user_info(session, headers, region)
         city_after = user_info_after_weight.get("cityId")
         if saved_city_id not in (None, 0, "0") and city_after in (None, 0, "", "0"):
-            report(
-                "Note: iGPSPORT cleared profile location while updating weight; "
-                "set location again in the app."
-            )
+            report(t("progress.profile.location_cleared"))
 
-    report("Verifying iGPSPORT profile…")
+    report(t("progress.profile.verify"))
     try:
         after = fetch_personal_interval_info(session, headers, region)
         user_info_after = fetch_user_info(session, headers, region)
@@ -321,7 +319,7 @@ def sync_profile_zones(
 
     weight_after = user_info_after.get("weight")
 
-    _report_summary(report, "Read-back", after, weight=weight_after)
+    _report_summary(report, t("progress.profile.label.readback"), after, weight=weight_after)
     return ProfileSyncResult(
         before=current,
         after=after,

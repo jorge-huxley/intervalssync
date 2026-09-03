@@ -12,8 +12,10 @@ from flet_permission_handler import Permission, PermissionHandler, PermissionSta
 from flet_secure_storage import SecureStorage
 
 from .. import __version__
+from ..i18n import set_language, t
 from . import config as config_module
 from . import secrets as secrets_module
+from .auto_sync import AutoSyncController
 from .update_check import RELEASES_PAGE, check_for_update
 from .settings_view import build_settings_view
 from .sync_view import build_sync_view
@@ -24,6 +26,7 @@ from . import theme
 
 _DESKTOP = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX}
 _MOBILE = {ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV, ft.PagePlatform.IOS}
+_ANDROID = {ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV}
 _PERMISSION_HANDLER_PLATFORMS = {
     ft.PagePlatform.ANDROID,
     ft.PagePlatform.ANDROID_TV,
@@ -35,7 +38,6 @@ _PERMISSION_HANDLER_PLATFORMS = {
 # singular "Download"). Used when the user opts in and grants storage access.
 ANDROID_DOWNLOADS = "/storage/emulated/0/Download/intervalssync-fit"
 
-APP_TITLE = "Intervals Sync"
 APP_ICON = "icon.png"
 
 
@@ -75,7 +77,6 @@ def _secret_store_for_platform(
 
 
 async def _app(page: ft.Page) -> None:
-    page.title = APP_TITLE
     page.theme_mode = ft.ThemeMode.SYSTEM
     theme.apply_page_theme(page)
     page.padding = 0
@@ -88,13 +89,31 @@ async def _app(page: ft.Page) -> None:
         page.window.min_height = 560
 
     config = config_module.load()
+    set_language(config.language)
+    theme.refresh_theme_fonts(page)
+    page.title = t("app.title")
 
     store, storage = _secret_store_for_platform(page.platform)
     perms = PermissionHandler() if _supports_permission_handler(page.platform) else None
+    notifications = None
+    if page.platform in _ANDROID:
+        from flet_android_notifications import FletAndroidNotifications
+
+        notifications = FletAndroidNotifications()
     if storage is not None:
         page.services.append(storage)
     if perms is not None:
         page.services.append(perms)
+    if notifications is not None:
+        page.services.append(notifications)
+
+    auto_sync = AutoSyncController(
+        page,
+        config,
+        store,
+        notifications=notifications,
+        is_android=page.platform in _ANDROID,
+    )
 
     def _private_download_dir() -> str:
         base = os.getenv("FLET_APP_STORAGE_DATA") or tempfile.gettempdir()
@@ -132,14 +151,14 @@ async def _app(page: ft.Page) -> None:
         if latest:
             page.show_dialog(
                 ft.SnackBar(
-                    content=ft.Text(f"Update available: v{latest}"),
-                    action="View",
+                    content=ft.Text(t("update.available", latest=latest)),
+                    action=t("update.action"),
                     on_action=open_releases,
                     duration=8000,
                 )
             )
         elif not quiet_when_current:
-            page.show_dialog(ft.SnackBar(ft.Text("You're on the latest version.")))
+            page.show_dialog(ft.SnackBar(ft.Text(t("update.latest"))))
         page.update()
 
     async def check_updates_now(_: ft.ControlEvent) -> None:
@@ -153,36 +172,35 @@ async def _app(page: ft.Page) -> None:
             ft.AlertDialog(
                 modal=True,
                 shape=ft.RoundedRectangleBorder(radius=theme.RADIUS_MD),
-                title=theme.display_text("About", size=22),
+                title=theme.display_text(t("about.title"), size=22),
                 content=ft.Column(
                     tight=True,
                     spacing=theme.SPACE_SM,
                     controls=[
                         ft.Text(
-                            APP_TITLE,
+                            t("app.title"),
                             weight=ft.FontWeight.W_600,
                             color=colors["text"],
                         ),
                         ft.Text(
-                            f"Version {__version__}",
+                            t("about.version", version=__version__),
                             size=13,
                             color=colors["text_muted"],
                         ),
                         ft.Text(
-                            "Sync rides and planned workouts between iGPSPORT, "
-                            "Bryton Active, and intervals.icu.",
+                            t("about.description"),
                             size=13,
                             color=colors["text_muted"],
                         ),
                     ],
                 ),
                 actions=[
-                    ft.TextButton("Check for updates", on_click=check_updates_now),
+                    ft.TextButton(t("about.check_updates"), on_click=check_updates_now),
                     ft.TextButton(
-                        "GitHub",
+                        t("about.github"),
                         url="https://github.com/jorge-huxley/intervalssync",
                     ),
-                    ft.TextButton("Close", on_click=lambda _: page.pop_dialog()),
+                    ft.TextButton(t("about.close"), on_click=lambda _: page.pop_dialog()),
                 ],
             )
         )
@@ -213,9 +231,11 @@ async def _app(page: ft.Page) -> None:
                             ft.Column(
                                 spacing=0,
                                 controls=[
-                                    theme.display_text(APP_TITLE, size=18, color=colors["text"]),
+                                    theme.display_text(
+                                        t("app.title"), size=18, color=colors["text"]
+                                    ),
                                     ft.Text(
-                                        "iGPSPORT · Bryton · intervals.icu",
+                                        t("header.subtitle"),
                                         size=11,
                                         color=colors["text_muted"],
                                     ),
@@ -229,7 +249,7 @@ async def _app(page: ft.Page) -> None:
                             support_gamification.kofi_header_button(page),
                             ft.IconButton(
                                 icon=ft.Icons.INFO_OUTLINE,
-                                tooltip="About",
+                                tooltip=t("about.tooltip"),
                                 icon_color=colors["text_muted"],
                                 on_click=show_about,
                             ),
@@ -250,6 +270,7 @@ async def _app(page: ft.Page) -> None:
     async def show_sync(_: ft.ControlEvent | None = None) -> None:
         nonlocal current_tab
         current_tab = _TAB_SYNC
+        set_language(config.language)
         body.content = _scrollable(build_sync_view(page, config, store))
         header_slot.content = _header()
         _update_nav()
@@ -263,6 +284,15 @@ async def _app(page: ft.Page) -> None:
         async def on_profile_sync_check() -> None:
             await profile_sync_ui.prompt_if_needed(page, config, store)
 
+        async def on_language_changed() -> None:
+            # Rebuild chrome (header partner/Ko-fi icon + Sync/Settings tabs) and body.
+            set_language(config.language)
+            theme.refresh_theme_fonts(page)
+            header_slot.content = _header()
+            _update_nav()
+            await auto_sync.refresh_locale()
+            await show_settings()
+
         body.content = _scrollable(
             await build_settings_view(
                 page,
@@ -272,6 +302,8 @@ async def _app(page: ft.Page) -> None:
                 perms=perms,
                 apply_download_location=apply_download_location,
                 on_profile_sync_check=on_profile_sync_check,
+                on_auto_sync_changed=auto_sync.apply,
+                on_language_changed=on_language_changed,
             )
         )
         header_slot.content = _header()
@@ -279,8 +311,9 @@ async def _app(page: ft.Page) -> None:
         _refresh_bg()
         page.update()
 
-    sync_tab = ft.TextButton("Sync", on_click=show_sync)
-    settings_tab = ft.TextButton("Settings", on_click=show_settings)
+    # Flet 0.86 TextButton uses `content`, not `text` — rebuild label on locale change.
+    sync_tab = ft.TextButton(content=t("nav.sync"), on_click=show_sync)
+    settings_tab = ft.TextButton(content=t("nav.settings"), on_click=show_settings)
     desktop_tabs = ft.Container(
         content=ft.Row(
             alignment=ft.MainAxisAlignment.CENTER,
@@ -289,8 +322,18 @@ async def _app(page: ft.Page) -> None:
         padding=ft.Padding(0, theme.SPACE_SM, 0, theme.SPACE_SM),
     )
 
+    def _nav_label(key: str) -> ft.Text:
+        return ft.Text(
+            t(key),
+            font_family=theme.body_font_medium(),
+            size=14,
+        )
+
     def _update_nav() -> None:
         colors = theme.palette(page)
+        sync_tab.content = _nav_label("nav.sync")
+        settings_tab.content = _nav_label("nav.settings")
+        page.title = t("app.title")
         for idx, btn in enumerate((sync_tab, settings_tab)):
             active = idx == current_tab
             btn.style = ft.ButtonStyle(
@@ -301,6 +344,12 @@ async def _app(page: ft.Page) -> None:
                     theme.SPACE_MD, theme.SPACE_SM, theme.SPACE_MD, theme.SPACE_SM
                 ),
             )
+
+    def on_lifecycle(e: ft.AppLifecycleStateChangeEvent) -> None:
+        if e.state == ft.AppLifecycleState.RESUME:
+            page.run_task(auto_sync.on_app_resume)
+
+    page.on_app_lifecycle_state_change = on_lifecycle
 
     page.add(
         ft.SafeArea(
@@ -315,9 +364,9 @@ async def _app(page: ft.Page) -> None:
                         content=body,
                         expand=True,
                         padding=ft.Padding(
-                            theme.SPACE_LG,
+                            theme.SPACE_MD if is_mobile else theme.SPACE_LG,
                             theme.SPACE_MD,
-                            theme.SPACE_LG,
+                            theme.SPACE_MD if is_mobile else theme.SPACE_LG,
                             theme.SPACE_LG if not is_mobile else theme.SPACE_MD,
                         ),
                     ),
@@ -342,6 +391,7 @@ async def _app(page: ft.Page) -> None:
 
     page.run_task(auto_check_updates)
     page.run_task(auto_check_profile_sync)
+    page.run_task(auto_sync.apply)
 
 
 def main() -> None:
