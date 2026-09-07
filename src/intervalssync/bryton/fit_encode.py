@@ -361,3 +361,26 @@ def icu_workout_doc_to_bryton_fit(
         encoder.on_mesg(Profile["mesg_num"]["WORKOUT_STEP"], step)
 
     return bytes(encoder.close())
+
+
+def encoded_step_count(
+    workout_doc: dict[str, Any],
+    *,
+    max_hr: float | None = None,
+) -> int:
+    """Number of steps the encoder will actually write for this workout.
+
+    Repeats expand into their children plus a repeat marker, so this differs
+    from ``len(workout_doc["steps"])``. Bryton's ``info.interval`` array is
+    per encoded step, so it has to be built from this, not the raw list.
+    """
+    raw_steps = workout_doc.get("steps")
+    if not isinstance(raw_steps, list) or not raw_steps:
+        return 0
+    steps = _flatten_steps(
+        raw_steps,
+        ftp=_num(workout_doc.get("ftp")),
+        lthr=_num(workout_doc.get("lthr")),
+        max_hr=max_hr if max_hr is not None else _num(workout_doc.get("max_hr")),
+    )
+    return len(steps or [])

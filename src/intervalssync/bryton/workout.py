@@ -7,6 +7,7 @@ intervals.icu ``workout_doc`` to Bryton-native FIT and POST multipart to
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -17,7 +18,11 @@ import requests
 from .. import intervals_icu
 from .ddp import WEB_HOST, BrytonSession, call_method, login
 from .exceptions import BrytonSyncError
-from .fit_encode import bryton_hr_uses_mhr, icu_workout_doc_to_bryton_fit
+from .fit_encode import (
+    bryton_hr_uses_mhr,
+    encoded_step_count,
+    icu_workout_doc_to_bryton_fit,
+)
 
 _CYCLING_TYPES = frozenset(
     {
@@ -193,11 +198,46 @@ def _auto_workout_filename() -> str:
     )
 
 
+def build_workout_info(
+    title: str,
+    plan_date: str,
+    workout_doc: dict[str, Any] | None = None,
+    *,
+    description: str = "",
+    max_hr: float | None = None,
+) -> str:
+    """Build the ``info`` blob Bryton stores alongside a workout file.
+
+    A workout carries its schedule here, not in the FIT, and there is no
+    separate plan object in the API -- ``plan`` is the whole mechanism. An
+    upload without this blob is inert: visible and editable in the app, but
+    absent from its Training calendar and impossible to send to the head unit.
+    TrainingPeaks-sourced workouts arrive with ``plan`` populated, which is why
+    they work and plain uploads do not.
+    """
+    # One entry per ENCODED step: repeats expand in the FIT, so the raw list
+    # would be short and the app's step count would disagree with the file.
+    n_steps = encoded_step_count(workout_doc, max_hr=max_hr) if workout_doc else 0
+    interval = [{"target_type": ""} for _ in range(n_steps)]
+    return json.dumps(
+        {
+            "name": title,
+            "description": description,
+            "plan": [plan_date] if plan_date else [],
+            "provider": "bryton",
+            "interval": interval,
+            "create_time": int(datetime.now().timestamp() * 1000),
+            "ver": 5,
+        }
+    )
+
+
 def upload_workout_fit(
     session: BrytonSession,
     fit_bytes: bytes,
     name: str,
     *,
+    info: str | None = None,
     http: requests.Session | None = None,
 ) -> bool:
     """Upload a FIT workout to Bryton Active web; return True on success."""
@@ -208,11 +248,14 @@ def upload_workout_fit(
         "X-User-Id": session.user_id,
         "X-Auth-Token": session.auth_token,
     }
+    payload = {"name": filename, "provider": "bryton"}
+    if info:
+        payload["info"] = info
     client = http or requests.Session()
     resp = client.post(
         url,
         files={"file": (filename, fit_bytes, "application/octet-stream")},
-        data={"name": filename, "provider": "bryton"},
+        data=payload,
         headers=headers,
         timeout=120,
     )
@@ -319,7 +362,17 @@ def upload_workouts(
         )
 
         report(f"Uploading {workout.name}…")
-        if upload_workout_fit(session, fit_bytes, upload_name, http=http):
+        # Direct attribute access, deliberately: a refactor that drops
+        # start_date must raise here rather than quietly emit plan:[], which
+        # would silently reintroduce the inert-upload bug this commit fixes.
+        info = build_workout_info(
+            workout.name,
+            workout.start_date,
+            workout.workout_doc,
+            description=workout.description,
+            max_hr=encode_max_hr,
+        )
+        if upload_workout_fit(session, fit_bytes, upload_name, info=info, http=http):
             after_ids, _ = _fetch_workout_library(session)
             new_ids = after_ids - ids_before
             stored_value = next(iter(new_ids), upload_name)

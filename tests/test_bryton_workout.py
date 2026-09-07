@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from intervalssync import intervals_icu
-from intervalssync.bryton import workout
+from intervalssync.bryton import fit_encode, workout
 from intervalssync.bryton.ddp import BrytonSession
 
 
@@ -132,6 +134,7 @@ def test_upload_workouts_skips_already_uploaded(monkeypatch):
         name = "Existing"
         description = ""
         activity_type = "Ride"
+        start_date = "2026-09-07"
         workout_doc = {"steps": [{"duration": 600}]}
 
     monkeypatch.setattr(workout, "web_login", lambda *a, **k: session)
@@ -157,6 +160,7 @@ def test_upload_workouts_reuploads_when_deleted_on_bryton(monkeypatch):
         name = "Existing"
         description = ""
         activity_type = "Ride"
+        start_date = "2026-09-07"
         workout_doc = {"steps": [{"duration": 600}]}
 
     fit = _valid_fit_bytes()
@@ -186,6 +190,7 @@ def test_upload_workouts_uploads_new_workout(monkeypatch):
         name = "New VO2"
         description = ""
         activity_type = "Ride"
+        start_date = "2026-09-07"
         workout_doc = {"steps": [{"duration": 600}]}
 
     fit = _valid_fit_bytes()
@@ -197,7 +202,7 @@ def test_upload_workouts_uploads_new_workout(monkeypatch):
 
     calls: list[str] = []
 
-    def fake_upload(session, fit_bytes, name, *, http=None):
+    def fake_upload(session, fit_bytes, name, *, info=None, http=None):
         calls.append(name)
         return True
 
@@ -230,6 +235,7 @@ def test_upload_workouts_fetches_max_hr_only_for_hr_workouts(monkeypatch):
         name = "Sweet Spot"
         description = ""
         activity_type = "Ride"
+        start_date = "2026-09-07"
         workout_doc = {
             "target": "POWER",
             "steps": [{"duration": 600, "power": {"value": 90, "units": "%ftp"}}],
@@ -237,6 +243,7 @@ def test_upload_workouts_fetches_max_hr_only_for_hr_workouts(monkeypatch):
 
     class HrWorkout:
         event_id = 21
+        start_date = "2026-09-08"
         name = "HR Endurance"
         description = ""
         activity_type = "Ride"
@@ -285,3 +292,84 @@ def test_upload_workouts_fetches_max_hr_only_for_hr_workouts(monkeypatch):
     assert result.uploaded == 2
     assert fetch_calls == ["Ride"]
     assert encode_calls == [None, 193.0]
+
+
+def test_build_workout_info_carries_plan_date():
+    info = json.loads(
+        workout.build_workout_info(
+            "FTP Ramp Test",
+            "2026-09-07",
+            {"steps": [{"duration": 60}, {"duration": 60}]},
+            description="to failure",
+        )
+    )
+    assert info["plan"] == ["2026-09-07"]
+    assert info["name"] == "FTP Ramp Test"
+    assert info["description"] == "to failure"
+    assert len(info["interval"]) == 2
+    assert info["ver"] == 5
+
+
+def test_build_workout_info_omits_plan_when_date_unknown():
+    info = json.loads(workout.build_workout_info("X", "", {"steps": []}))
+    assert info["plan"] == []
+
+
+def test_upload_workouts_schedules_on_the_calendar_date(monkeypatch):
+    """Without an ``info`` blob carrying ``plan`` the upload is inert: absent
+    from the app's Training calendar and unsendable to the head unit."""
+    session = BrytonSession(user_id="u1", auth_token="tok", host="active.brytonsport.com")
+
+    class CW:
+        event_id = 42
+        name = "FTP Ramp Test"
+        description = ""
+        activity_type = "Ride"
+        start_date = "2026-09-07"
+        workout_doc = {"steps": [{"duration": 600}]}
+
+    monkeypatch.setattr(workout, "web_login", lambda *a, **k: session)
+    monkeypatch.setattr(workout, "_fetch_workout_library", lambda *a, **k: (set(), set()))
+    monkeypatch.setattr(intervals_icu, "fetch_calendar_workouts", lambda *a, **k: [CW()])
+    monkeypatch.setattr(
+        workout, "icu_workout_doc_to_bryton_fit", lambda *a, **k: _valid_fit_bytes()
+    )
+
+    seen: list[str | None] = []
+
+    def fake_upload(session, fit_bytes, name, *, info=None, http=None):
+        seen.append(info)
+        return True
+
+    monkeypatch.setattr(workout, "upload_workout_fit", fake_upload)
+
+    workout.upload_workouts(
+        workout.BrytonWorkoutUploadConfig(
+            bryton_email="a@b.com", bryton_password="pw", intervals_api_key="key"
+        )
+    )
+
+    assert len(seen) == 1
+    assert seen[0] is not None, "upload sent no info blob: workout will not reach the device"
+    assert json.loads(seen[0])["plan"] == ["2026-09-07"]
+
+
+def test_build_workout_info_counts_encoded_steps_not_raw_ones():
+    """Repeats expand in the FIT, so ``interval`` must follow the encoder."""
+    doc = {
+        "ftp": 220,
+        "steps": [
+            {"duration": 600, "warmup": True, "power": {"value": 50, "units": "%ftp"}},
+            {
+                "reps": 4,
+                "steps": [
+                    {"duration": 300, "power": {"value": 105, "units": "%ftp"}},
+                    {"duration": 300, "power": {"value": 50, "units": "%ftp"}},
+                ],
+            },
+            {"duration": 600, "cooldown": True, "power": {"value": 45, "units": "%ftp"}},
+        ],
+    }
+    info = json.loads(workout.build_workout_info("Threshold", "2026-09-07", doc))
+    assert len(info["interval"]) == fit_encode.encoded_step_count(doc)
+    assert len(info["interval"]) > len(doc["steps"])
