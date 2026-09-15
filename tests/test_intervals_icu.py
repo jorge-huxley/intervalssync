@@ -33,6 +33,7 @@ def test_fetch_calendar_workouts(monkeypatch):
                     "name": "Big Gear",
                     "description": "Strength",
                     "type": "Ride",
+                    "start_date_local": "2026-06-03T00:00:00",
                     "workout_doc": {"steps": [{"duration": 120}]},
                 },
                 {
@@ -49,6 +50,9 @@ def test_fetch_calendar_workouts(monkeypatch):
     assert len(items) == 1
     assert items[0].event_id == 100
     assert items[0].name == "Big Gear"
+    # Bryton schedules workouts by date; without this they never reach the
+    # head unit. See build_workout_info().
+    assert items[0].start_date == "2026-06-03"
 
 
 def test_fetch_sport_settings_max_hr(monkeypatch):

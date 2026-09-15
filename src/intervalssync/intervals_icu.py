@@ -27,6 +27,7 @@ class CalendarWorkout:
     description: str
     activity_type: str
     workout_doc: dict[str, Any]
+    start_date: str = ""
 
 
 @dataclass(frozen=True)
@@ -141,6 +142,7 @@ def fetch_calendar_workouts(
                 description=str(event.get("description") or ""),
                 activity_type=str(event.get("type") or "Ride"),
                 workout_doc=workout_doc,
+                start_date=str(event.get("start_date_local") or "")[:10],
             )
         )
     return workouts
