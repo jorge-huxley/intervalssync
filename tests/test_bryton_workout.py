@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import pytest
 
@@ -124,6 +125,91 @@ def test_apply_uploaded_bryton_workout_map():
     )
     workout.apply_uploaded_bryton_workout_map(uploaded, result)
     assert uploaded == {"1": "new_name"}
+
+
+@pytest.fixture
+def frozen_upload_time(monkeypatch):
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 9, 15, 12, 0, 0, tzinfo=tz)
+
+    monkeypatch.setattr(workout, "datetime", FrozenDatetime)
+
+
+def test_upload_workout_fit_blank_names_are_unique(frozen_upload_time):
+    session = BrytonSession(user_id="u1", auth_token="tok", host="active.brytonsport.com")
+    filenames = []
+
+    class FakeSession:
+        def post(self, url, *, files, data, headers, timeout):
+            assert files["file"][0] == data["name"]
+            filenames.append(data["name"])
+            return FakeResponse()
+
+    for _ in range(2):
+        assert workout.upload_workout_fit(
+            session, _valid_fit_bytes(), "", http=FakeSession()
+        )
+
+    assert len(set(filenames)) == 2
+    assert all(name.startswith("bsWO") and name.endswith(".fit") for name in filenames)
+
+
+def test_same_time_uploads_keep_filename_dedup_independent(monkeypatch, frozen_upload_time):
+    session = BrytonSession(user_id="u1", auth_token="tok", host="active.brytonsport.com")
+    calendar = [
+        intervals_icu.CalendarWorkout(
+            event_id=event_id,
+            name="Intervals",
+            description="",
+            activity_type="Ride",
+            workout_doc={"steps": [{"duration": 600}]},
+            start_date="2026-09-15",
+        )
+        for event_id in (10, 11)
+    ]
+    live_names = set()
+    posted_names = []
+
+    class FakeSession:
+        def post(self, url, *, files, data, headers, timeout):
+            assert files["file"][0] == data["name"]
+            stem = data["name"].removesuffix(".fit")
+            live_names.add(stem)
+            posted_names.append(stem)
+            return FakeResponse()
+
+    monkeypatch.setattr(workout, "web_login", lambda *a, **k: session)
+    # No IDs available: exercise the persisted filename fallback.
+    monkeypatch.setattr(
+        workout, "_fetch_workout_library", lambda *a, **k: (set(), set(live_names))
+    )
+    monkeypatch.setattr(intervals_icu, "fetch_calendar_workouts", lambda *a, **k: calendar)
+    monkeypatch.setattr(workout.requests, "Session", FakeSession)
+
+    config = workout.BrytonWorkoutUploadConfig(
+        bryton_email="a@b.com", bryton_password="pw", intervals_api_key="key"
+    )
+    first = workout.upload_workouts(config)
+    assert first.uploaded == 2
+    assert len(set(posted_names)) == 2
+    assert first.uploaded_map == dict(zip(("10", "11"), posted_names))
+    workout.apply_uploaded_bryton_workout_map(config.uploaded_workouts, first)
+
+    # Removing one workout must not let the remaining name hide its absence.
+    removed_name = config.uploaded_workouts["10"]
+    live_names.remove(removed_name)
+    second = workout.upload_workouts(config)
+    assert second.uploaded == 1
+    assert second.skipped == 1
+    assert set(second.uploaded_map) == {"10"}
+    assert second.uploaded_map["10"] not in first.uploaded_map.values()
+    workout.apply_uploaded_bryton_workout_map(config.uploaded_workouts, second)
+
+    third = workout.upload_workouts(config)
+    assert third.uploaded == 0
+    assert third.skipped == 2
 
 
 def test_upload_workouts_skips_already_uploaded(monkeypatch):

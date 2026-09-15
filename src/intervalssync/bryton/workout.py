@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any, Callable
+from uuid import uuid4
 
 import requests
 
@@ -191,10 +192,12 @@ def _sanitize_workout_filename(name: str, *, event_id: int) -> str:
 
 
 def _auto_workout_filename() -> str:
+    # Names are a fallback deduplication key, so time alone is insufficient
+    # when multiple uploads (including separate processes) share a timestamp.
     now = datetime.now()
     return (
         f"bsWO{now.month:02d}{now.day:02d}_"
-        f"{now.hour:02d}{now.minute:02d}{now.second:02d}"
+        f"{now.hour:02d}{now.minute:02d}{now.second:02d}_{uuid4().hex}"
     )
 
 
