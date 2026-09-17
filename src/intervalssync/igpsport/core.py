@@ -28,7 +28,10 @@ from ..dropbox_client import (
     upload_to_dropbox,
 )
 from ..intervals_icu import (
-    fetch_uploaded_external_ids as icu_fetch_uploaded_external_ids,
+    ActivityIdentities,
+    ActivityUploadResult,
+    activity_exists as icu_activity_exists,
+    fetch_activity_identities as icu_fetch_activity_identities,
     set_activity_type,
     upload_fit_file,
 )
@@ -118,12 +121,15 @@ class SyncResult:
     listed: int = 0
     downloaded: int = 0
     uploaded: int = 0
+    linked: int = 0
     uploaded_dropbox: int = 0
     skipped: int = 0
     skipped_dropbox: int = 0
     failed: int = 0
     failed_dropbox: int = 0
     activities: list[Activity] = field(default_factory=list)
+    activity_map: dict[str, str] = field(default_factory=dict)
+    pruned_keys: list[str] = field(default_factory=list)
 
 
 # A progress callback receives short, human-readable status events. It is
@@ -300,18 +306,23 @@ def download_fit(fit_url: str, dest_path: Path) -> Path:
 
 def upload_to_intervals(
     fit_path: Path, title: str, ride_id: int, api_key: str
-) -> str | None:
-    """Upload a .fit file to intervals.icu; return the new activity id or None."""
+) -> ActivityUploadResult | None:
+    """Upload a .fit file to intervals.icu and return its identity result."""
     return upload_fit_file(
         fit_path, title, external_id_for(ride_id), api_key
     )
 
 
-def fetch_uploaded_external_ids(
+def fetch_activity_identities(
     api_key: str, oldest: date, newest: date
-) -> set[str]:
-    """Return external_ids for rides already on intervals.icu in a date range."""
-    return icu_fetch_uploaded_external_ids(api_key, oldest, newest)
+) -> ActivityIdentities:
+    """Return activity IDs and external-ID links in an Intervals date range."""
+    return icu_fetch_activity_identities(api_key, oldest, newest)
+
+
+def activity_exists(api_key: str, activity_id: str) -> bool:
+    """Return whether a mapped Intervals activity still exists."""
+    return icu_activity_exists(api_key, activity_id)
 
 
 def _activity_date_range(activities: list[Activity]) -> tuple[date, date]:
@@ -346,6 +357,8 @@ class SyncConfig:
     # When False (default), skip activities already uploaded to intervals.icu.
     # When True, re-download and re-upload them regardless.
     force_resync: bool = False
+    # iGPSPORT ride id (decimal string) → intervals.icu activity id.
+    uploaded_activities: dict[str, str] = field(default_factory=dict)
     # Sport to set on uploaded activities (intervals.icu doesn't accept it on
     # upload). Empty string = leave the uploaded sport untouched.
     activity_type: str = ACTIVITY_TYPE_KEEP
@@ -358,8 +371,27 @@ class SyncConfig:
     dropbox_date_filenames: bool = True
 
 
-def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
-    """Run the configured steps end-to-end, reporting progress via the callback."""
+def apply_uploaded_activity_map(
+    uploaded_activities: dict[str, str],
+    result: SyncResult,
+) -> None:
+    """Merge activity identities into config and remove verified deletions."""
+    for key in result.pruned_keys:
+        uploaded_activities.pop(key, None)
+    uploaded_activities.update(result.activity_map)
+
+
+def sync(
+    config: SyncConfig,
+    progress: Progress | None = None,
+    *,
+    on_activity_map: Callable[[SyncResult], None] | None = None,
+) -> SyncResult:
+    """Sync rides, checkpointing verified identities before subsequent I/O.
+
+    Front-ends can persist the cumulative identity map with on_activity_map.
+    Persistence errors propagate so we stop before doing more remote work.
+    """
     report = progress or _noop
     result = SyncResult()
 
@@ -387,21 +419,50 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
     if not needs_url:
         return result
 
-    # Figure out which activities are already on intervals.icu so we can skip
-    # re-downloading them. Only relevant when uploading and not forcing a resync.
-    already_uploaded: set[str] = set()
+    # Resolve every Intervals identity before processing any ride. This keeps a
+    # later verification failure from occurring after earlier FIT downloads.
+    intervals_skip: set[str] = set()
     if config.upload_intervals and not config.force_resync and config.intervals_api_key:
         oldest, newest = _activity_date_range(activities)
         try:
-            already_uploaded = fetch_uploaded_external_ids(
+            identities = fetch_activity_identities(
                 config.intervals_api_key, oldest, newest
             )
-            report(
-                f"{len(already_uploaded)} activities already on intervals.icu "
-                f"in {oldest.isoformat()}…{newest.isoformat()}."
-            )
-        except requests.RequestException as exc:
-            report(f"⚠ Could not check intervals.icu (will process all): {exc}")
+        except (requests.RequestException, ValueError) as exc:
+            raise SyncError(f"Could not check intervals.icu activities: {exc}") from exc
+
+        report(
+            f"{len(identities.activity_ids)} activities already on intervals.icu "
+            f"in {oldest.isoformat()}…{newest.isoformat()}."
+        )
+        for act in activities:
+            ride_key = str(act.ride_id)
+            external_id = external_id_for(act.ride_id)
+            discovered_id = identities.external_ids.get(external_id)
+            if discovered_id is not None:
+                intervals_skip.add(ride_key)
+                result.activity_map[ride_key] = discovered_id
+                continue
+
+            mapped_id = config.uploaded_activities.get(ride_key)
+            if mapped_id is None:
+                continue
+            if mapped_id in identities.activity_ids:
+                intervals_skip.add(ride_key)
+                continue
+            try:
+                mapped_exists = activity_exists(config.intervals_api_key, mapped_id)
+            except requests.RequestException as exc:
+                raise SyncError(
+                    f"Could not verify intervals.icu activity {mapped_id}: {exc}"
+                ) from exc
+            if mapped_exists:
+                intervals_skip.add(ride_key)
+            else:
+                result.pruned_keys.append(ride_key)
+
+    if on_activity_map and (result.activity_map or result.pruned_keys):
+        on_activity_map(result)
 
     # Validate Dropbox prerequisites once, before processing any activity, so a
     # misconfiguration fails fast instead of part-way through the loop.
@@ -430,13 +491,14 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
     any_upload_enabled = config.upload_intervals or config.upload_dropbox
 
     for act in activities:
+        ride_key = str(act.ride_id)
         ext = external_id_for(act.ride_id)
         fit_path = download_dir / f"{ext}.fit"
         dropbox_filename = dropbox_filename_for(act, config.dropbox_date_filenames)
 
         # Each target tracks its own "already there" state, so an activity can
         # be uploaded to one target while being skipped on the other.
-        intervals_needs_it = config.upload_intervals and ext not in already_uploaded
+        intervals_needs_it = config.upload_intervals and ride_key not in intervals_skip
         dropbox_needs_it = (
             config.upload_dropbox and dropbox_filename not in dropbox_uploaded_names
         )
@@ -473,14 +535,23 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
             if not config.intervals_api_key:
                 raise SyncError("intervals.icu API key is required for upload.")
 
-            activity_id = upload_to_intervals(
+            upload_result = upload_to_intervals(
                 fit_path, act.title, act.ride_id, config.intervals_api_key
             )
-            if activity_id:
-                report(f"✓ Uploaded {act.ride_id}: {act.title}")
-                result.uploaded += 1
+            if upload_result:
+                activity_id = upload_result.activity_id
+                result.activity_map[ride_key] = activity_id
+                if upload_result.created:
+                    report(f"✓ Uploaded {act.ride_id}: {act.title}")
+                    result.uploaded += 1
+                else:
+                    report(f"↔ Linked {act.ride_id}: {act.title}")
+                    result.linked += 1
 
-                if config.activity_type:
+                if on_activity_map:
+                    on_activity_map(result)
+
+                if upload_result.created and config.activity_type:
                     if set_activity_type(
                         activity_id, config.activity_type, config.intervals_api_key
                     ):

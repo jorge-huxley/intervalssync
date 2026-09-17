@@ -8,6 +8,7 @@ import pytest
 
 from intervalssync.bryton import core
 from intervalssync.bryton.ddp import BrytonSession, _is_deleted_activity
+from intervalssync.intervals_icu import ActivityUploadResult
 
 
 def _local_ts(year: int, month: int, day: int, hour: int, minute: int, second: int) -> int:
@@ -99,7 +100,7 @@ def stub_sync(monkeypatch, tmp_path):
 
     def fake_upload(fp, title, ext, key):
         rec["uploaded"].append(ext)
-        return "icu-1"
+        return ActivityUploadResult("icu-1", created=True)
 
     monkeypatch.setattr(core, "upload_fit_file", fake_upload)
 
@@ -157,7 +158,11 @@ def test_sync_ignores_deleted_activities(monkeypatch, tmp_path):
         return dest_path
 
     monkeypatch.setattr(core, "download_fit_to_path", fake_download)
-    monkeypatch.setattr(core, "upload_fit_file", lambda *a, **k: "icu-1")
+    monkeypatch.setattr(
+        core,
+        "upload_fit_file",
+        lambda *a, **k: ActivityUploadResult("icu-1", created=True),
+    )
 
     cfg = core.SyncConfig(
         bryton_email="a@b.com",

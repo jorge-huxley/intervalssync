@@ -205,10 +205,11 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
             if not config.intervals_api_key:
                 raise BrytonSyncError("intervals.icu API key is required for upload.")
 
-            activity_id = upload_fit_file(
+            upload_result = upload_fit_file(
                 fit_path, act.title, ext, config.intervals_api_key
             )
-            if activity_id:
+            if upload_result:
+                activity_id = upload_result.activity_id
                 report(f"✓ Uploaded {act.activity_id}: {act.title}")
                 result.uploaded += 1
                 if config.activity_type:

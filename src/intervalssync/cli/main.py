@@ -20,6 +20,7 @@ from ..bryton.exceptions import BrytonSyncError
 from ..igpsport.core import SyncConfig as IgpSyncConfig
 from ..igpsport.core import SyncError as IgpSyncError
 from ..igpsport.core import SyncResult as IgpSyncResult
+from ..igpsport.core import apply_uploaded_activity_map
 from ..igpsport.core import sync as igpsport_sync
 from ..igpsport.profile_sync import (
     ProfileSyncConfig,
@@ -68,6 +69,7 @@ def _build_igpsport_sync_config(
             delete_after_upload if delete_after_upload is not None else config.delete_after_upload
         ),
         force_resync=force_resync if force_resync is not None else config.force_resync,
+        uploaded_activities=dict(config.uploaded_activities),
         activity_type=activity_type if activity_type is not None else config.activity_type,
         list_activities=True,
         get_download_url=True,
@@ -110,9 +112,11 @@ def _igpsport_result_payload(result: IgpSyncResult, *, ok: bool, error: str | No
         "source": "igpsport",
         "listed": result.listed,
         "uploaded": result.uploaded,
+        "linked": result.linked,
         "skipped": result.skipped,
         "failed": result.failed,
         "downloaded": result.downloaded,
+        "activity_map": result.activity_map,
         "activities": [
             {
                 "ride_id": act.ride_id,
@@ -157,6 +161,7 @@ def _emit_json(payload: dict) -> None:
 def _emit_igpsport_text_summary(result: IgpSyncResult) -> None:
     print(
         f"Done — uploaded {result.uploaded}, "
+        f"linked {result.linked}, "
         f"downloaded {result.downloaded}, "
         f"skipped {result.skipped}, "
         f"failed {result.failed}."
@@ -332,8 +337,14 @@ def cmd_sync(args: argparse.Namespace) -> int:
         download_dir=args.download_dir,
         delete_after_upload=delete_after_upload,
     )
+    def persist_activity_map(partial_result: IgpSyncResult) -> None:
+        apply_uploaded_activity_map(config.uploaded_activities, partial_result)
+        cli_config_module.save(config)
+
     try:
-        result = igpsport_sync(sync_config, progress=progress)
+        result = igpsport_sync(
+            sync_config, progress=progress, on_activity_map=persist_activity_map
+        )
     except IgpSyncError as exc:
         if use_json:
             _emit_json(_igpsport_result_payload(IgpSyncResult(), ok=False, error=str(exc)))
@@ -346,6 +357,10 @@ def cmd_sync(args: argparse.Namespace) -> int:
         else:
             print(f"✗ Unexpected error: {exc}", file=sys.stderr)
         return EXIT_SYNC_ERROR
+
+    if result.activity_map or result.pruned_keys:
+        apply_uploaded_activity_map(config.uploaded_activities, result)
+        cli_config_module.save(config)
 
     ok = result.failed == 0
     if use_json:

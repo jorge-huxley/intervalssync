@@ -31,6 +31,8 @@ class CliConfig:
     delete_after_upload: bool = True
     force_resync: bool = False
     activity_type: str = ""
+    # iGPSPORT ride id (decimal string) → intervals.icu activity id.
+    uploaded_activities: dict[str, str] = field(default_factory=dict)
     # Planned workouts: intervals.icu event id → iGPSPORT workoutId.
     uploaded_workouts: dict[str, int] = field(default_factory=dict)
     # Planned workouts: intervals.icu event id → Bryton FIT filename stem.

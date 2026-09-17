@@ -148,17 +148,26 @@ def test_check_missing_credentials(tmp_path: Path, capsys):
 def test_sync_json_success(tmp_path: Path, monkeypatch, capsys):
     env_file = tmp_path / ".env"
     _write_env(env_file)
+    monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
+    cli_config.save(
+        cli_config.CliConfig(uploaded_activities={"7": "old-i7"})
+    )
 
     activities = [core.Activity(1, "Ride", "2026-06-15 08:00:00")]
 
-    def fake_sync(config, progress=None):
+    def fake_sync(config, progress=None, **kwargs):
+        assert config.uploaded_activities == {"7": "old-i7"}
+        config.uploaded_activities["999"] = "must-not-leak"
         if progress:
             progress("working")
         return core.SyncResult(
             listed=1,
             downloaded=1,
-            uploaded=1,
+            linked=1,
             activities=activities,
+            activity_map={"1": "i1"},
+            pruned_keys=["7"],
         )
 
     monkeypatch.setattr(cli, "igpsport_sync", fake_sync)
@@ -172,15 +181,76 @@ def test_sync_json_success(tmp_path: Path, monkeypatch, capsys):
     assert "working" in captured.err
     payload = json.loads(captured.out)
     assert payload["ok"] is True
-    assert payload["uploaded"] == 1
+    assert payload["uploaded"] == 0
+    assert payload["linked"] == 1
+    assert payload["activity_map"] == {"1": "i1"}
     assert payload["activities"][0]["ride_id"] == 1
+    assert cli_config.load().uploaded_activities == {"1": "i1"}
+
+
+def test_sync_persists_activity_map_after_partial_failure(
+    tmp_path: Path, monkeypatch, capsys
+):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+    monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
+
+    monkeypatch.setattr(
+        cli,
+        "igpsport_sync",
+        lambda config, progress=None, **kwargs: core.SyncResult(
+            uploaded=1,
+            failed=1,
+            activity_map={"2": "i2"},
+        ),
+    )
+
+    args = cli._build_parser().parse_args(
+        ["sync", "--env-file", str(env_file), "--json"]
+    )
+    assert cli.cmd_sync(args) == cli.EXIT_SYNC_ERROR
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["activity_map"] == {"2": "i2"}
+    assert cli_config.load().uploaded_activities == {"2": "i2"}
+
+
+def test_sync_exception_does_not_change_activity_map(tmp_path: Path, monkeypatch, capsys):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+    monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
+    cli_config.save(
+        cli_config.CliConfig(uploaded_activities={"7": "old-i7"})
+    )
+
+    def fake_sync(config, progress=None, **kwargs):
+        config.uploaded_activities["999"] = "must-not-leak"
+        raise core.SyncError("lookup failed")
+
+    monkeypatch.setattr(cli, "igpsport_sync", fake_sync)
+
+    args = cli._build_parser().parse_args(
+        ["sync", "--env-file", str(env_file), "--json"]
+    )
+    assert cli.cmd_sync(args) == cli.EXIT_SYNC_ERROR
+
+    assert cli_config.load().uploaded_activities == {"7": "old-i7"}
+
+
+def test_igpsport_text_summary_includes_linked(capsys):
+    cli._emit_igpsport_text_summary(core.SyncResult(uploaded=1, linked=2))
+
+    assert "uploaded 1, linked 2," in capsys.readouterr().out
 
 
 def test_sync_json_sync_error(tmp_path: Path, monkeypatch, capsys):
     env_file = tmp_path / ".env"
     _write_env(env_file)
 
-    def fake_sync(config, progress=None):
+    def fake_sync(config, progress=None, **kwargs):
         raise core.SyncError("login failed")
 
     monkeypatch.setattr(cli, "igpsport_sync", fake_sync)
@@ -197,11 +267,27 @@ def test_cli_config_roundtrip(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
 
-    cfg = cli_config.CliConfig(env_file="/custom/.env", max_activities=10)
+    cfg = cli_config.CliConfig(
+        env_file="/custom/.env",
+        max_activities=10,
+        uploaded_activities={"123": "i456"},
+    )
     cli_config.save(cfg)
     loaded = cli_config.load()
     assert loaded.env_file == "/custom/.env"
     assert loaded.max_activities == 10
+    assert loaded.uploaded_activities == {"123": "i456"}
+
+
+def test_cli_config_loads_legacy_file_without_uploaded_activities(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
+    cli_config.CONFIG_PATH.write_text('{"max_activities": 9}', encoding="utf-8")
+
+    loaded = cli_config.load()
+
+    assert loaded.max_activities == 9
+    assert loaded.uploaded_activities == {}
 
 
 def test_upload_workouts_parser_accepts_flags():
@@ -343,7 +429,7 @@ def test_sync_zones_json_success(tmp_path: Path, monkeypatch, capsys):
     env_file = tmp_path / ".env"
     _write_env(env_file)
 
-    def fake_sync(config, progress=None):
+    def fake_sync(config, progress=None, **kwargs):
         if progress:
             progress("syncing zones")
         return igp_profile_sync.ProfileSyncResult(
@@ -375,7 +461,7 @@ def test_sync_zones_json_sync_error(tmp_path: Path, monkeypatch, capsys):
     env_file = tmp_path / ".env"
     _write_env(env_file)
 
-    def fake_sync(config, progress=None):
+    def fake_sync(config, progress=None, **kwargs):
         raise core.SyncError("profile update failed")
 
     monkeypatch.setattr(cli, "sync_profile_zones", fake_sync)

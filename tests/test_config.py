@@ -20,6 +20,7 @@ def test_defaults():
     assert cfg.dropbox_folder == "/intervalssync-fit"
     assert cfg.dropbox_date_filenames is True
     assert cfg.uploaded_workouts == {}
+    assert cfg.uploaded_activities == {}
     assert cfg.uploaded_bryton_workouts == {}
     assert cfg.workout_days_ahead == 1
     assert cfg.lifetime_activities_uploaded == 0
@@ -44,6 +45,7 @@ def test_save_and_load_roundtrip(tmp_path, monkeypatch):
         upload_dropbox=True,
         dropbox_folder="/rides",
         dropbox_date_filenames=False,
+        uploaded_activities={"123": "existing-activity"},
     )
     config_module.save(cfg)
     assert path.exists()
@@ -56,6 +58,7 @@ def test_save_and_load_roundtrip(tmp_path, monkeypatch):
     assert loaded.upload_dropbox is True
     assert loaded.dropbox_folder == "/rides"
     assert loaded.dropbox_date_filenames is False
+    assert loaded.uploaded_activities == {"123": "existing-activity"}
 
 
 def test_load_ignores_unknown_keys(tmp_path, monkeypatch):
