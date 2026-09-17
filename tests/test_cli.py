@@ -156,7 +156,7 @@ def test_sync_json_success(tmp_path: Path, monkeypatch, capsys):
 
     activities = [core.Activity(1, "Ride", "2026-06-15 08:00:00")]
 
-    def fake_sync(config, progress=None):
+    def fake_sync(config, progress=None, **kwargs):
         assert config.uploaded_activities == {"7": "old-i7"}
         config.uploaded_activities["999"] = "must-not-leak"
         if progress:
@@ -199,7 +199,7 @@ def test_sync_persists_activity_map_after_partial_failure(
     monkeypatch.setattr(
         cli,
         "igpsport_sync",
-        lambda config, progress=None: core.SyncResult(
+        lambda config, progress=None, **kwargs: core.SyncResult(
             uploaded=1,
             failed=1,
             activity_map={"2": "i2"},
@@ -226,7 +226,7 @@ def test_sync_exception_does_not_change_activity_map(tmp_path: Path, monkeypatch
         cli_config.CliConfig(uploaded_activities={"7": "old-i7"})
     )
 
-    def fake_sync(config, progress=None):
+    def fake_sync(config, progress=None, **kwargs):
         config.uploaded_activities["999"] = "must-not-leak"
         raise core.SyncError("lookup failed")
 
@@ -250,7 +250,7 @@ def test_sync_json_sync_error(tmp_path: Path, monkeypatch, capsys):
     env_file = tmp_path / ".env"
     _write_env(env_file)
 
-    def fake_sync(config, progress=None):
+    def fake_sync(config, progress=None, **kwargs):
         raise core.SyncError("login failed")
 
     monkeypatch.setattr(cli, "igpsport_sync", fake_sync)
@@ -429,7 +429,7 @@ def test_sync_zones_json_success(tmp_path: Path, monkeypatch, capsys):
     env_file = tmp_path / ".env"
     _write_env(env_file)
 
-    def fake_sync(config, progress=None):
+    def fake_sync(config, progress=None, **kwargs):
         if progress:
             progress("syncing zones")
         return igp_profile_sync.ProfileSyncResult(
@@ -461,7 +461,7 @@ def test_sync_zones_json_sync_error(tmp_path: Path, monkeypatch, capsys):
     env_file = tmp_path / ".env"
     _write_env(env_file)
 
-    def fake_sync(config, progress=None):
+    def fake_sync(config, progress=None, **kwargs):
         raise core.SyncError("profile update failed")
 
     monkeypatch.setattr(cli, "sync_profile_zones", fake_sync)

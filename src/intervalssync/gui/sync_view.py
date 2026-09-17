@@ -18,6 +18,7 @@ from ..bryton.workout import (
 from ..igpsport.core import (
     SyncConfig as IgpSyncConfig,
     SyncError,
+    SyncResult as IgpSyncResult,
     apply_uploaded_activity_map,
     sync as igpsport_sync,
 )
@@ -213,9 +214,15 @@ def build_sync_view(
             dropbox_date_filenames=config.dropbox_date_filenames,
         )
 
+        def persist_activity_map(partial_result: IgpSyncResult) -> None:
+            apply_uploaded_activity_map(config.uploaded_activities, partial_result)
+            config_module.save(config)
+
         uploaded_count = 0
         try:
-            result = igpsport_sync(sync_config, progress=append_log)
+            result = igpsport_sync(
+                sync_config, progress=append_log, on_activity_map=persist_activity_map
+            )
             if result.activity_map or result.pruned_keys:
                 apply_uploaded_activity_map(config.uploaded_activities, result)
                 config_module.save(config)

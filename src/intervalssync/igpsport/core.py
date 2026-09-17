@@ -381,8 +381,17 @@ def apply_uploaded_activity_map(
     uploaded_activities.update(result.activity_map)
 
 
-def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
-    """Run the configured steps end-to-end, reporting progress via the callback."""
+def sync(
+    config: SyncConfig,
+    progress: Progress | None = None,
+    *,
+    on_activity_map: Callable[[SyncResult], None] | None = None,
+) -> SyncResult:
+    """Sync rides, checkpointing verified identities before subsequent I/O.
+
+    Front-ends can persist the cumulative identity map with on_activity_map.
+    Persistence errors propagate so we stop before doing more remote work.
+    """
     report = progress or _noop
     result = SyncResult()
 
@@ -451,6 +460,9 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
                 intervals_skip.add(ride_key)
             else:
                 result.pruned_keys.append(ride_key)
+
+    if on_activity_map and (result.activity_map or result.pruned_keys):
+        on_activity_map(result)
 
     # Validate Dropbox prerequisites once, before processing any activity, so a
     # misconfiguration fails fast instead of part-way through the loop.
@@ -535,6 +547,9 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
                 else:
                     report(f"↔ Linked {act.ride_id}: {act.title}")
                     result.linked += 1
+
+                if on_activity_map:
+                    on_activity_map(result)
 
                 if upload_result.created and config.activity_type:
                     if set_activity_type(

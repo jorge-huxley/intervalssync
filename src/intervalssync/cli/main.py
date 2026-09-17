@@ -337,8 +337,14 @@ def cmd_sync(args: argparse.Namespace) -> int:
         download_dir=args.download_dir,
         delete_after_upload=delete_after_upload,
     )
+    def persist_activity_map(partial_result: IgpSyncResult) -> None:
+        apply_uploaded_activity_map(config.uploaded_activities, partial_result)
+        cli_config_module.save(config)
+
     try:
-        result = igpsport_sync(sync_config, progress=progress)
+        result = igpsport_sync(
+            sync_config, progress=progress, on_activity_map=persist_activity_map
+        )
     except IgpSyncError as exc:
         if use_json:
             _emit_json(_igpsport_result_payload(IgpSyncResult(), ok=False, error=str(exc)))

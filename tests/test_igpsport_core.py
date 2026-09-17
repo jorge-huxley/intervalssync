@@ -763,6 +763,39 @@ def test_apply_uploaded_activity_map_updates_and_prunes():
     assert uploaded == {"1": "new-i1", "3": "i3"}
 
 
+def test_checkpoint_saves_discovery_and_pruning_before_download(stub_sync, monkeypatch):
+    stub_sync["existing"] = {"igpsport_1"}
+    stub_sync["verified"]["deleted-i2"] = False
+    persisted = {"2": "deleted-i2", "99": "unrelated"}
+
+    def fail_download(*args):
+        assert persisted == {"1": "existing-igpsport_1", "99": "unrelated"}
+        raise core.requests.Timeout("download failed")
+
+    monkeypatch.setattr(core, "download_fit", fail_download)
+    with pytest.raises(core.requests.Timeout, match="download failed"):
+        core.sync(
+            _config(stub_sync["tmp"], uploaded_activities=dict(persisted)),
+            on_activity_map=lambda result: core.apply_uploaded_activity_map(persisted, result),
+        )
+
+
+def test_checkpoint_write_error_stops_before_more_remote_work(stub_sync):
+    def fail_save(result):
+        assert result.activity_map == {"1": "i1"}
+        raise OSError("disk full")
+
+    with pytest.raises(OSError, match="disk full"):
+        core.sync(
+            _config(stub_sync["tmp"], activity_type="GravelRide"),
+            on_activity_map=fail_save,
+        )
+
+    assert stub_sync["uploaded"] == [1]
+    assert stub_sync["downloaded"] == ["igpsport_1.fit"]
+    assert stub_sync["typed"] == []
+
+
 def test_sync_expected_external_id_seeds_mapping_without_download(stub_sync):
     stub_sync["existing"] = {"igpsport_1"}
 
