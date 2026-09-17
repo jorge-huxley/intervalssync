@@ -51,6 +51,8 @@ class AppConfig:
     upload_dropbox: bool = False
     dropbox_folder: str = "/intervalssync-fit"
     dropbox_date_filenames: bool = True
+    # iGPSPORT ride id (decimal string) → intervals.icu activity id.
+    uploaded_activities: dict[str, str] = field(default_factory=dict)
     # Planned workouts: intervals.icu event id → iGPSPORT workoutId.
     uploaded_workouts: dict[str, int] = field(default_factory=dict)
     # Planned workouts: intervals.icu event id → Bryton file id or filename stem.

@@ -15,7 +15,12 @@ from ..bryton.workout import (
     apply_uploaded_bryton_workout_map,
     upload_workouts as bryton_upload_workouts,
 )
-from ..igpsport.core import SyncConfig as IgpSyncConfig, SyncError, sync as igpsport_sync
+from ..igpsport.core import (
+    SyncConfig as IgpSyncConfig,
+    SyncError,
+    apply_uploaded_activity_map,
+    sync as igpsport_sync,
+)
 from ..dropbox_client import get_dropbox_app_key
 from ..igpsport.workout import WorkoutUploadConfig, apply_uploaded_workout_map, upload_workouts
 from . import support_gamification
@@ -187,6 +192,7 @@ def build_sync_view(
         dropbox_app_key: str | None,
     ) -> None:
         sync_config = IgpSyncConfig(
+            uploaded_activities=dict(config.uploaded_activities),
             igp_user=config.igp_user,
             igp_password=igp_password,
             igp_region=config.igp_region,
@@ -210,9 +216,13 @@ def build_sync_view(
         uploaded_count = 0
         try:
             result = igpsport_sync(sync_config, progress=append_log)
+            if result.activity_map or result.pruned_keys:
+                apply_uploaded_activity_map(config.uploaded_activities, result)
+                config_module.save(config)
             uploaded_count = result.uploaded
             append_log(
                 f"\nDone — intervals uploaded {result.uploaded}, "
+                f"linked {result.linked}, "
                 f"Dropbox uploaded {result.uploaded_dropbox}, "
                 f"downloaded {result.downloaded}, "
                 f"skipped {result.skipped}, Dropbox skipped {result.skipped_dropbox}, "
