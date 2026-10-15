@@ -303,10 +303,13 @@ def test_set_activity_type(monkeypatch, status, expected):
 
 
 def test_login_builds_bearer_from_access_token():
+    captured = {}
+
     class FakeSession:
         headers: dict[str, str] = {}
 
         def post(self, *a, **k):
+            captured.update(k)
             return FakeResponse(
                 status=200,
                 json_data={"data": {"access_token": "intl.jwt.token"}},
@@ -318,6 +321,7 @@ def test_login_builds_bearer_from_access_token():
     session = FakeSession()
     headers = core.login(session, "user+tag@example.com", "igp&1%!")
     assert headers == {"Authorization": "Bearer intl.jwt.token"}
+    assert captured["timeout"] == (10, 30)
 
 
 def test_login_raises_when_access_token_missing():
@@ -342,7 +346,7 @@ def test_login_china_parses_access_token():
     class FakeSession:
         headers: dict[str, str] = {}
 
-        def post(self, url, json=None):
+        def post(self, url, json=None, **kwargs):
             assert json == {
                 "appId": "igpsport-web",
                 "username": "13800000000",
@@ -375,9 +379,10 @@ def test_list_activities_china_parses_camel_case_rows():
     captured = {}
 
     class FakeSession:
-        def get(self, url, params=None):
+        def get(self, url, params=None, **kwargs):
             captured["url"] = url
             captured["params"] = params
+            captured["timeout"] = kwargs.get("timeout")
             return FakeResponse(
                 json_data={
                     "data": {
@@ -400,10 +405,41 @@ def test_list_activities_china_parses_camel_case_rows():
         "sort": "1",
         "reqType": "0",
     }
+    assert captured["timeout"] == (10, 30)
     assert len(acts) == 1
     assert acts[0].ride_id == 42
     assert acts[0].title == "Morning ride"
     assert acts[0].start_time == "2026-06-01 08:00:00"
+
+
+def test_resolve_fit_url_bounds_detail_and_fallback_requests():
+    calls = []
+
+    class FakeSession:
+        def get(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return FakeResponse(status=404, json_data={})
+
+    assert core.resolve_fit_url(FakeSession(), {"Authorization": "Bearer x"}, 42) is None
+    assert len(calls) == 2
+    assert [kwargs["timeout"] for _, kwargs in calls] == [(10, 30), (10, 30)]
+
+
+def test_download_fit_uses_long_bounded_timeout(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_get(url, **kwargs):
+        captured.update(kwargs)
+        response = FakeResponse()
+        response.content = b"FIT"
+        return response
+
+    monkeypatch.setattr(core.requests, "get", fake_get)
+
+    destination = tmp_path / "ride.fit"
+    assert core.download_fit("https://fit.example/ride.fit", destination) == destination
+    assert destination.read_bytes() == b"FIT"
+    assert captured["timeout"] == (10, 120)
 
 
 def test_list_activities_requests_full_page_and_caps():
@@ -411,7 +447,7 @@ def test_list_activities_requests_full_page_and_caps():
     captured_pages: list[dict] = []
 
     class FakeSession:
-        def get(self, url, params=None):
+        def get(self, url, params=None, **kwargs):
             captured_pages.append(dict(params or {}))
             page_no = int(params["pageNo"])
             page_size = int(params["pageSize"])
@@ -443,7 +479,7 @@ def test_list_activities_paginates_when_api_caps_page_size():
     captured_pages: list[dict] = []
 
     class FakeSession:
-        def get(self, url, params=None):
+        def get(self, url, params=None, **kwargs):
             captured_pages.append(dict(params or {}))
             page_no = int(params["pageNo"])
             # Simulate iGPSPORT: always cap at 20 rows per page.
@@ -474,7 +510,7 @@ def test_list_activities_paginates_when_api_caps_page_size():
 
 def test_list_activities_caps_when_server_returns_extra():
     class FakeSession:
-        def get(self, url, params=None):
+        def get(self, url, params=None, **kwargs):
             rows = [{"rideId": i, "title": "", "startTime": ""} for i in range(20)]
             return FakeResponse(json_data={"data": {"rows": rows}})
 

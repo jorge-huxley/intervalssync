@@ -311,14 +311,31 @@ def test_upload_workouts_json_success(tmp_path: Path, monkeypatch, capsys):
         return workout.WorkoutUploadResult(
             listed=2,
             uploaded=1,
+            updated=2,
+            recreated=1,
             skipped=1,
+            description_truncated=1,
             uploaded_map={"42": 100},
+            synced_map={"42": 100},
+            workout_export_state={
+                "42": {
+                    "remote_id": 100,
+                    "export_fingerprint": "fingerprint",
+                }
+            },
         )
 
     monkeypatch.setattr(cli, "upload_workouts", fake_upload)
 
     args = cli._build_parser().parse_args(
-        ["upload-workouts", "--env-file", str(env_file), "--json", "--workout-days-ahead", "2"]
+        [
+            "upload-workouts",
+            "--env-file",
+            str(env_file),
+            "--json",
+            "--workout-days-ahead",
+            "2",
+        ]
     )
     assert cli.cmd_upload_workouts(args) == cli.EXIT_OK
 
@@ -328,12 +345,62 @@ def test_upload_workouts_json_success(tmp_path: Path, monkeypatch, capsys):
     assert payload["ok"] is True
     assert payload["source"] == "igpsport"
     assert payload["uploaded"] == 1
+    assert payload["updated"] == 2
+    assert payload["recreated"] == 1
     assert payload["skipped"] == 1
+    assert payload["description_truncated"] == 1
+    assert payload["unsupported"] == 0
+    assert payload["verification_failed"] == 0
+    assert payload["synced_map"] == {"42": 100}
     assert payload["no_steps"] == 0
 
     loaded = cli_config.load()
     assert loaded.uploaded_workouts == {"42": 100}
+    assert loaded.workout_export_state["42"]["export_fingerprint"] == "fingerprint"
     assert loaded.workout_days_ahead == 1
+
+
+def test_upload_workouts_checkpoints_pending_remote_id_before_verification(
+    tmp_path: Path, monkeypatch, capsys
+):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+    monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
+
+    def fake_upload(config, progress=None):
+        assert config.checkpoint is not None
+        config.checkpoint(
+            workout.WorkoutUploadResult(
+                workout_export_state={
+                    "42": {
+                        "remote_id": 100,
+                        "export_fingerprint": None,
+                        "verification_status": "pending",
+                    }
+                }
+            )
+        )
+        return workout.WorkoutUploadResult(
+            failed=1,
+            verification_failed=1,
+            workout_export_state={
+                "42": {
+                    "remote_id": 100,
+                    "export_fingerprint": None,
+                    "verification_status": "pending",
+                }
+            },
+        )
+
+    monkeypatch.setattr(cli, "upload_workouts", fake_upload)
+    args = cli._build_parser().parse_args(
+        ["upload-workouts", "--env-file", str(env_file), "--json"]
+    )
+
+    assert cli.cmd_upload_workouts(args) == cli.EXIT_SYNC_ERROR
+    assert json.loads(capsys.readouterr().out)["verification_failed"] == 1
+    assert cli_config.load().workout_export_state["42"]["verification_status"] == "pending"
 
 
 def test_upload_workouts_json_sync_error(tmp_path: Path, monkeypatch, capsys):

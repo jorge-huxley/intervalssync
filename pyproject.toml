@@ -40,6 +40,9 @@ dev = ["pytest>=8"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "real_verification: exercise the iGPSPORT read-back verifier instead of its upload-test stub",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -40,7 +40,7 @@ src/intervalssync/
 - **`intervals_icu.py`** — shared upload, skip-existing (`external_id`), sport PUT, calendar workout fetch, sport-settings lookup (`fetch_sport_settings`, `max_hr`).
 - **`igpsport/core.py`** — `sync(SyncConfig, progress)`: login → list → FIT URL → download → upload. `external_id`: `igpsport_{ride_id}`.
 - **`igpsport/profile_sync.py`** — `sync_profile_zones`: intervals.icu sport settings + athlete weight → iGPSPORT profile thresholds/zones/weight.
-- **`igpsport/workout.py`** — planned workouts intervals.icu → iGPSPORT.
+- **`igpsport/workout.py`** — planned workouts intervals.icu → iGPSPORT. CLI and GUI retain authoritative event-ID mappings and persist `workout_export_state` fingerprints/verification metadata bound to mapped remote IDs. Changed exports update in place; new event IDs never rebind another event's workout. Missing in-window workouts are recreated, and `[skip-igp]` suppresses writes. No automatic remote deletion.
 - **`bryton/ddp.py`** — Meteor DDP login + `activityList` subscription.
 - **`bryton/api.py`** — `GET https://m3.brytonactive.com/api/activity?id=…` (FIT download; Android app API).
 - **`bryton/core.py`** — `sync(SyncConfig, progress)`. `external_id`: `bryton_{activity_id}`.

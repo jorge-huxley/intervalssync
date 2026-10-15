@@ -206,12 +206,19 @@ def fetch_calendar_workouts(
     )
     resp.raise_for_status()
     workouts: list[CalendarWorkout] = []
-    for event in resp.json():
+    events = resp.json()
+    if not isinstance(events, list):
+        raise ValueError("intervals.icu calendar response must be a list")
+    for event in events:
+        if not isinstance(event, dict):
+            raise ValueError("intervals.icu calendar contains an invalid event")
         if event.get("category") != "WORKOUT":
             continue
         workout_doc = event.get("workout_doc")
-        if not isinstance(workout_doc, dict):
-            continue
+        if workout_doc is None:
+            workout_doc = {}
+        elif not isinstance(workout_doc, dict):
+            raise ValueError("intervals.icu workout document must be an object")
         workouts.append(
             CalendarWorkout(
                 event_id=int(event["id"]),

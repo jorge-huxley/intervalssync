@@ -3,8 +3,54 @@
 from __future__ import annotations
 
 import json
+import io
+import os
+
+import pytest
 
 from intervalssync.gui import config as config_module
+
+
+@pytest.mark.parametrize("failure", ["partial_write", "replace"])
+def test_failed_gui_save_preserves_checkpointed_pending_id(tmp_path, monkeypatch, failure):
+    path = tmp_path / "config.json"
+    monkeypatch.setattr(config_module, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config_module, "CONFIG_PATH", path)
+    cfg = config_module.AppConfig(
+        uploaded_workouts={"42": 100}, stats_seeded=True,
+        workout_export_state={"42": {"remote_id": 100,
+            "export_fingerprint": None, "verification_status": "pending"}},
+    )
+    config_module.save(cfg)
+    before = path.read_text(encoding="utf-8")
+    if failure == "replace":
+        def unavailable(*args, **kwargs):
+            raise OSError("synthetic replacement failure")
+        monkeypatch.setattr(os, "replace", unavailable)
+    else:
+        original_open = io.open
+        class InterruptedWriter:
+            def __init__(self, handle):
+                self.handle = handle
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return self.handle.__exit__(*args)
+            def write(self, value):
+                self.handle.write(value[:len(value) // 2])
+                self.handle.flush()
+                raise OSError("synthetic interrupted write")
+        def interrupted_open(file, mode="r", *args, **kwargs):
+            handle = original_open(file, mode, *args, **kwargs)
+            return InterruptedWriter(handle) if "w" in mode else handle
+        monkeypatch.setattr(io, "open", interrupted_open)
+    cfg.uploaded_workouts["43"] = 200
+    with pytest.raises(OSError):
+        config_module.save(cfg)
+    assert path.read_text(encoding="utf-8") == before
+    restored = config_module.load()
+    assert restored.uploaded_workouts == {"42": 100}
+    assert restored.workout_export_state["42"]["verification_status"] == "pending"
 
 
 def test_defaults():

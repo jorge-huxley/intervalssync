@@ -23,7 +23,7 @@ from ..igpsport.core import (
     sync as igpsport_sync,
 )
 from ..dropbox_client import get_dropbox_app_key
-from ..igpsport.workout import WorkoutUploadConfig, apply_uploaded_workout_map, upload_workouts
+from ..igpsport.workout import WorkoutUploadConfig, apply_workout_state, upload_workouts
 from . import support_gamification
 from . import theme
 
@@ -301,19 +301,28 @@ def build_sync_view(
             intervals_api_key=api_key,
             workout_days_ahead=config.workout_days_ahead,
             uploaded_workouts=dict(config.uploaded_workouts),
+            workout_export_state={key: dict(value) for key, value in config.workout_export_state.items()},
             force_resync=config.force_resync,
         )
+
+        def checkpoint(result):
+            apply_workout_state(config.uploaded_workouts, config.workout_export_state, result)
+            config_module.save(config)
+
+        upload_config.checkpoint = checkpoint
 
         uploaded_count = 0
         try:
             result = upload_workouts(upload_config, progress=append_log)
-            if result.uploaded_map or result.pruned_keys:
-                apply_uploaded_workout_map(config.uploaded_workouts, result)
+            if result.workout_export_state != config.workout_export_state or result.uploaded_map or result.pruned_keys:
+                apply_workout_state(config.uploaded_workouts, config.workout_export_state, result)
                 config_module.save(config)
-            uploaded_count = result.uploaded
+            uploaded_count = result.uploaded + result.recreated
             append_log(
                 f"\nDone — uploaded {result.uploaded}, "
+                f"updated {result.updated}, recreated {result.recreated}, "
                 f"skipped {result.skipped}, no steps {result.no_steps}, "
+                f"unsupported {result.unsupported}, verification failed {result.verification_failed}, "
                 f"failed {result.failed}."
             )
         except SyncError as exc:

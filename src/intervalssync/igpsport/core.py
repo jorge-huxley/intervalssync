@@ -37,6 +37,7 @@ from ..intervals_icu import (
 )
 
 from .region import INTERNATIONAL, IgpRegionConfig, resolve_region
+from .http import FIT_DOWNLOAD_TIMEOUT, HTTP_TIMEOUT
 
 LOGIN_URL = INTERNATIONAL.login_url
 GATEWAY = INTERNATIONAL.gateway_base
@@ -177,6 +178,7 @@ def _login_bearer_token(
     resp = session.post(
         login_url,
         json={"appId": "igpsport-web", "username": user, "password": password},
+        timeout=HTTP_TIMEOUT,
     )
     try:
         body = resp.json()
@@ -227,6 +229,7 @@ def _list_activities_query(
                 "sort": "1",
                 "reqType": "0",
             },
+            timeout=HTTP_TIMEOUT,
         )
         resp.raise_for_status()
 
@@ -279,7 +282,9 @@ def resolve_fit_url(
     gateway = cfg.gateway_base
 
     detail = session.get(
-        f"{gateway}/queryActivityDetail/{ride_id}", headers=auth_headers
+        f"{gateway}/queryActivityDetail/{ride_id}",
+        headers=auth_headers,
+        timeout=HTTP_TIMEOUT,
     )
     if detail.ok:
         fit_url = detail.json().get("data", {}).get("fitUrl")
@@ -287,7 +292,9 @@ def resolve_fit_url(
             return fit_url
 
     fallback = session.get(
-        f"{gateway}/getDownloadUrl/{ride_id}", headers=auth_headers
+        f"{gateway}/getDownloadUrl/{ride_id}",
+        headers=auth_headers,
+        timeout=HTTP_TIMEOUT,
     )
     if fallback.ok:
         return fallback.json().get("data")
@@ -297,7 +304,7 @@ def resolve_fit_url(
 
 def download_fit(fit_url: str, dest_path: Path) -> Path:
     """Download a .fit file to dest_path and return the path."""
-    resp = requests.get(fit_url)
+    resp = requests.get(fit_url, timeout=FIT_DOWNLOAD_TIMEOUT)
     resp.raise_for_status()
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     dest_path.write_bytes(resp.content)

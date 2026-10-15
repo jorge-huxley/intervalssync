@@ -37,7 +37,7 @@ from ..bryton.workout import (
 from ..igpsport.workout import (
     WorkoutUploadConfig,
     WorkoutUploadResult,
-    apply_uploaded_workout_map,
+    apply_workout_state,
     upload_workouts,
 )
 from . import config as cli_config_module
@@ -193,6 +193,11 @@ def _build_workout_upload_config(
             workout_days_ahead if workout_days_ahead is not None else config.workout_days_ahead
         ),
         uploaded_workouts=dict(config.uploaded_workouts),
+        workout_export_state={
+            str(key): dict(value)
+            for key, value in config.workout_export_state.items()
+            if isinstance(value, dict)
+        },
         force_resync=force_resync if force_resync is not None else config.force_resync,
     )
 
@@ -228,10 +233,18 @@ def _workout_result_payload(
         "source": source,
         "listed": result.listed,
         "uploaded": result.uploaded,
+        "updated": getattr(result, "updated", 0),
+        "recreated": getattr(result, "recreated", 0),
         "skipped": result.skipped,
         "failed": result.failed,
         "no_steps": result.no_steps,
+        "description_truncated": getattr(result, "description_truncated", 0),
+        "unsupported": getattr(result, "unsupported", 0),
+        "verification_failed": getattr(result, "verification_failed", 0),
     }
+    if isinstance(result, WorkoutUploadResult):
+        payload["uploaded_map"] = result.uploaded_map
+        payload["synced_map"] = result.synced_map
     if error is not None:
         payload["error"] = error
     return payload
@@ -240,8 +253,12 @@ def _workout_result_payload(
 def _emit_workout_text_summary(result: WorkoutUploadResult | BrytonWorkoutUploadResult) -> None:
     print(
         f"Done — uploaded {result.uploaded}, "
+        f"updated {getattr(result, 'updated', 0)}, "
+        f"recreated {getattr(result, 'recreated', 0)}, "
         f"skipped {result.skipped}, "
         f"no steps {result.no_steps}, "
+        f"unsupported {getattr(result, 'unsupported', 0)}, "
+        f"verification failed {getattr(result, 'verification_failed', 0)}, "
         f"failed {result.failed}."
     )
 
@@ -439,6 +456,14 @@ def cmd_upload_workouts(args: argparse.Namespace) -> int:
         workout_days_ahead=args.workout_days_ahead,
         force_resync=True if args.force_resync else None,
     )
+    if source == "igpsport":
+        def checkpoint(result: WorkoutUploadResult) -> None:
+            apply_workout_state(
+                config.uploaded_workouts, config.workout_export_state, result
+            )
+            cli_config_module.save(config)
+
+        upload_config.checkpoint = checkpoint
 
     try:
         result = upload_workouts(upload_config, progress=progress)
@@ -463,8 +488,14 @@ def cmd_upload_workouts(args: argparse.Namespace) -> int:
             print(f"✗ Unexpected error: {exc}", file=sys.stderr)
         return EXIT_SYNC_ERROR
 
-    if result.uploaded_map or result.pruned_keys:
-        apply_uploaded_workout_map(config.uploaded_workouts, result)
+    if (
+        result.workout_export_state != config.workout_export_state
+        or result.uploaded_map
+        or result.pruned_keys
+    ):
+        apply_workout_state(
+            config.uploaded_workouts, config.workout_export_state, result
+        )
         cli_config_module.save(config)
 
     ok = result.failed == 0
