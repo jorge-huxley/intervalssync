@@ -66,6 +66,7 @@
 - **Sync zones to iGPSPORT** — push FTP, LTHR, max HR, weight, and power/HR zones from intervals.icu into your iGPSPORT profile (Settings → iGPSPORT profile, or `intervalssync sync-zones`; the app prompts on launch when thresholds differ)
 - **Headless CLI** — activity sync, workout upload, and iGPSPORT zone/threshold sync from the terminal, with JSON output and exit codes for automation and AI agents (see [CLI & automation](#cli--automation-ai-agents))
 - **China iGPSPORT region** — accounts on [app.igpsport.cn](https://app.igpsport.cn/login) use a separate API; choose **China** in Settings (or `INTERVALSSYNC_IGPSPORT_REGION=china` in the CLI)
+- **China Bryton region** — accounts created in the China-region Bryton app use a separate backend; choose **China** in Settings (or `INTERVALSSYNC_BRYTON_REGION=china` in the CLI)
 
 > Prefer the terminal, or want to help out? It's open source (Python + [Flet](https://flet.dev), MIT) — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -75,6 +76,7 @@
 2. Unzip it anywhere and double-click the app (e.g. `intervalssync.exe`).
 3. On first launch, open **Settings** and enter:
    - your iGPSPORT **email** and **password** (or **phone number** for China — set region to China if you use [app.igpsport.cn](https://app.igpsport.cn/login))
+   - for Bryton Active, your **email** and **password** and the matching **region** (International or China)
    - your intervals.icu **API key** (intervals.icu → Settings → Developer)
 4. Click **Save**, then go back and press **Sync** (or **Upload to iGPSPORT** / **Upload to Bryton** for planned sessions on your intervals.icu calendar).
 

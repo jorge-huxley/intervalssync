@@ -33,7 +33,7 @@ src/intervalssync/
   cli/main.py, env.py, config.py                 # headless CLI
   gui/app.py, views, config.py, secrets.py       # Flet UI (dual-source: iGPSPORT + Bryton)
   igpsport/core.py, workout.py                   # iGPSPORT source
-  bryton/ddp.py, api.py, core.py                 # Bryton source
+  bryton/ddp.py, api.py, core.py, region.py      # Bryton source
   intervals_icu.py, dropbox_client.py            # shared by sources
 ```
 
@@ -41,8 +41,8 @@ src/intervalssync/
 - **`igpsport/core.py`** — `sync(SyncConfig, progress)`: login → list → FIT URL → download → upload. `external_id`: `igpsport_{ride_id}`.
 - **`igpsport/profile_sync.py`** — `sync_profile_zones`: intervals.icu sport settings + athlete weight → iGPSPORT profile thresholds/zones/weight.
 - **`igpsport/workout.py`** — planned workouts intervals.icu → iGPSPORT.
-- **`bryton/ddp.py`** — Meteor DDP login + `activityList` subscription.
-- **`bryton/api.py`** — `GET https://m3.brytonactive.com/api/activity?id=…` (FIT download; Android app API).
+- **`bryton/ddp.py`** — Meteor DDP login + `activityList` subscription. `region.py` holds the international vs China endpoints.
+- **`bryton/api.py`** — `GET https://{session.host}/api/activity?id=…` (FIT download; Android app API).
 - **`bryton/core.py`** — `sync(SyncConfig, progress)`. `external_id`: `bryton_{activity_id}`.
 - **`gui/secrets.py`** — async OS vault via `flet-secure-storage`.
 - **`gui/config.py`** — GUI JSON settings: `enable_igpsport` / `enable_bryton`, per-source usernames, shared sync options.
@@ -58,9 +58,11 @@ src/intervalssync/
 
 ## Bryton API notes
 
-1. Login: Meteor DDP `login` with email + SHA-256 password digest on `m3.brytonactive.com`.
+1. Login: Meteor DDP `login` with email + SHA-256 password digest on `m3.brytonactive.com` (international) or `active.cn.brytonactive.com` (China).
 2. List: subscribe `activityList` → `userActivities` collection.
 3. FIT: REST `GET /api/activity?id={_id}` with `X-User-Id`, `X-Auth-Token`, static `x-api-key` (not the web `activity.detail.2` samples API).
+4. Workouts: POST `https://{web_host}/workout/upload/{user_id}` (`active.brytonsport.com` international, `active.cn.brytonactive.com` China).
+5. **Regions are fully separate account databases.** An account created in one region returns `User not found` in the other. GUI `bryton_region`; CLI `INTERVALSSYNC_BRYTON_REGION=international|china`.
 
 ## Flet version note
 

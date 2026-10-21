@@ -19,8 +19,9 @@ from ..intervals_icu import (
     upload_fit_file,
 )
 from .api import download_fit_to_path
-from .ddp import DEFAULT_HOST, BrytonSession, list_activities, login
+from .ddp import BrytonSession, list_activities, login
 from .exceptions import BrytonSyncError
+from .region import resolve_region
 
 ACTIVITY_TYPE_KEEP = ""
 
@@ -90,7 +91,9 @@ class SyncConfig:
     intervals_api_key: str | None
     dropbox_refresh_token: str | None = None
     dropbox_app_key: str | None = None
-    host: str = DEFAULT_HOST
+    # Explicit endpoint override; normally resolved from bryton_region.
+    host: str | None = None
+    bryton_region: str = "international"
     max_activities: int = 5
     download_dir: Path = Path("downloads")
     delete_after_upload: bool = True
@@ -118,8 +121,17 @@ def sync(config: SyncConfig, progress: Progress | None = None) -> SyncResult:
     report = progress or _noop
     result = SyncResult()
 
+    try:
+        region = resolve_region(config.bryton_region)
+    except ValueError as exc:
+        raise BrytonSyncError(str(exc)) from exc
+
     report("Logging in to Bryton Active…")
-    session = login(config.bryton_email, config.bryton_password, host=config.host)
+    session = login(
+        config.bryton_email,
+        config.bryton_password,
+        host=config.host or region.host,
+    )
     report("Logged in.")
 
     raw_activities = list_activities(session, limit=config.max_activities)
