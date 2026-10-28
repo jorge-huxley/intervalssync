@@ -12,9 +12,12 @@ from typing import Any
 import requests
 
 from .exceptions import BrytonAuthError, BrytonDDPError
+from .region import INTERNATIONAL
 
-DEFAULT_HOST = "m3.brytonactive.com"
-WEB_HOST = "active.brytonsport.com"
+# Backwards-compatible aliases for the international endpoints. Region-aware
+# callers should resolve a BrytonRegionConfig instead.
+DEFAULT_HOST = INTERNATIONAL.host
+WEB_HOST = INTERNATIONAL.web_host
 DDP_CONNECT = {"msg": "connect", "version": "1", "support": ["1", "pre2", "pre1"]}
 
 

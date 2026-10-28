@@ -96,6 +96,20 @@ async def build_settings_view(
         value=config.enable_bryton,
         active_color=colors["accent"],
     )
+    bryton_region_value = (
+        config.bryton_region
+        if config.bryton_region in ("international", "china")
+        else "international"
+    )
+    bryton_region = ft.Dropdown(
+        label="Bryton region",
+        value=bryton_region_value,
+        options=[
+            ft.dropdown.Option("international", "International"),
+            ft.dropdown.Option("china", "China"),
+        ],
+        helper_text="Use China if your account was created in the China-region Bryton app",
+    )
     bryton_user = _input_field(
         label="Bryton Active email",
         value=config.bryton_user,
@@ -519,7 +533,7 @@ async def build_settings_view(
     )
     bryton_credentials = ft.Column(
         spacing=theme.SPACE_SM,
-        controls=[bryton_user, bryton_password],
+        controls=[bryton_region, bryton_user, bryton_password],
     )
     workout_sync_section = ft.Container(
         visible=config.enable_igpsport or config.enable_bryton,
@@ -598,6 +612,7 @@ async def build_settings_view(
         config.igp_user = igp_user.value.strip()
         config.igp_region = igp_region.value or "international"
         config.bryton_user = bryton_user.value.strip()
+        config.bryton_region = bryton_region.value or "international"
         try:
             config.max_activities = max(1, int(max_activities.value))
         except (TypeError, ValueError):

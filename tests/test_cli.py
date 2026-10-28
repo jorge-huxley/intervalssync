@@ -66,6 +66,27 @@ def test_load_igpsport_credentials_rejects_invalid_region(tmp_path):
         cli_env.load_igpsport_credentials(env_file)
 
 
+def test_load_bryton_credentials_defaults_region(tmp_path):
+    env_file = tmp_path / ".env"
+    _write_bryton_env(env_file)
+    creds = cli_env.load_bryton_credentials(env_file)
+    assert creds.bryton_region == "international"
+
+
+def test_load_bryton_credentials_china_region(tmp_path):
+    env_file = tmp_path / ".env"
+    _write_bryton_env(env_file, **{cli_env.BRYTON_REGION_KEY: "china"})
+    creds = cli_env.load_bryton_credentials(env_file)
+    assert creds.bryton_region == "china"
+
+
+def test_load_bryton_credentials_rejects_invalid_region(tmp_path):
+    env_file = tmp_path / ".env"
+    _write_bryton_env(env_file, **{cli_env.BRYTON_REGION_KEY: "eu"})
+    with pytest.raises(cli_env.CliConfigError, match="INTERVALSSYNC_BRYTON_REGION"):
+        cli_env.load_bryton_credentials(env_file)
+
+
 def test_parse_dotenv_comments_and_quotes():
     text = """
 # comment
@@ -356,13 +377,35 @@ def test_upload_workouts_json_sync_error(tmp_path: Path, monkeypatch, capsys):
     assert payload["error"] == "fetch failed"
 
 
+def test_sync_bryton_passes_region(tmp_path: Path, monkeypatch, capsys):
+    env_file = tmp_path / ".env"
+    _write_bryton_env(env_file, **{cli_env.BRYTON_REGION_KEY: "china"})
+    monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
+
+    def fake_sync(config, progress=None):
+        assert config.bryton_region == "china"
+        return cli.BrytonSyncResult()
+
+    monkeypatch.setattr(cli, "bryton_sync", fake_sync)
+
+    args = cli._build_parser().parse_args(
+        ["sync", "--source", "bryton", "--env-file", str(env_file), "--json"]
+    )
+    assert cli.cmd_sync(args) == cli.EXIT_OK
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["source"] == "bryton"
+
+
 def test_upload_workouts_bryton_json_success(tmp_path: Path, monkeypatch, capsys):
     env_file = tmp_path / ".env"
-    _write_bryton_env(env_file)
+    _write_bryton_env(env_file, **{cli_env.BRYTON_REGION_KEY: "china"})
     monkeypatch.setattr(cli_config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(cli_config, "CONFIG_PATH", tmp_path / "config.json")
 
     def fake_upload(config, progress=None):
+        assert config.bryton_region == "china"
         if progress:
             progress("uploading bryton")
         return bryton_workout.BrytonWorkoutUploadResult(

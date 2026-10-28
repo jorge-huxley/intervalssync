@@ -258,6 +258,7 @@ def build_sync_view(
             intervals_api_key=api_key,
             dropbox_refresh_token=dropbox_refresh_token,
             dropbox_app_key=dropbox_app_key,
+            bryton_region=config.bryton_region,
             max_activities=config.max_activities,
             download_dir=Path(config.download_dir),
             delete_after_upload=config.delete_after_upload,
@@ -335,6 +336,7 @@ def build_sync_view(
             workout_days_ahead=config.workout_days_ahead,
             uploaded_workouts=dict(config.uploaded_bryton_workouts),
             force_resync=config.force_resync,
+            bryton_region=config.bryton_region,
         )
 
         uploaded_count = 0

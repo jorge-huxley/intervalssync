@@ -93,6 +93,7 @@ def _build_bryton_sync_config(
         bryton_email=credentials.bryton_email,
         bryton_password=credentials.bryton_password,
         intervals_api_key=credentials.intervals_api_key,
+        bryton_region=credentials.bryton_region,
         max_activities=max_activities if max_activities is not None else config.max_activities,
         download_dir=Path(download_dir or config.download_dir),
         delete_after_upload=(
@@ -208,6 +209,7 @@ def _build_bryton_workout_upload_config(
         bryton_email=credentials.bryton_email,
         bryton_password=credentials.bryton_password,
         intervals_api_key=credentials.intervals_api_key,
+        bryton_region=credentials.bryton_region,
         workout_days_ahead=(
             workout_days_ahead if workout_days_ahead is not None else config.workout_days_ahead
         ),

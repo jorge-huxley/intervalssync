@@ -17,13 +17,14 @@ from uuid import uuid4
 import requests
 
 from .. import intervals_icu
-from .ddp import WEB_HOST, BrytonSession, call_method, login
+from .ddp import BrytonSession, call_method, login
 from .exceptions import BrytonSyncError
 from .fit_encode import (
     bryton_hr_uses_mhr,
     encoded_step_count,
     icu_workout_doc_to_bryton_fit,
 )
+from .region import INTERNATIONAL, resolve_region
 
 _CYCLING_TYPES = frozenset(
     {
@@ -95,6 +96,9 @@ class BrytonWorkoutUploadConfig:
     workout_days_ahead: int = 1
     uploaded_workouts: dict[str, str] = field(default_factory=dict)
     force_resync: bool = False
+    bryton_region: str = "international"
+    # Explicit endpoint override; normally resolved from bryton_region.
+    web_host: str | None = None
 
 
 def apply_uploaded_bryton_workout_map(
@@ -265,9 +269,9 @@ def upload_workout_fit(
     return resp.ok
 
 
-def web_login(email: str, password: str) -> BrytonSession:
+def web_login(email: str, password: str, *, host: str | None = None) -> BrytonSession:
     """Log in to the Bryton Active website backend."""
-    return login(email, password, host=WEB_HOST)
+    return login(email, password, host=host or INTERNATIONAL.web_host)
 
 
 def upload_workouts(
@@ -283,8 +287,17 @@ def upload_workouts(
     days = max(1, config.workout_days_ahead)
     newest = config.newest or (today + timedelta(days=days - 1))
 
+    try:
+        region = resolve_region(config.bryton_region)
+    except ValueError as exc:
+        raise BrytonSyncError(str(exc)) from exc
+
     report("Logging in to Bryton Active…")
-    session = web_login(config.bryton_email, config.bryton_password)
+    session = web_login(
+        config.bryton_email,
+        config.bryton_password,
+        host=config.web_host or region.web_host,
+    )
     report("Logged in.")
 
     live_ids, live_names = _fetch_workout_library(session)

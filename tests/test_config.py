@@ -12,6 +12,7 @@ def test_defaults():
     assert cfg.enable_igpsport is True
     assert cfg.igp_region == "international"
     assert cfg.enable_bryton is False
+    assert cfg.bryton_region == "international"
     assert cfg.delete_after_upload is True
     assert cfg.force_resync is False
     assert cfg.activity_type == ""  # "" = leave the uploaded sport untouched
@@ -81,6 +82,7 @@ def test_save_and_load_bryton_flags(tmp_path, monkeypatch):
         enable_igpsport=False,
         enable_bryton=True,
         bryton_user="rider@example.com",
+        bryton_region="china",
     )
     config_module.save(cfg)
 
@@ -88,6 +90,7 @@ def test_save_and_load_bryton_flags(tmp_path, monkeypatch):
     assert loaded.enable_igpsport is False
     assert loaded.enable_bryton is True
     assert loaded.bryton_user == "rider@example.com"
+    assert loaded.bryton_region == "china"
     assert "activity_source" not in json.loads(path.read_text(encoding="utf-8"))
 
 

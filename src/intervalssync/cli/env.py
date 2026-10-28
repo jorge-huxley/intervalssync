@@ -14,6 +14,7 @@ IGPSPORT_PASSWORD_KEY = "INTERVALSSYNC_IGPSPORT_PASSWORD"
 IGPSPORT_REGION_KEY = "INTERVALSSYNC_IGPSPORT_REGION"
 BRYTON_EMAIL_KEY = "INTERVALSSYNC_BRYTON_EMAIL"
 BRYTON_PASSWORD_KEY = "INTERVALSSYNC_BRYTON_PASSWORD"
+BRYTON_REGION_KEY = "INTERVALSSYNC_BRYTON_REGION"
 INTERVALS_API_KEY_KEY = "INTERVALSSYNC_INTERVALS_API_KEY"
 
 IGPSPORT_REQUIRED_KEYS = (
@@ -31,12 +32,15 @@ _IGPSPORT_BODY = (
     f"  {IGPSPORT_USER_KEY}=<email>\n"
     f"  {IGPSPORT_PASSWORD_KEY}=<password>\n"
     f"  {INTERVALS_API_KEY_KEY}=<api-key>\n"
-    f"  {IGPSPORT_REGION_KEY}=international  # or china for app.igpsport.cn"
+    f"  # optional: international (default) or china for app.igpsport.cn\n"
+    f"  {IGPSPORT_REGION_KEY}=international"
 )
 _BRYTON_BODY = (
     f"  {BRYTON_EMAIL_KEY}=<email>\n"
     f"  {BRYTON_PASSWORD_KEY}=<password>\n"
-    f"  {INTERVALS_API_KEY_KEY}=<api-key>"
+    f"  {INTERVALS_API_KEY_KEY}=<api-key>\n"
+    f"  # optional: international (default) or china for the China-region Bryton app\n"
+    f"  {BRYTON_REGION_KEY}=international"
 )
 
 ENV_OVERRIDE_HINT = (
@@ -77,6 +81,7 @@ class BrytonCredentials:
     bryton_email: str
     bryton_password: str
     intervals_api_key: str
+    bryton_region: str = "international"
 
 
 def _default_hermes_env_path() -> Path:
@@ -175,10 +180,18 @@ def load_bryton_credentials(env_path: Path) -> BrytonCredentials:
     if missing:
         raise CliConfigError(_missing_keys_message(env_path, missing, source="bryton"))
 
+    region = values.get(BRYTON_REGION_KEY, "international") or "international"
+    if region not in ("international", "china"):
+        raise CliConfigError(
+            f"Invalid {BRYTON_REGION_KEY}={region!r} in {env_path} "
+            "(expected 'international' or 'china')."
+        )
+
     return BrytonCredentials(
         bryton_email=values[BRYTON_EMAIL_KEY],
         bryton_password=values[BRYTON_PASSWORD_KEY],
         intervals_api_key=values[INTERVALS_API_KEY_KEY],
+        bryton_region=region,
     )
 
 

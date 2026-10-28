@@ -30,6 +30,7 @@ class AppConfig:
     igp_user: str = ""
     igp_region: str = "international"
     bryton_user: str = ""
+    bryton_region: str = "international"
     max_activities: int = 5
     download_dir: str = field(default_factory=_default_download_dir)
     # Remove each .fit file once it has been uploaded to intervals.icu.
