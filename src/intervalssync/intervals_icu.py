@@ -5,8 +5,10 @@ Activity upload/dedup, calendar workout fetch, and sport-settings lookup.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +51,19 @@ class SportSettings:
     max_hr: float | None
     power_zones: list[float]
     hr_zones: list[float]
+    power_zone_names: list[str] = field(default_factory=list)
+    hr_zone_names: list[str] = field(default_factory=list)
+    invalid_fields: frozenset[str] = field(default_factory=frozenset)
+
+
+@dataclass(frozen=True)
+class AthleteSettings:
+    resting_hr: int | None
+    weight: float | None
+    height_cm: int | None
+    birth_date: str | None
+    sex: int | None
+    invalid_fields: frozenset[str] = field(default_factory=frozenset)
 
 
 def _num(value: Any) -> float | None:
@@ -69,6 +84,59 @@ def _num_list(value: Any) -> list[float]:
         if num is not None:
             out.append(num)
     return out
+
+
+def _source_num(data: dict[str, Any], key: str) -> tuple[float | None, bool]:
+    value = data.get(key)
+    if value is None:
+        return None, False
+    if isinstance(value, bool):
+        return None, True
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None, True
+    if not isfinite(number) or number <= 0:
+        return None, True
+    return number, False
+
+
+def _source_num_list(data: dict[str, Any], key: str) -> tuple[list[float], bool]:
+    value = data.get(key)
+    if value is None:
+        return [], False
+    if not isinstance(value, list) or not value:
+        return [], True
+    numbers: list[float] = []
+    for item in value:
+        if isinstance(item, bool):
+            return [], True
+        try:
+            number = float(item)
+        except (TypeError, ValueError):
+            return [], True
+        if not isfinite(number) or number <= 0:
+            return [], True
+        numbers.append(number)
+    return numbers, False
+
+
+def _source_names(data: dict[str, Any], key: str) -> tuple[list[str], bool]:
+    value = data.get(key)
+    if value is None:
+        return [], False
+    if not isinstance(value, list) or not value:
+        return [], True
+    names: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            return [], True
+        names.append(item.strip())
+    return names, False
+
+
+def _round_half_up(value: Decimal) -> int:
+    return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _parse_activity_id(value: Any) -> str | None:
@@ -230,6 +298,7 @@ def fetch_sport_settings(
     sport: str = "Ride",
     *,
     http: requests.Session | None = None,
+    strict: bool = False,
 ) -> SportSettings:
     """Return athlete thresholds and zone definitions from intervals.icu sport settings."""
     client = http or requests.Session()
@@ -241,13 +310,46 @@ def fetch_sport_settings(
     resp.raise_for_status()
     data = resp.json()
     if not isinstance(data, dict):
+        if strict:
+            raise ValueError("intervals.icu sport settings response must be an object")
         return SportSettings(None, None, None, [], [])
+    if not strict:
+        return SportSettings(
+            ftp=_num(data.get("ftp")),
+            lthr=_num(data.get("lthr")),
+            max_hr=_num(data.get("max_hr")),
+            power_zones=_num_list(data.get("power_zones")),
+            hr_zones=_num_list(data.get("hr_zones")),
+        )
+    invalid: set[str] = set()
+    ftp, ftp_invalid = _source_num(data, "ftp")
+    lthr, lthr_invalid = _source_num(data, "lthr")
+    max_hr, max_hr_invalid = _source_num(data, "max_hr")
+    # Preserve fractional thresholds; each consumer applies its legacy rounding.
+    power_zones, power_invalid = _source_num_list(data, "power_zones")
+    hr_zones, hr_invalid = _source_num_list(data, "hr_zones")
+    power_names, power_names_invalid = _source_names(data, "power_zone_names")
+    hr_names, hr_names_invalid = _source_names(data, "hr_zone_names")
+    for key, is_invalid in (
+        ("ftp", ftp_invalid),
+        ("lthr", lthr_invalid),
+        ("max_hr", max_hr_invalid),
+        ("power_zones", power_invalid),
+        ("hr_zones", hr_invalid),
+        ("power_zone_names", power_names_invalid),
+        ("hr_zone_names", hr_names_invalid),
+    ):
+        if is_invalid:
+            invalid.add(key)
     return SportSettings(
-        ftp=_num(data.get("ftp")),
-        lthr=_num(data.get("lthr")),
-        max_hr=_num(data.get("max_hr")),
-        power_zones=_num_list(data.get("power_zones")),
-        hr_zones=_num_list(data.get("hr_zones")),
+        ftp=ftp,
+        lthr=lthr,
+        max_hr=max_hr,
+        power_zones=power_zones,
+        hr_zones=hr_zones,
+        power_zone_names=power_names,
+        hr_zone_names=hr_names,
+        invalid_fields=frozenset(invalid),
     )
 
 
@@ -278,3 +380,88 @@ def fetch_athlete_weight(
     if not isinstance(data, dict):
         return None
     return _num(data.get("icu_weight")) or _num(data.get("weight"))
+
+
+def fetch_athlete_settings(
+    api_key: str,
+    *,
+    http: requests.Session | None = None,
+) -> AthleteSettings:
+    """Return normalized rider fields without deriving values from activities."""
+    client = http or requests.Session()
+    resp = client.get(
+        INTERVALS_ATHLETE_URL,
+        auth=("API_KEY", api_key),
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise ValueError("intervals.icu athlete response must be an object")
+
+    invalid: set[str] = set()
+
+    resting_value, resting_invalid = _source_num(data, "icu_resting_hr")
+    resting_hr: int | None = None
+    if resting_value is not None:
+        if resting_value.is_integer():
+            resting_hr = int(resting_value)
+        else:
+            resting_invalid = True
+    if resting_invalid:
+        invalid.add("resting_hr")
+
+    weight_key = "icu_weight" if data.get("icu_weight") is not None else "weight"
+    weight, weight_invalid = _source_num(data, weight_key)
+    if weight_invalid:
+        invalid.add("weight")
+
+    height, height_invalid = _source_num(data, "height")
+    height_cm: int | None = None
+    if height is not None:
+        if height <= 3:
+            try:
+                height_cm = _round_half_up(Decimal(str(height)) * Decimal("100"))
+            except (InvalidOperation, ValueError):
+                height_invalid = True
+        else:
+            height_invalid = True
+    if height_invalid:
+        invalid.add("height")
+
+    birth_value = data.get("icu_date_of_birth")
+    birth_date: str | None = None
+    birth_invalid = False
+    if birth_value is not None:
+        if isinstance(birth_value, str):
+            try:
+                birth_date = date.fromisoformat(birth_value.strip()).isoformat()
+            except ValueError:
+                birth_invalid = True
+        else:
+            birth_invalid = True
+    if birth_invalid:
+        invalid.add("birth_date")
+
+    sex_value = data.get("sex")
+    sex: int | None = None
+    sex_invalid = False
+    if sex_value is not None:
+        normalized_sex = str(sex_value).strip().casefold()
+        if normalized_sex in {"m", "male"}:
+            sex = 1
+        elif normalized_sex in {"f", "female"}:
+            sex = 2
+        else:
+            sex_invalid = True
+    if sex_invalid:
+        invalid.add("sex")
+
+    return AthleteSettings(
+        resting_hr=resting_hr,
+        weight=weight,
+        height_cm=height_cm,
+        birth_date=birth_date,
+        sex=sex,
+        invalid_fields=frozenset(invalid),
+    )

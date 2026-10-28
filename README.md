@@ -64,6 +64,7 @@
 - Stores your credentials in the **OS secure vault** (Windows Credential Manager / macOS Keychain / Android Keystore), never in a file
 - Lets you know when a newer version is available
 - **Sync zones to iGPSPORT** — push FTP, LTHR, max HR, weight, and power/HR zones from intervals.icu into your iGPSPORT profile (Settings → iGPSPORT profile, or `intervalssync sync-zones`; the app prompts on launch when thresholds differ)
+- **Verified rider-settings sync (CLI)** — transfer selected cycling thresholds, zones, resting HR, weight, height, birth date, and sex from intervals.icu to iGPSPORT. Zone conversion follows the existing sync rules, including rounding, caps, and HR mode. Preview with `sync-rider-settings --dry-run --json`; actual writes are verified by reading them back. See [CLI documentation](docs/AGENT.md#verified-rider-settings-intervalsicu--igpsport) for source invocation until this addition is released.
 - **Headless CLI** — activity sync, workout upload, and iGPSPORT zone/threshold sync from the terminal, with JSON output and exit codes for automation and AI agents (see [CLI & automation](#cli--automation-ai-agents))
 - **China iGPSPORT region** — accounts on [app.igpsport.cn](https://app.igpsport.cn/login) use a separate API; choose **China** in Settings (or `INTERVALSSYNC_IGPSPORT_REGION=china` in the CLI)
 - **China Bryton region** — accounts created in the China-region Bryton app use a separate backend; choose **China** in Settings (or `INTERVALSSYNC_BRYTON_REGION=china` in the CLI)

@@ -8,6 +8,7 @@ from typing import Any
 
 import requests
 
+from .http import HTTP_TIMEOUT
 from .region import INTERNATIONAL, IgpRegionConfig, resolve_region
 
 IGPS_MOBILE_API = INTERNATIONAL.mobile_api_base
@@ -16,6 +17,8 @@ UPDATE_INTERVAL_URL = INTERNATIONAL.update_interval_url
 
 # iGPSPORT heartRateComputeMode: 0 = max HR, 1 = HRR, 2 = LTHR.
 HEART_RATE_COMPUTE_MODE_MAX_HR = 0
+HEART_RATE_COMPUTE_MODE_HRR = 1
+HEART_RATE_COMPUTE_MODE_LTHR = 2
 
 
 def member_id_from_token(auth_headers: dict[str, str]) -> int | None:
@@ -90,7 +93,9 @@ def fetch_personal_interval_info(
     cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
     get_headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
     try:
-        resp = session.get(cfg.get_interval_url, headers=get_headers, timeout=30)
+        resp = session.get(
+            cfg.get_interval_url, headers=get_headers, timeout=HTTP_TIMEOUT
+        )
     except requests.RequestException as exc:
         raise RuntimeError(f"GET UserIntervalInfo failed: {exc}") from exc
 
@@ -121,7 +126,7 @@ def update_personal_interval_info(
     cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
     try:
         resp = session.post(
-            cfg.update_interval_url, headers=headers, json=body, timeout=30
+            cfg.update_interval_url, headers=headers, json=body, timeout=HTTP_TIMEOUT
         )
     except requests.RequestException as exc:
         raise RuntimeError(f"POST UpdatePersonalIntervalInfo failed: {exc}") from exc
@@ -152,7 +157,7 @@ def fetch_user_info(
     cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
     get_headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
     try:
-        resp = session.get(cfg.user_info_url, headers=get_headers, timeout=30)
+        resp = session.get(cfg.user_info_url, headers=get_headers, timeout=HTTP_TIMEOUT)
     except requests.RequestException as exc:
         raise RuntimeError(f"GET UserInfo failed: {exc}") from exc
 
@@ -175,7 +180,7 @@ def fetch_user_info(
 
 def build_personal_user_info_payload(
     user_info: dict[str, Any],
-    weight_kg: int,
+    weight_kg: float,
 ) -> dict[str, Any]:
     """Build the UpdatePersonalUserInfo body the iGPSPORT app sends.
 
@@ -196,32 +201,45 @@ def build_personal_user_info_payload(
         "gender": int(gender) if gender is not None else 0,
         "height": int(user_info["height"]) if user_info.get("height") is not None else 0,
         "nickName": user_info.get("nickName") or "",
-        # App sends a float (e.g. 76.0); whole-kg rounding happens before call.
-        "weight": float(int(weight_kg)),
+        "weight": float(weight_kg),
     }
 
 
-def update_user_weight(
+def build_personal_user_info_payload_updates(
+    user_info: dict[str, Any],
+    updates: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the six-field app payload while preserving unselected values."""
+    payload = build_personal_user_info_payload(
+        user_info,
+        float(user_info.get("weight") or 0),
+    )
+    key_map = {
+        "weight": "weight",
+        "height": "height",
+        "birth_date": "birthDate",
+        "sex": "gender",
+    }
+    for source_key, payload_key in key_map.items():
+        if source_key in updates:
+            payload[payload_key] = updates[source_key]
+    return payload
+
+
+def update_personal_user_info(
     session: requests.Session,
     headers: dict[str, str],
-    weight_kg: int,
+    body: dict[str, Any],
     region: IgpRegionConfig | str | None = None,
 ) -> dict[str, Any]:
-    """POST User/UpdatePersonalUserInfo with whole-kg weight (app profile weight).
-
-    Matches the Android editor: personal fields only, with ``areaId`` so location
-    is preserved. ``UpdateUserInfo`` clears ``cityId`` even when present in body.
-    """
+    """POST a complete six-field UpdatePersonalUserInfo payload."""
     cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
-    current = fetch_user_info(session, headers, region)
-    payload = build_personal_user_info_payload(current, weight_kg)
-
     try:
         resp = session.post(
             cfg.update_personal_user_info_url,
             headers=headers,
-            json=payload,
-            timeout=30,
+            json=body,
+            timeout=HTTP_TIMEOUT,
         )
     except requests.RequestException as exc:
         raise RuntimeError(f"POST UpdatePersonalUserInfo failed: {exc}") from exc
@@ -235,12 +253,26 @@ def update_user_weight(
 
     if not resp.ok:
         raise RuntimeError(f"POST UpdatePersonalUserInfo: HTTP {resp.status_code}")
-
     if isinstance(result, dict) and result.get("code") not in (0, None):
         message = result.get("message") or "unknown error"
         raise RuntimeError(f"POST UpdatePersonalUserInfo failed: {message}")
-
     return result if isinstance(result, dict) else {}
+
+
+def update_user_weight(
+    session: requests.Session,
+    headers: dict[str, str],
+    weight_kg: int,
+    region: IgpRegionConfig | str | None = None,
+) -> dict[str, Any]:
+    """POST User/UpdatePersonalUserInfo with whole-kg weight (app profile weight).
+
+    Matches the Android editor: personal fields only, with ``areaId`` so location
+    is preserved. ``UpdateUserInfo`` clears ``cityId`` even when present in body.
+    """
+    current = fetch_user_info(session, headers, region)
+    payload = build_personal_user_info_payload(current, weight_kg)
+    return update_personal_user_info(session, headers, payload, region)
 
 
 def zone_range_summary(zones: list[dict[str, Any]]) -> str:
