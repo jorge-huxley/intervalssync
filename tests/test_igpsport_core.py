@@ -81,6 +81,11 @@ def test_parse_igp_start_time_formats():
 
 def test_dropbox_filename_for_dotted_date():
     act = core.Activity(1, "Ride", "2026.07.19")
+    assert core.dropbox_filename_for(act) == "igpsport_1.fit"
+
+
+def test_dropbox_filename_preserves_actual_midnight():
+    act = core.Activity(1, "Ride", "2026-07-19 00:00:00")
     assert core.dropbox_filename_for(act) == "ride-0-2026-07-19-00-00-00.fit"
 
 
@@ -474,12 +479,74 @@ def test_list_activities_paginates_when_api_caps_page_size():
 
 def test_list_activities_caps_when_server_returns_extra():
     class FakeSession:
-        def get(self, url, params=None):
+        def get(self, url, params=None, **kwargs):
             rows = [{"rideId": i, "title": "", "startTime": ""} for i in range(20)]
             return FakeResponse(json_data={"data": {"rows": rows}})
 
     acts = core.list_activities(FakeSession(), 5)
     assert len(acts) == 5
+
+
+@pytest.mark.parametrize("region", ["international", "china"])
+def test_list_activities_enriches_date_only_times_from_detail(region):
+    calls = []
+
+    class FakeSession:
+        def get(self, url, params=None, **kwargs):
+            calls.append(url)
+            if "queryMyActivity" in url:
+                return FakeResponse(json_data={"data": {"rows": [
+                    {"rideId": 1, "startTime": "2026.10.27"},
+                    {"rideId": 2, "startTime": "2026.10.27"},
+                ]}})
+            ride_id = int(url.rsplit("/", 1)[1])
+            return FakeResponse(json_data={"data": {
+                "startTime": f"2026-10-27 {ride_id + 7:02}:42:08",
+                "fitUrl": f"https://fit.test/{ride_id}.fit",
+            }})
+
+    activities = core.list_activities(FakeSession(), 2, region)
+    assert [act.start_time for act in activities] == [
+        "2026-10-27 08:42:08", "2026-10-27 09:42:08",
+    ]
+    assert [core.dropbox_filename_for(act) for act in activities] == [
+        "ride-0-2026-10-27-08-42-08.fit", "ride-0-2026-10-27-09-42-08.fit",
+    ]
+    assert activities[0].fit_url == "https://fit.test/1.fit"
+    assert len(calls) == 3
+    assert all(url.startswith(core.resolve_region(region).gateway_base) for url in calls)
+
+
+@pytest.mark.parametrize("detail", [None, [], {"startTime": "2026.10.27"},
+                                       {"startTime": "invalid"}])
+def test_list_activities_keeps_date_without_inventing_time(detail):
+    class FakeSession:
+        def get(self, url, **kwargs):
+            if "queryMyActivity" in url:
+                return FakeResponse(json_data={"data": {"rows": [
+                    {"rideId": 1, "startTime": "2026.10.27"},
+                ]}})
+            return FakeResponse(json_data={"data": detail})
+
+    activity, = core.list_activities(FakeSession(), 1)
+    assert activity.start_time == "2026.10.27"
+    assert core.dropbox_filename_for(activity) == "igpsport_1.fit"
+    assert core._activity_date_range([activity]) == (date(2026, 10, 26), date(2026, 10, 28))
+
+
+@pytest.mark.parametrize("error", [core.requests.Timeout(), ValueError("bad JSON")])
+def test_list_activities_survives_unavailable_detail(error):
+    class FakeSession:
+        def get(self, url, **kwargs):
+            if "queryMyActivity" in url:
+                return FakeResponse(json_data={"data": {"rows": [
+                    {"rideId": 1, "startTime": "2026.10.27"},
+                ]}})
+            raise error
+
+    activity, = core.list_activities(FakeSession(), 1)
+    assert activity.start_time == "2026.10.27"
+    assert core.dropbox_filename_for(activity) == "igpsport_1.fit"
 
 
 # --------------------------------------------------------------------------- #
@@ -490,6 +557,7 @@ def test_list_activities_caps_when_server_returns_extra():
 def stub_sync(monkeypatch, tmp_path):
     """Replace every network leaf so sync() runs offline. Returns a recorder."""
     rec = {
+        "list_activities": core.list_activities,
         "downloaded": [],
         "uploaded": [],
         "dropbox": [],
@@ -596,6 +664,47 @@ def _config(tmp_path, **overrides):
     )
     base.update(overrides)
     return core.SyncConfig(**base)
+
+
+def test_sync_uses_detail_times_for_output_and_dropbox_skip_checks(monkeypatch, stub_sync):
+    from intervalssync.cli.main import _igpsport_result_payload
+
+    class FakeSession:
+        def get(self, url, **kwargs):
+            if "queryMyActivity" in url:
+                return FakeResponse(json_data={"data": {"rows": [
+                    {"rideId": 1, "startTime": "2026.10.27"},
+                    {"rideId": 2, "startTime": "2026.10.27"},
+                ]}})
+            ride_id = int(url.rsplit("/", 1)[1])
+            return FakeResponse(json_data={"data": {
+                "startTime": f"2026-10-27 {ride_id + 7:02}:42:08",
+                "fitUrl": f"https://fit.test/{ride_id}.fit",
+            }})
+
+    monkeypatch.setattr(core.requests, "Session", FakeSession)
+    monkeypatch.setattr(core, "list_activities", stub_sync["list_activities"])
+
+    def unexpected_resolve(*args):
+        pytest.fail("The FIT URL from the detail response should be reused")
+
+    monkeypatch.setattr(core, "resolve_fit_url", unexpected_resolve)
+    stub_sync["dropbox_existing"] = {
+        "ride-0-2026-10-27-00-00-00.fit",
+        "ride-0-2026-10-27-08-42-08.fit",
+    }
+    messages = []
+    result = core.sync(_config(
+        stub_sync["tmp"], max_activities=2, list_activities=True,
+        upload_intervals=False, upload_dropbox=True,
+    ), messages.append)
+    assert result.skipped_dropbox == 1
+    assert result.uploaded_dropbox == 1
+    assert stub_sync["dropbox"][0][0] == "ride-0-2026-10-27-09-42-08.fit"
+    assert stub_sync["downloaded"] == ["igpsport_2.fit"]
+    assert any("2026-10-27 09:42:08" in message for message in messages)
+    payload = _igpsport_result_payload(result, ok=True)
+    assert payload["activities"][1]["start_time"] == "2026-10-27 09:42:08"
 
 
 def test_sync_rejects_malformed_activity_discovery_before_fit_work(monkeypatch, tmp_path):

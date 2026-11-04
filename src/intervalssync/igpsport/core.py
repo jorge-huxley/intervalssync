@@ -51,12 +51,14 @@ IGP_TIME_FORMATS = (
 )
 
 
-def parse_igp_start_time(value: str) -> datetime | None:
+def parse_igp_start_time(value: str, *, require_time: bool = False) -> datetime | None:
     """Parse an iGPSPORT activity start time; return None if unrecognised."""
     if not value or not isinstance(value, str):
         return None
     text = value.strip()
     for fmt in IGP_TIME_FORMATS:
+        if require_time and "%H" not in fmt:
+            continue
         try:
             return datetime.strptime(text, fmt)
         except ValueError:
@@ -95,7 +97,7 @@ def dropbox_filename_for(activity: "Activity", use_date: bool = True) -> str:
     fallback = f"{external_id_for(activity.ride_id)}.fit"
     if not use_date:
         return fallback
-    start = parse_igp_start_time(activity.start_time)
+    start = parse_igp_start_time(activity.start_time, require_time=True)
     if start is None:
         return fallback
     return f"ride-0-{start:%Y-%m-%d-%H-%M-%S}.fit"
@@ -114,6 +116,7 @@ class Activity:
     ride_id: int
     title: str
     start_time: str
+    fit_url: str | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass
@@ -204,7 +207,36 @@ def list_activities(
 ) -> list[Activity]:
     """Return the most recent activities, newest first, capped at max_activities."""
     cfg = resolve_region(region.name if isinstance(region, IgpRegionConfig) else region)
-    return _list_activities_query(session, max_activities, cfg)
+    activities = _list_activities_query(session, max_activities, cfg)
+    # The list endpoint can return only YYYY.MM.DD. Enrich the shared Activity
+    # before logging, CLI JSON, date-range checks, or Dropbox skip decisions.
+    for activity in activities:
+        if parse_igp_start_time(activity.start_time, require_time=True) is not None:
+            continue
+        try:
+            detail = fetch_activity_detail(session, activity.ride_id, cfg)
+        except (requests.RequestException, ValueError):
+            # Keep the list date for date-range checks. Dropbox uses the unique
+            # ride ID when the full timestamp is unavailable, never fake midnight.
+            continue
+        start_time = detail.get("startTime") or detail.get("StartTime")
+        if parse_igp_start_time(start_time, require_time=True) is not None:
+            activity.start_time = start_time
+        activity.fit_url = detail.get("fitUrl")
+    return activities
+
+
+def fetch_activity_detail(
+    session: requests.Session, ride_id: int, region: IgpRegionConfig
+) -> dict:
+    """Fetch the full start timestamp and FIT URL from the activity detail API."""
+    response = session.get(
+        f"{region.gateway_base}/queryActivityDetail/{ride_id}", timeout=30
+    )
+    response.raise_for_status()
+    body = response.json()
+    data = body.get("data") if isinstance(body, dict) else None
+    return data if isinstance(data, dict) else {}
 
 
 def _list_activities_query(
@@ -514,7 +546,7 @@ def sync(
         if any_upload_enabled and not intervals_needs_it and not dropbox_needs_it:
             continue
 
-        fit_url = resolve_fit_url(session, auth_headers, act.ride_id, region)
+        fit_url = act.fit_url or resolve_fit_url(session, auth_headers, act.ride_id, region)
         if not fit_url:
             report(f"⚠ Could not resolve FIT URL for {act.ride_id}; skipping.")
             result.failed += 1
