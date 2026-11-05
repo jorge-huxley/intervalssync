@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import copy
+
+import pytest
+
 from intervalssync.igpsport.profile_sync import (
+    _verify_interval_state,
+    RiderSettingsSyncConfig,
     ProfileSyncConfig,
     apply_intervals_settings,
+    build_rider_settings_plan,
     compare_profile_thresholds,
+    parse_rider_fields,
+    sync_rider_settings,
 )
-from intervalssync.intervals_icu import SportSettings
+from intervalssync.intervals_icu import AthleteSettings, SportSettings
 
 
 def _igpsport_payload(*, power_count: int = 7, hr_count: int = 5) -> dict:
@@ -22,6 +31,492 @@ def _igpsport_payload(*, power_count: int = 7, hr_count: int = 5) -> dict:
         "power": [{"id": index, "start": 0, "end": 100 + index} for index in range(power_count)],
         "heartRate": [{"id": index, "start": 0, "end": 100 + index} for index in range(hr_count)],
     }
+
+
+FRIEL_NAMES = [
+    "Recovery",
+    "Aerobic",
+    "Tempo",
+    "SubThreshold",
+    "SuperThreshold",
+    "Aerobic Capacity",
+    "Anaerobic",
+]
+COGGAN_NAMES = [
+    "Active Recovery",
+    "Endurance",
+    "Tempo",
+    "Threshold",
+    "VO2 Max",
+    "Anaerobic",
+    "Neuromuscular",
+]
+
+
+def _rider_source() -> tuple[SportSettings, AthleteSettings]:
+    return (
+        SportSettings(
+            ftp=230,
+            lthr=180,
+            max_hr=195,
+            power_zones=[55, 75, 90, 105, 120, 150, 999],
+            hr_zones=[120, 140, 160, 175, 185, 190, 195],
+            power_zone_names=COGGAN_NAMES,
+            hr_zone_names=FRIEL_NAMES,
+        ),
+        AthleteSettings(
+            resting_hr=48,
+            weight=72.34,
+            height_cm=178,
+            birth_date="1990-01-02",
+            sex=1,
+        ),
+    )
+
+
+def _rider_interval_destination() -> dict:
+    return {
+        "member": {
+            "ftp": 220,
+            "mhr": 190,
+            "lthr": 170,
+            "heartRateComputeMode": 0,
+            "quietHeartRate": 55,
+            "unrelated": "keep",
+        },
+        "power": [
+            {
+                "id": i,
+                "start": 0,
+                "end": 2000 if i == 6 else 100 + i,
+                "color": f"p{i}",
+            }
+            for i in range(7)
+        ],
+        "heartRate": [
+            {"id": i, "start": 0, "end": 130 + i, "color": f"m{i}"}
+            for i in range(5)
+        ],
+        "heartRateReserve": [
+            {"id": i, "start": 0, "end": 140 + i, "color": f"r{i}"}
+            for i in range(5)
+        ],
+        "heartRateLactateThreshold": [
+            {"id": i, "start": 0, "end": 150 + i, "color": f"l{i}"}
+            for i in range(5)
+        ],
+    }
+
+
+def _rider_user_destination() -> dict:
+    return {
+        "cityId": 12345,
+        "areaId": 12345,
+        "sex": 2,
+        "height": 165,
+        "nickName": "Preserve Me",
+        "birthDate": "1985-05-06",
+        "weight": 80.0,
+        "unrelated": "keep",
+    }
+
+
+@pytest.mark.parametrize("metric", ["hr_zones", "power_zones"])
+def test_malformed_destination_zones_block_interval_group(metric):
+    sport, athlete = _rider_source()
+    destination = _rider_interval_destination()
+    table = "power" if metric == "power_zones" else "heartRate"
+    destination[table][1] = None
+    plan = build_rider_settings_plan(
+        sport, athlete, destination, _rider_user_destination(), parse_rider_fields(metric)
+    )
+    assert plan.interval_changed_fields == ()
+    assert plan.field_statuses[metric] == "invalid"
+
+
+def test_rounded_power_collision_uses_legacy_boundary_repair():
+    sport, athlete = _rider_source()
+    from dataclasses import replace
+    sport = replace(sport, ftp=200, power_zones=[55, 55.1, 55.2, 55.3, 55.4, 150, 999])
+    plan = build_rider_settings_plan(
+        sport, athlete, _rider_interval_destination(), _rider_user_destination(),
+        parse_rider_fields("power_zones"),
+    )
+    assert plan.field_statuses["power_zones"] == "would_update"
+    assert [row["end"] for row in plan.interval_body["power"]] == [110, 111, 112, 113, 114, 300, 2500]
+
+
+def test_interval_only_plan_does_not_parse_unselected_personal_values():
+    sport, athlete = _rider_source()
+    user = _rider_user_destination()
+    user["gender"] = "malformed"
+    plan = build_rider_settings_plan(
+        sport, athlete, _rider_interval_destination(), user, parse_rider_fields("ftp")
+    )
+    assert plan.interval_changed_fields == ("ftp",)
+    assert plan.personal_changed_fields == ()
+
+
+def test_parse_rider_fields_defaults_to_all_and_expands_dependencies():
+    all_fields = parse_rider_fields(None)
+    selected = parse_rider_fields("hr_zones,power_zones")
+
+    assert len(all_fields.requested) == 10
+    assert all_fields.requested == all_fields.effective
+    assert selected.requested == ("power_zones", "hr_zones")
+    assert selected.effective == (
+        "ftp",
+        "power_zones",
+        "max_hr",
+        "lthr",
+        "hr_zones",
+    )
+
+
+@pytest.mark.parametrize("raw", ["ftp,ftp", "ftp,,lthr", "unknown"])
+def test_parse_rider_fields_rejects_duplicates_empty_members_and_unknowns(raw):
+    with pytest.raises(ValueError):
+        parse_rider_fields(raw)
+
+
+def test_build_rider_plan_uses_legacy_max_hr_table_and_mode():
+    sport, athlete = _rider_source()
+    current = _rider_interval_destination()
+
+    plan = build_rider_settings_plan(
+        sport,
+        athlete,
+        current,
+        _rider_user_destination(),
+        parse_rider_fields("hr_zones"),
+    )
+
+    assert plan.interval_body["member"]["heartRateComputeMode"] == 0
+    assert plan.interval_body["member"]["lthr"] == 180
+    assert plan.interval_body["member"]["mhr"] == 195
+    assert [
+        zone["end"] for zone in plan.interval_body["heartRate"]
+    ] == [120, 140, 160, 175, 195]
+    assert plan.interval_body["heartRateLactateThreshold"] == current["heartRateLactateThreshold"]
+    assert plan.interval_body["heartRateReserve"] == current["heartRateReserve"]
+    assert plan.interval_body["member"]["unrelated"] == "keep"
+
+
+def test_build_rider_plan_five_hr_bounds_use_legacy_max_hr_table():
+    _sport, athlete = _rider_source()
+    sport = SportSettings(
+        ftp=None,
+        lthr=None,
+        max_hr=195,
+        power_zones=[],
+        hr_zones=[120, 145, 165, 180, 195],
+        hr_zone_names=["Recovery", "Endurance", "Tempo", "Threshold", "VO2 Max"],
+    )
+    current = _rider_interval_destination()
+    current["member"]["heartRateComputeMode"] = 1
+
+    plan = build_rider_settings_plan(
+        sport,
+        athlete,
+        current,
+        _rider_user_destination(),
+        parse_rider_fields("hr_zones"),
+    )
+
+    assert plan.interval_body["member"]["heartRateComputeMode"] == 0
+    assert [zone["end"] for zone in plan.interval_body["heartRate"]] == [
+        120,
+        145,
+        165,
+        180,
+        195,
+    ]
+    assert plan.interval_body["heartRateReserve"] == current["heartRateReserve"]
+    assert plan.interval_body["heartRateLactateThreshold"] == current[
+        "heartRateLactateThreshold"
+    ]
+
+
+def test_build_rider_plan_uses_legacy_power_rounding_and_terminal_cap():
+    sport, athlete = _rider_source()
+    current = _rider_interval_destination()
+    current["power"][-1]["end"] = 2000
+
+    plan = build_rider_settings_plan(
+        sport,
+        athlete,
+        current,
+        _rider_user_destination(),
+        parse_rider_fields("power_zones"),
+    )
+
+    assert plan.interval_body["member"]["ftp"] == 230
+    assert [zone["end"] for zone in plan.interval_body["power"]] == [
+        126,
+        172,
+        207,
+        242,
+        276,
+        345,
+        2500,
+    ]
+    assert [zone["color"] for zone in plan.interval_body["power"]] == [
+        f"p{i}" for i in range(7)
+    ]
+
+
+def test_build_rider_plan_personal_payload_preserves_unselected_required_fields():
+    sport, athlete = _rider_source()
+
+    plan = build_rider_settings_plan(
+        sport,
+        athlete,
+        _rider_interval_destination(),
+        _rider_user_destination(),
+        parse_rider_fields("height,birth_date"),
+    )
+
+    assert plan.personal_payload == {
+        "areaId": 12345,
+        "birthDate": "1990-01-02",
+        "gender": 2,
+        "height": 178,
+        "nickName": "Preserve Me",
+        "weight": 80.0,
+    }
+    assert plan.field_statuses["height"] == "would_update"
+    assert plan.field_statuses["birth_date"] == "would_update"
+
+
+def test_build_rider_plan_refuses_personal_write_when_required_value_is_missing():
+    sport, athlete = _rider_source()
+    current_user = _rider_user_destination()
+    del current_user["weight"]
+
+    plan = build_rider_settings_plan(
+        sport,
+        athlete,
+        _rider_interval_destination(),
+        current_user,
+        parse_rider_fields("height"),
+    )
+
+    assert plan.field_statuses["height"] == "invalid"
+    assert plan.personal_changed_fields == ()
+
+
+def test_build_rider_plan_missing_source_does_not_clear_destination():
+    sport, athlete = _rider_source()
+    athlete = AthleteSettings(None, None, None, None, None)
+
+    plan = build_rider_settings_plan(
+        sport,
+        athlete,
+        _rider_interval_destination(),
+        _rider_user_destination(),
+        parse_rider_fields("weight,height,birth_date,sex,resting_hr"),
+    )
+
+    assert set(plan.field_statuses.values()) == {"source_missing"}
+    assert plan.personal_changed_fields == ()
+    assert plan.interval_changed_fields == ()
+
+
+def test_build_rider_plan_invalid_zone_shape_blocks_interval_group():
+    sport, athlete = _rider_source()
+    sport = SportSettings(
+        **{
+            **sport.__dict__,
+            "invalid_fields": frozenset({"hr_zones"}),
+        }
+    )
+
+    plan = build_rider_settings_plan(
+        sport,
+        athlete,
+        _rider_interval_destination(),
+        _rider_user_destination(),
+        parse_rider_fields("ftp,hr_zones"),
+    )
+
+    assert plan.field_statuses["hr_zones"] == "invalid"
+    assert plan.field_statuses["ftp"] == "invalid"
+    assert plan.interval_changed_fields == ()
+
+
+def test_sync_rider_settings_writes_each_changed_group_once_and_verifies(monkeypatch):
+    from intervalssync.igpsport import profile_sync
+
+    sport, athlete = _rider_source()
+    current_interval = _rider_interval_destination()
+    current_interval["power"][-1]["end"] = 2000
+    current_user = _rider_user_destination()
+    interval_posts: list[dict] = []
+    personal_posts: list[dict] = []
+    state = {"interval": current_interval, "user": current_user}
+
+    monkeypatch.setattr(profile_sync, "login", lambda *a, **k: {"Authorization": "Bearer x"})
+    monkeypatch.setattr(profile_sync, "member_id_from_token", lambda *a, **k: 1)
+    monkeypatch.setattr(profile_sync.intervals_icu, "fetch_sport_settings", lambda *a, **k: sport)
+    monkeypatch.setattr(profile_sync.intervals_icu, "fetch_athlete_settings", lambda *a, **k: athlete)
+    monkeypatch.setattr(profile_sync, "fetch_personal_interval_info", lambda *a, **k: copy.deepcopy(state["interval"]))
+    monkeypatch.setattr(profile_sync, "fetch_user_info", lambda *a, **k: copy.deepcopy(state["user"]))
+
+    def post_interval(_session, _headers, body, *_args, **_kwargs):
+        interval_posts.append(copy.deepcopy(body))
+        state["interval"] = copy.deepcopy(body)
+        return {"code": 0}
+
+    def post_personal(_session, _headers, body, *_args, **_kwargs):
+        personal_posts.append(copy.deepcopy(body))
+        state["user"].update(
+            weight=body["weight"],
+            height=body["height"],
+            birthDate=body["birthDate"],
+            sex=body["gender"],
+            cityId=body["areaId"],
+            nickName=body["nickName"],
+        )
+        return {"code": 0}
+
+    monkeypatch.setattr(profile_sync, "update_personal_interval_info", post_interval)
+    monkeypatch.setattr(profile_sync, "update_personal_user_info", post_personal)
+
+    result = sync_rider_settings(
+        RiderSettingsSyncConfig("user", "pass", "api", fields=None)
+    )
+
+    assert len(interval_posts) == 1
+    assert len(personal_posts) == 1
+    assert result.failed == 0
+    assert result.verified > 0
+    assert set(result.field_statuses.values()) <= {"verified", "unchanged"}
+
+
+def test_sync_rider_settings_continues_personal_group_after_interval_write_failure(monkeypatch):
+    from intervalssync.igpsport import profile_sync
+
+    sport, athlete = _rider_source()
+    current_user = _rider_user_destination()
+    personal_posts: list[dict] = []
+    monkeypatch.setattr(profile_sync, "login", lambda *a, **k: {"Authorization": "Bearer x"})
+    monkeypatch.setattr(profile_sync, "member_id_from_token", lambda *a, **k: 1)
+    monkeypatch.setattr(profile_sync.intervals_icu, "fetch_sport_settings", lambda *a, **k: sport)
+    monkeypatch.setattr(profile_sync.intervals_icu, "fetch_athlete_settings", lambda *a, **k: athlete)
+    monkeypatch.setattr(profile_sync, "fetch_personal_interval_info", lambda *a, **k: _rider_interval_destination())
+    monkeypatch.setattr(profile_sync, "fetch_user_info", lambda *a, **k: copy.deepcopy(current_user))
+    monkeypatch.setattr(profile_sync, "update_personal_interval_info", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("private")))
+
+    def post_personal(_session, _headers, body, *_args, **_kwargs):
+        personal_posts.append(body)
+        current_user.update(weight=body["weight"], height=body["height"], birthDate=body["birthDate"], sex=body["gender"])
+        return {"code": 0}
+
+    monkeypatch.setattr(profile_sync, "update_personal_user_info", post_personal)
+
+    result = sync_rider_settings(RiderSettingsSyncConfig("u", "p", "a", fields=None))
+
+    assert personal_posts
+    assert result.failed > 0
+    assert result.field_statuses["ftp"] == "write_failed"
+    assert result.field_statuses["height"] == "verified"
+
+
+def test_sync_rider_settings_reports_readback_mismatch(monkeypatch):
+    from intervalssync.igpsport import profile_sync
+
+    sport, athlete = _rider_source()
+    current = _rider_interval_destination()
+    monkeypatch.setattr(profile_sync, "login", lambda *a, **k: {"Authorization": "Bearer x"})
+    monkeypatch.setattr(profile_sync, "member_id_from_token", lambda *a, **k: 1)
+    monkeypatch.setattr(profile_sync.intervals_icu, "fetch_sport_settings", lambda *a, **k: sport)
+    monkeypatch.setattr(profile_sync.intervals_icu, "fetch_athlete_settings", lambda *a, **k: athlete)
+    monkeypatch.setattr(profile_sync, "fetch_personal_interval_info", lambda *a, **k: copy.deepcopy(current))
+    monkeypatch.setattr(profile_sync, "fetch_user_info", lambda *a, **k: _rider_user_destination())
+    monkeypatch.setattr(profile_sync, "update_personal_interval_info", lambda *a, **k: {"code": 0})
+
+    result = sync_rider_settings(
+        RiderSettingsSyncConfig("u", "p", "a", fields="ftp")
+    )
+
+    assert result.updated == 1
+    assert result.field_statuses == {"ftp": "verify_failed"}
+    assert result.failed == 1
+
+
+def test_interval_verifier_ignores_server_regenerated_zone_ids_only():
+    expected = _rider_interval_destination()
+    actual = copy.deepcopy(expected)
+    for table_name in (
+        "power",
+        "heartRate",
+        "heartRateReserve",
+        "heartRateLactateThreshold",
+    ):
+        for row in actual[table_name]:
+            row["id"] += 1000
+
+    assert _verify_interval_state(actual, expected)
+
+    actual["power"][0]["end"] += 1
+    assert not _verify_interval_state(actual, expected)
+
+
+def test_interval_verifier_detects_inactive_hr_table_changes():
+    expected = _rider_interval_destination()
+    actual = copy.deepcopy(expected)
+    actual["heartRateReserve"][0]["end"] += 1
+
+    assert not _verify_interval_state(actual, expected)
+
+
+def test_sync_rider_settings_dry_run_can_show_values_without_writes(monkeypatch):
+    from intervalssync.igpsport import profile_sync
+
+    sport, athlete = _rider_source()
+    monkeypatch.setattr(profile_sync, "login", lambda *a, **k: {"Authorization": "Bearer x"})
+    monkeypatch.setattr(profile_sync, "member_id_from_token", lambda *a, **k: 1)
+    monkeypatch.setattr(profile_sync.intervals_icu, "fetch_sport_settings", lambda *a, **k: sport)
+    monkeypatch.setattr(profile_sync.intervals_icu, "fetch_athlete_settings", lambda *a, **k: athlete)
+    monkeypatch.setattr(profile_sync, "fetch_personal_interval_info", lambda *a, **k: _rider_interval_destination())
+    monkeypatch.setattr(profile_sync, "fetch_user_info", lambda *a, **k: _rider_user_destination())
+    monkeypatch.setattr(profile_sync, "update_personal_interval_info", lambda *a, **k: pytest.fail("dry-run wrote interval group"))
+    monkeypatch.setattr(profile_sync, "update_personal_user_info", lambda *a, **k: pytest.fail("dry-run wrote personal group"))
+
+    result = sync_rider_settings(
+        RiderSettingsSyncConfig(
+            "u", "p", "a", fields="ftp", dry_run=True, show_values=True
+        )
+    )
+
+    assert result.field_statuses == {"ftp": "would_update"}
+    assert result.updated == 0
+    assert result.source_values == {"ftp": 230}
+    assert result.current_values == {"ftp": 220}
+    assert result.desired_values == {"ftp": 230}
+
+
+def test_sync_rider_settings_unchanged_second_run_posts_nothing(monkeypatch):
+    from intervalssync.igpsport import profile_sync
+
+    sport, athlete = _rider_source()
+    current = _rider_interval_destination()
+    current["member"]["ftp"] = 230
+    monkeypatch.setattr(profile_sync, "login", lambda *a, **k: {"Authorization": "Bearer x"})
+    monkeypatch.setattr(profile_sync, "member_id_from_token", lambda *a, **k: 1)
+    monkeypatch.setattr(profile_sync.intervals_icu, "fetch_sport_settings", lambda *a, **k: sport)
+    monkeypatch.setattr(profile_sync.intervals_icu, "fetch_athlete_settings", lambda *a, **k: athlete)
+    monkeypatch.setattr(profile_sync, "fetch_personal_interval_info", lambda *a, **k: copy.deepcopy(current))
+    monkeypatch.setattr(profile_sync, "fetch_user_info", lambda *a, **k: _rider_user_destination())
+    monkeypatch.setattr(profile_sync, "update_personal_interval_info", lambda *a, **k: pytest.fail("unchanged field was written"))
+
+    result = sync_rider_settings(
+        RiderSettingsSyncConfig("u", "p", "a", fields="ftp")
+    )
+
+    assert result.field_statuses == {"ftp": "unchanged"}
+    assert result.updated == 0
+    assert result.failed == 0
 
 
 def test_apply_intervals_settings_updates_thresholds_and_zones():
@@ -191,6 +686,42 @@ def test_update_user_weight_posts_personal_user_info(monkeypatch):
         "nickName": "Jorge Silva",
         "weight": 76.0,
     }
+
+
+def test_interval_info_requests_use_bounded_connect_and_read_timeouts():
+    from intervalssync.igpsport import interval_info
+
+    calls = []
+
+    class FakeResp:
+        ok = True
+        status_code = 200
+
+        def __init__(self, body):
+            self.body = body
+
+        def json(self):
+            return self.body
+
+    class FakeSession:
+        def get(self, url, **kwargs):
+            calls.append(kwargs.get("timeout"))
+            if url.endswith("UserIntervalInfo"):
+                return FakeResp({"code": 0, "data": {"member": {}}})
+            return FakeResp({"code": 0, "data": {}})
+
+        def post(self, url, **kwargs):
+            calls.append(kwargs.get("timeout"))
+            return FakeResp({"code": 0, "data": {}})
+
+    session = FakeSession()
+    headers = {"Authorization": "Bearer x"}
+    interval_info.fetch_personal_interval_info(session, headers)
+    interval_info.update_personal_interval_info(session, headers, {})
+    interval_info.fetch_user_info(session, headers)
+    interval_info.update_personal_user_info(session, headers, {})
+
+    assert calls == [(10, 30), (10, 30), (10, 30), (10, 30)]
 
     body = apply_intervals_settings(_igpsport_payload(), _ride_settings())
     status = compare_profile_thresholds(

@@ -517,3 +517,163 @@ def test_sync_zones_json_sync_error(tmp_path: Path, monkeypatch, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
     assert payload["error"] == "profile update failed"
+
+
+def test_rider_settings_error_output_does_not_echo_private_exception(
+    tmp_path, monkeypatch, capsys
+):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("synthetic-private-token-and-profile")
+
+    monkeypatch.setattr(cli, "sync_rider_settings", fail)
+    args = cli._build_parser().parse_args(
+        ["sync-rider-settings", "--env-file", str(env_file), "--json"]
+    )
+    assert cli.cmd_sync_rider_settings(args) == cli.EXIT_SYNC_ERROR
+    captured = capsys.readouterr()
+    assert "synthetic-private" not in captured.out + captured.err
+    assert json.loads(captured.out)["ok"] is False
+
+
+def _fake_rider_result():
+    from intervalssync.igpsport.profile_sync import RiderSettingsSyncResult
+
+    return RiderSettingsSyncResult(
+        requested_fields=("hr_zones",),
+        effective_fields=("max_hr", "lthr", "hr_zones"),
+        field_statuses={
+            "max_hr": "unchanged",
+            "lthr": "unchanged",
+            "hr_zones": "verified",
+        },
+        selected=3,
+        updated=1,
+        verified=1,
+        unchanged=2,
+        source_missing=0,
+        failed=0,
+        source_values={"hr_zones": [120, 140, 160, 175, 185, 190, 195]},
+        current_values={"hr_zones": [130, 150, 170, 185, 195]},
+        desired_values={"hr_zones": [120, 140, 160, 175, 195]},
+    )
+
+
+@pytest.mark.parametrize("error_type", [core.SyncError, RuntimeError])
+def test_rider_sync_errors_keep_numeric_failure_counters(tmp_path, monkeypatch, capsys, error_type):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+    def unavailable(*args, **kwargs):
+        raise error_type("synthetic-private-error")
+    monkeypatch.setattr(cli, "sync_rider_settings", unavailable)
+    args = cli._build_parser().parse_args(
+        ["sync-rider-settings", "--env-file", str(env_file), "--json"]
+    )
+    assert cli.cmd_sync_rider_settings(args) == cli.EXIT_SYNC_ERROR
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["ok"] is False
+    assert payload["selected"] == 0
+    assert payload["failed"] == 1
+    for key in ("selected", "updated", "verified", "unchanged", "source_missing", "failed"):
+        assert type(payload[key]) is int
+    assert "synthetic-private-error" not in captured.out + captured.err
+    assert "source_values" not in payload
+
+
+def test_sync_rider_settings_parser_accepts_selective_dry_run_flags():
+    args = cli._build_parser().parse_args(
+        [
+            "sync-rider-settings",
+            "--sport",
+            "Ride",
+            "--fields",
+            "hr_zones,power_zones",
+            "--dry-run",
+            "--show-values",
+            "--json",
+        ]
+    )
+
+    assert args.command == "sync-rider-settings"
+    assert args.fields == "hr_zones,power_zones"
+    assert args.dry_run is True
+    assert args.show_values is True
+
+
+@pytest.mark.parametrize(
+    "extra_args",
+    [
+        ["--fields", "ftp,ftp"],
+        ["--fields", "ftp,,lthr"],
+        ["--fields", "unknown"],
+        ["--show-values"],
+    ],
+)
+def test_sync_rider_settings_validates_before_credentials(
+    extra_args, monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        cli,
+        "load_credentials",
+        lambda *a, **k: pytest.fail("credentials loaded before validation"),
+    )
+    args = cli._build_parser().parse_args(
+        ["sync-rider-settings", "--json", *extra_args]
+    )
+
+    assert cli.cmd_sync_rider_settings(args) == cli.EXIT_CONFIG_ERROR
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+
+
+def test_sync_rider_settings_json_is_status_only_by_default(
+    tmp_path: Path, monkeypatch, capsys
+):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+    monkeypatch.setattr(cli, "sync_rider_settings", lambda *a, **k: _fake_rider_result())
+    args = cli._build_parser().parse_args(
+        [
+            "sync-rider-settings",
+            "--env-file",
+            str(env_file),
+            "--fields",
+            "hr_zones",
+            "--json",
+        ]
+    )
+
+    assert cli.cmd_sync_rider_settings(args) == cli.EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["field_statuses"]["hr_zones"] == "verified"
+    assert "source_values" not in payload
+    assert "current_values" not in payload
+    assert "desired_values" not in payload
+
+
+def test_sync_rider_settings_dry_run_show_values_is_explicit(
+    tmp_path: Path, monkeypatch, capsys
+):
+    env_file = tmp_path / ".env"
+    _write_env(env_file)
+    monkeypatch.setattr(cli, "sync_rider_settings", lambda *a, **k: _fake_rider_result())
+    args = cli._build_parser().parse_args(
+        [
+            "sync-rider-settings",
+            "--env-file",
+            str(env_file),
+            "--fields",
+            "hr_zones",
+            "--dry-run",
+            "--show-values",
+            "--json",
+        ]
+    )
+
+    assert cli.cmd_sync_rider_settings(args) == cli.EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["source_values"]["hr_zones"][-1] == 195
+    assert payload["desired_values"]["hr_zones"][-1] == 195

@@ -25,6 +25,10 @@ from ..igpsport.core import sync as igpsport_sync
 from ..igpsport.profile_sync import (
     ProfileSyncConfig,
     ProfileSyncResult,
+    RiderSettingsSyncConfig,
+    RiderSettingsSyncResult,
+    parse_rider_fields,
+    sync_rider_settings,
     result_payload as profile_sync_result_payload,
     sync_profile_zones,
 )
@@ -246,6 +250,48 @@ def _emit_workout_text_summary(result: WorkoutUploadResult | BrytonWorkoutUpload
         f"no steps {result.no_steps}, "
         f"failed {result.failed}."
     )
+
+
+def _rider_settings_result_payload(
+    result: RiderSettingsSyncResult,
+    *,
+    ok: bool,
+    include_values: bool = False,
+    error: str | None = None,
+) -> dict:
+    payload = {
+        "ok": ok,
+        "source": "igpsport",
+        "requested_fields": list(result.requested_fields),
+        "effective_fields": list(result.effective_fields),
+        "field_statuses": dict(result.field_statuses),
+        "selected": result.selected,
+        "updated": result.updated,
+        "verified": result.verified,
+        "unchanged": result.unchanged,
+        "source_missing": result.source_missing,
+        "failed": result.failed,
+    }
+    if include_values:
+        payload["source_values"] = result.source_values or {}
+        payload["current_values"] = result.current_values or {}
+        payload["desired_values"] = result.desired_values or {}
+    if error is not None:
+        payload["error"] = error
+    return payload
+
+
+
+def _emit_rider_settings_text_summary(result: RiderSettingsSyncResult) -> None:
+    print(
+        f"Done — selected {result.selected}, "
+        f"updated {result.updated}, "
+        f"verified {result.verified}, "
+        f"unchanged {result.unchanged}, "
+        f"source missing {result.source_missing}, "
+        f"failed {result.failed}."
+    )
+
 
 
 def _source_from_args(args: argparse.Namespace) -> ActivitySource:
@@ -532,6 +578,91 @@ def cmd_sync_zones(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_sync_rider_settings(args: argparse.Namespace) -> int:
+    use_json = args.json
+    try:
+        parse_rider_fields(args.fields)
+        if args.show_values and not args.dry_run:
+            raise ValueError("--show-values requires --dry-run")
+    except ValueError as exc:
+        if use_json:
+            _emit_json({"ok": False, "source": "igpsport", "error": str(exc)})
+        else:
+            print(exc, file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    config = cli_config_module.load()
+    try:
+        env_path = resolve_env_path(
+            env_file=Path(args.env_file) if args.env_file else None,
+            config_env_file=config.env_file or None,
+        )
+        credentials = load_credentials(env_path, source="igpsport")
+    except CliConfigError as exc:
+        if use_json:
+            _emit_json({"ok": False, "source": "igpsport", "error": str(exc)})
+        else:
+            print(exc, file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    sync_config = RiderSettingsSyncConfig(
+        igp_user=credentials.igp_user,
+        igp_password=credentials.igp_password,
+        intervals_api_key=credentials.intervals_api_key,
+        igp_region=credentials.igp_region,
+        sport=args.sport,
+        fields=args.fields,
+        dry_run=args.dry_run,
+        show_values=args.show_values,
+    )
+
+    def progress(message: str) -> None:
+        print(message, file=sys.stderr)
+
+    try:
+        result = sync_rider_settings(sync_config, progress=progress)
+    except IgpSyncError as exc:
+        empty = RiderSettingsSyncResult(
+            requested_fields=(), effective_fields=(), field_statuses={},
+            selected=0, updated=0, verified=0, unchanged=0, source_missing=0, failed=1,
+        )
+        if use_json:
+            _emit_json(
+                _rider_settings_result_payload(empty, ok=False, error="Could not synchronize rider settings")
+            )
+        else:
+            print("✗ Could not synchronize rider settings", file=sys.stderr)
+        return EXIT_SYNC_ERROR
+    except Exception as exc:  # noqa: BLE001
+        empty = RiderSettingsSyncResult(
+            requested_fields=(), effective_fields=(), field_statuses={},
+            selected=0, updated=0, verified=0, unchanged=0, source_missing=0, failed=1,
+        )
+        if use_json:
+            _emit_json(
+                _rider_settings_result_payload(
+                    empty, ok=False, error="Could not synchronize rider settings"
+                )
+            )
+        else:
+            print("✗ Could not synchronize rider settings", file=sys.stderr)
+        return EXIT_SYNC_ERROR
+
+    ok = result.failed == 0
+    if use_json:
+        _emit_json(
+            _rider_settings_result_payload(
+                result,
+                ok=ok,
+                include_values=args.dry_run and args.show_values,
+            )
+        )
+    else:
+        _emit_rider_settings_text_summary(result)
+    return EXIT_OK if ok else EXIT_SYNC_ERROR
+
+
+
 def _add_source_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--source",
@@ -640,6 +771,34 @@ def _build_parser() -> argparse.ArgumentParser:
         help='intervals.icu sport-settings key (default: "Ride").',
     )
     sync_zones_parser.set_defaults(func=cmd_sync_zones)
+
+    sync_rider_settings_parser = subparsers.add_parser(
+        "sync-rider-settings",
+        parents=[common],
+        help="Push selected cycling rider settings from intervals.icu to iGPSPORT.",
+    )
+    sync_rider_settings_parser.add_argument(
+        "--sport",
+        choices=("Ride",),
+        default="Ride",
+        help='Sport settings key (currently only "Ride").',
+    )
+    sync_rider_settings_parser.add_argument(
+        "--fields",
+        metavar="LIST",
+        help="Comma-separated field list; omitted or blank selects every supported field.",
+    )
+    sync_rider_settings_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Calculate changes without writing them.",
+    )
+    sync_rider_settings_parser.add_argument(
+        "--show-values",
+        action="store_true",
+        help="Include source/current/desired values (requires --dry-run).",
+    )
+    sync_rider_settings_parser.set_defaults(func=cmd_sync_rider_settings)
 
     return parser
 

@@ -149,6 +149,68 @@ Success example:
 }
 ```
 
+### Verified rider settings (intervals.icu → iGPSPORT)
+
+Use this command when intervals.icu must own the cycling profile values and
+iGPSPORT is only the destination. This addition requires a release before it
+is available through `intervalssync@latest`. Until then, run from this checkout
+with `uv sync` followed by the source commands below:
+
+```bash
+# All supported fields, status-only output, no writes
+uv run intervalssync sync-rider-settings \
+  --env-file .env --sport Ride --dry-run --json
+
+# Selected zone groups; show values only for this explicit dry-run
+uv run intervalssync sync-rider-settings \
+  --env-file .env --sport Ride \
+  --fields hr_zones,power_zones --dry-run --show-values --json
+
+# Apply all supported fields and verify iGPSPORT read-back
+uv run intervalssync sync-rider-settings \
+  --env-file .env --sport Ride --json
+```
+
+Supported fields are `ftp`, `power_zones`, `max_hr`, `lthr`, `hr_zones`,
+`resting_hr`, `weight`, `height`, `birth_date`, and `sex`. Omit `--fields`, or
+pass a blank value, to select all fields. `power_zones` automatically includes
+`ftp`; `hr_zones` automatically includes `lthr` and `max_hr`. Duplicate, empty,
+or unknown field names are configuration errors. Only cycling `Ride` is
+supported; other sports are intentionally reserved for later generic support.
+
+The selective command reuses the existing `sync-zones` power/HR conversion,
+threshold rounding, terminal-cap behavior, and maximum-HR mode/table for selected
+HR-zone synchronization. Names are optional: custom or translated labels do not
+block valid configured boundaries. Unselected tables and HR mode remain unchanged
+when HR zones are not synchronized. Malformed numeric input blocks its write group.
+
+Synthetic conversion example: with Friel HR upper bounds
+`[120,145,165,175,185,190,195]` and maximum HR `195`, iGPSPORT receives five
+ends `[120,145,165,175,195]`; the three upper Friel bands become one fifth band.
+With FTP `250`, Coggan percentages `[55,75,90,105,120,150,999]`, and a fetched
+destination cap of `2500`, iGPSPORT receives
+`[138,188,225,262,300,375,2500]`. Legacy ties-to-even rounding applies, the `999`
+open marker is replaced by the legacy fixed power cap of `2500`. The usual
+destination shapes are seven power slots and five HR slots. Five-slot power
+examples in the research note are explicitly synthetic, not observed live shapes.
+
+Missing Intervals values never clear iGPSPORT fields. Writes are grouped by the
+iGPSPORT interval and personal-profile endpoints, with at most one write per
+changed group. Each successful write is fetched again and compared exactly; a
+2xx response with a mismatch is `verify_failed`. A second unchanged run performs
+no write.
+
+Normal JSON is status-only. It contains requested/effective fields, per-field
+statuses and the numeric
+`selected`, `updated`, `verified`, `unchanged`, `source_missing`, and `failed`
+counters. Source/current/desired values appear only when both `--dry-run` and
+`--show-values` are supplied. `--show-values` without `--dry-run` is rejected.
+
+Possible field statuses are `unchanged`, `would_update`, `verified`,
+`source_missing`, `invalid`, `write_failed`, and `verify_failed`. Exit code `0`
+means no field failed; `1` means an upstream/write/verification failure; `2`
+means invalid CLI configuration or credentials.
+
 ## Optional flags
 
 | Flag | Purpose |
@@ -167,6 +229,7 @@ Success example:
 | `intervalssync sync` | Download recent rides → upload to intervals.icu |
 | `intervalssync upload-workouts` | Planned workouts → iGPSPORT or Bryton (`--source`) |
 | `intervalssync sync-zones` | Push thresholds + zones from intervals.icu → iGPSPORT profile |
+| `intervalssync sync-rider-settings` | Selective, verified cycling profile sync from intervals.icu → iGPSPORT |
 | `intervalssync check` | Validate `.env` keys (no network) |
 
 `@latest` means the newest stable release published to PyPI, not the newest

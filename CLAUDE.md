@@ -67,3 +67,13 @@ src/intervalssync/
 ## Flet version note
 
 Built against Flet 0.86.x. Uses `ft.Icons` / `ft.Colors`, `page.show_dialog`, `ft.run(main)`.
+
+## Verified rider-settings CLI
+
+`sync-rider-settings` transfers selected cycling settings from intervals.icu to
+ iGPSPORT, with dependencies and read-back verification (`Ride` only). Missing
+source values preserve destination fields. Zone conversion, threshold rounding,
+power caps, and selected HR-zone mode reuse the legacy sync behavior; labels do
+not gate valid numeric configurations.
+Values may be printed only with explicit `--dry-run --show-values`; normal/error
+output is status-only. Legacy `sync-zones` parsing and behavior remain unchanged.
